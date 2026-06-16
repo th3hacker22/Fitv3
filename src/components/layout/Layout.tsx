@@ -16,7 +16,7 @@ function NavItem({ to, icon: Icon, label }: { to: string; icon: any; label: stri
     <Link
       to={to}
       onClick={triggerHaptic}
-      className="group relative flex flex-1 flex-col items-center p-3 text-zinc-500 hover:text-zinc-300 [&.active]:text-primary transition-colors"
+      className="group relative flex flex-1 flex-col items-center p-3 text-text-muted hover:text-text-primary [&.active]:text-primary transition-colors"
     >
       <div className="absolute top-0 w-8 h-0.5 bg-primary scale-x-0 group-[.active]:scale-x-100 transition-transform origin-center rounded-b-full shadow-[0_0_8px_rgba(204,255,0,0.8)]" />
       <Icon size={22} strokeWidth={2.5} className="mt-1" />
@@ -74,7 +74,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           )}
         </AnimatePresence>
 
-        <nav className="absolute bottom-0 w-full bg-zinc-900/90 backdrop-blur-md border-t border-zinc-800/50 flex justify-between items-center z-50 pb-[env(safe-area-inset-bottom)]">
+        <nav className="absolute bottom-0 w-full bg-bg-surface/90 backdrop-blur-md border-t border-border flex justify-between items-center z-50 pb-[env(safe-area-inset-bottom)]">
           <NavItem to="/" icon={Home} label="Home" />
           <NavItem to="/exercises" icon={Dumbbell} label="Exercises" />
           <NavItem to="/feed" icon={Globe} label="Feed" />

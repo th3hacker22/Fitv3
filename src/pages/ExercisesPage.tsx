@@ -277,7 +277,7 @@ export default function ExercisesPage() {
           className={cn(
             "whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border",
             (!filters.equipment || filters.equipment === "all")
-              ? "bg-zinc-700 text-white border-zinc-600"
+              ? "bg-primary text-primary-text border-primary"
               : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
           )}
         >
@@ -294,7 +294,7 @@ export default function ExercisesPage() {
               className={cn(
                 "whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border",
                 isActive
-                  ? "bg-zinc-700 text-white border-zinc-600 shadow-sm"
+                  ? "bg-primary text-primary-text border-primary shadow-sm"
                   : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
               )}
             >
@@ -410,7 +410,7 @@ export default function ExercisesPage() {
             ))}
 
             {filters.equipment && filters.equipment !== "all" && (
-              <span className="text-[10px] bg-zinc-700/50 text-white border border-zinc-600 px-2 py-0.5 rounded flex items-center gap-1 font-bold uppercase tracking-wider">
+              <span className="text-[10px] bg-bg-elevated text-text-primary border border-border px-2 py-0.5 rounded flex items-center gap-1 font-bold uppercase tracking-wider">
                 {filters.equipment}
                 <button 
                   className="hover:text-text-primary ml-0.5"
