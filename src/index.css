@@ -1,0 +1,317 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════
+   PULSE NEON — Global Design System
+   ═══════════════════════════════════════════════════════════════ */
+
+:root, :root[data-theme="light"] {
+  --c-bg: #F9FAFB;
+  --c-bg-surface: #FFFFFF;
+  --c-bg-surface-hover: #F3F4F6;
+  --c-bg-elevated: #FFFFFF;
+
+  --c-primary: #CCFF00;
+  --c-primary-hover: #B8E600;
+  --c-primary-dim: rgba(204, 255, 0, 0.15);
+  --c-primary-glow: rgba(204, 255, 0, 0.4);
+  --c-primary-text: #050505;
+
+  --c-secondary: #00D0DF;
+  --c-secondary-dim: rgba(0, 208, 223, 0.1);
+  --c-secondary-glow: rgba(0, 208, 223, 0.3);
+
+  --c-success: #00C853;
+  --c-warning: #F57C00;
+  --c-danger: #D32F2F;
+
+  --c-text-primary: #111827;
+  --c-text-secondary: #4B5563;
+  --c-text-muted: #9CA3AF;
+
+  --c-border: rgba(0, 0, 0, 0.1);
+  --c-border-hover: rgba(0, 0, 0, 0.15);
+  --c-border-active: rgba(204, 255, 0, 0.8);
+
+  --s-card: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --s-card-hover: 0 8px 30px rgba(0, 0, 0, 0.12);
+  --s-glow-primary: 0 0 20px rgba(204, 255, 0, 0.4);
+  --s-glow-secondary: 0 0 20px rgba(0, 208, 223, 0.3);
+  --s-inset: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  
+  --skeleton-base: rgba(0, 0, 0, 0.05);
+  --skeleton-highlight: rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="dark"] {
+  --c-bg: #050505;
+  --c-bg-surface: #0F0F11;
+  --c-bg-surface-hover: #1A1A1D;
+  --c-bg-elevated: #141416;
+
+  --c-primary: #CCFF00;
+  --c-primary-hover: #B8E600;
+  --c-primary-dim: rgba(204, 255, 0, 0.08);
+  --c-primary-glow: rgba(204, 255, 0, 0.25);
+  --c-primary-text: #0A0A0B;
+
+  --c-secondary: #00F0FF;
+  --c-secondary-dim: rgba(0, 240, 255, 0.08);
+  --c-secondary-glow: rgba(0, 240, 255, 0.25);
+
+  --c-success: #00E676;
+  --c-warning: #FFAB00;
+  --c-danger: #FF5252;
+
+  --c-text-primary: #FFFFFF;
+  --c-text-secondary: #9CA3AF;
+  --c-text-muted: #4B5563;
+
+  --c-border: rgba(255, 255, 255, 0.06);
+  --c-border-hover: rgba(255, 255, 255, 0.12);
+  --c-border-active: rgba(204, 255, 0, 0.3);
+
+  --s-card: 0 4px 32px rgba(0, 0, 0, 0.4);
+  --s-card-hover: 0 8px 48px rgba(0, 0, 0, 0.5);
+  --s-glow-primary: 0 0 24px rgba(204, 255, 0, 0.25);
+  --s-glow-secondary: 0 0 24px rgba(0, 240, 255, 0.25);
+  --s-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  
+  --skeleton-base: rgba(255, 255, 255, 0.03);
+  --skeleton-highlight: rgba(255, 255, 255, 0.06);
+}
+
+@theme {
+  /* ── Backgrounds ── */
+  --color-bg: var(--c-bg);
+  --color-bg-surface: var(--c-bg-surface);
+  --color-bg-surface-hover: var(--c-bg-surface-hover);
+  --color-bg-elevated: var(--c-bg-elevated);
+
+  /* ── Primary: Electric Lime ── */
+  --color-primary: var(--c-primary);
+  --color-primary-hover: var(--c-primary-hover);
+  --color-primary-dim: var(--c-primary-dim);
+  --color-primary-glow: var(--c-primary-glow);
+  --color-primary-text: var(--c-primary-text);
+
+  /* ── Secondary: Cyber Blue ── */
+  --color-secondary: var(--c-secondary);
+  --color-secondary-dim: var(--c-secondary-dim);
+  --color-secondary-glow: var(--c-secondary-glow);
+
+  /* ── Semantic ── */
+  --color-success: var(--c-success);
+  --color-warning: var(--c-warning);
+  --color-danger: var(--c-danger);
+
+  /* ── Text ── */
+  --color-text-primary: var(--c-text-primary);
+  --color-text-secondary: var(--c-text-secondary);
+  --color-text-muted: var(--c-text-muted);
+
+  /* ── Borders ── */
+  --color-border: var(--c-border);
+  --color-border-hover: var(--c-border-hover);
+  --color-border-active: var(--c-border-active);
+
+  /* ── Font ── */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+
+  /* ── Radius ── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* ── Shadows ── */
+  --shadow-card: var(--s-card);
+  --shadow-card-hover: var(--s-card-hover);
+  --shadow-glow-primary: var(--s-glow-primary);
+  --shadow-glow-secondary: var(--s-glow-secondary);
+  --shadow-inset: var(--s-inset);
+}
+
+/* ── Base Resets ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: #050505;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  min-height: 100dvh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+/* ── Hide scrollbar utility ── */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Safe area for bottom nav ── */
+.pb-safe {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PULSE NEON — Utility Classes
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Glass Card ── */
+.glass-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--glass-bg, rgba(255, 255, 255, 0.03));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.06));
+  box-shadow: var(--s-card, 0 4px 32px rgba(0, 0, 0, 0.4));
+  transition: all 0.3s ease;
+}
+.glass-card:hover {
+  border-color: var(--c-border-hover, rgba(255, 255, 255, 0.12));
+  box-shadow: var(--s-card-hover, 0 8px 48px rgba(0, 0, 0, 0.5));
+}
+
+/* ── Stat Pill ── */
+.stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 9999px;
+  padding: 0.25rem 0.625rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+/* ── Image Card Overlay ── */
+.image-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, var(--c-bg) 0%, var(--c-bg) 30%, transparent 100%);
+  pointer-events: none;
+}
+
+/* ── Glow Text ── */
+.glow-text {
+  text-shadow: 0 0 20px var(--c-primary-glow);
+}
+
+/* ── Neon Pulse Animation ── */
+@keyframes neon-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--c-primary-glow);
+  }
+  50% {
+    box-shadow: var(--s-glow-primary);
+  }
+}
+.animate-neon-pulse {
+  animation: neon-pulse 2s ease-in-out infinite;
+}
+
+/* ── Shimmer Skeleton ── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 25%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ── Float Animation ── */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* ── Selection Color ── */
+::selection {
+  background: rgba(204, 255, 0, 0.3);
+  color: #FFFFFF;
+}
+
+/* ── Input Focus Ring ── */
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  ring: 1px;
+  ring-color: rgba(204, 255, 0, 0.4);
+}
+
+/* ── Number Input Spinners (hide on mobile) ── */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.anatomy-grid {
+  background-image:
+    linear-gradient(rgba(16, 185, 129, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 185, 129, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.anatomy-scan-line {
+  animation: scan-line 4s linear infinite;
+}
