@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { db, type BodyMeasurement, type ProgressPhoto } from "@/db";
 import { uid } from "@/utils/id";
+import { useThemeColors } from "@/hooks/useThemeColors";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -43,6 +44,7 @@ export default function BodyPage() {
     chest: "",
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chartColors = useThemeColors();
 
   // Load data
   useEffect(() => {
@@ -220,14 +222,14 @@ export default function BodyPage() {
               >
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="#27272A"
+                  stroke={chartColors.grid}
                   vertical={false}
                 />
                 <XAxis
                   dataKey="date"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#A1A1AA", fontSize: 10 }}
+                  tick={{ fill: chartColors.textMuted, fontSize: 10 }}
                   tickFormatter={(d) =>
                     new Date(d).toLocaleDateString("en-US", {
                       day: "numeric",
@@ -238,17 +240,18 @@ export default function BodyPage() {
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#A1A1AA", fontSize: 10 }}
+                  tick={{ fill: chartColors.textMuted, fontSize: 10 }}
                   domain={["auto", "auto"]}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#1C1C1F",
-                    border: "1px solid #27272A",
+                    backgroundColor: chartColors.surface,
+                    border: `1px solid ${chartColors.border}`,
                     borderRadius: 8,
                     fontSize: 12,
                   }}
-                  labelStyle={{ color: "#F5F5F7" }}
+                  labelStyle={{ color: chartColors.text }}
+                  itemStyle={{ color: chartColors.text }}
                   formatter={(value) => [`${Number(value)} kg`, "Weight"]}
                   labelFormatter={(d) =>
                     new Date(d).toLocaleDateString("en-US")
@@ -257,13 +260,13 @@ export default function BodyPage() {
                 <Line
                   type="monotone"
                   dataKey="weight"
-                  stroke="#CCFF00"
+                  stroke={chartColors.primary}
                   strokeWidth={2}
-                  dot={{ fill: "#CCFF00", strokeWidth: 0, r: 4 }}
+                  dot={{ fill: chartColors.primary, strokeWidth: 0, r: 4 }}
                   activeDot={{
                     r: 6,
-                    fill: "#CCFF00",
-                    stroke: "#1C1C1F",
+                    fill: chartColors.primary,
+                    stroke: chartColors.surface,
                     strokeWidth: 2,
                   }}
                   animationDuration={800}

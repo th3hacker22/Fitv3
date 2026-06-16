@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { useExerciseStore } from "@/store/useExerciseStore";
 import { getExerciseProgress, getEstimated1RM } from "@/db";
+import { useThemeColors } from "@/hooks/useThemeColors";
 
 export default function ExerciseProgressChart() {
   const { exercises } = useExerciseStore();

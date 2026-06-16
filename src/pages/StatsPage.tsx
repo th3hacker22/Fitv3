@@ -39,6 +39,7 @@ import {
 } from "@/db";
 import { useExerciseStore } from "@/store/useExerciseStore";
 import ExerciseProgressChart from "@/components/stats/ExerciseProgressChart";
+import { useThemeColors } from "@/hooks/useThemeColors";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -51,6 +52,7 @@ const fadeUp = {
 
 export default function StatsPage() {
   const { exercises, loadExercises } = useExerciseStore();
+  const chartColors = useThemeColors();
   const [streak, setStreak] = useState(0);
   const [totalStats, setTotalStats] = useState({
     totalWorkouts: 0,
@@ -254,30 +256,30 @@ export default function StatsPage() {
               >
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="#27272A"
+                  stroke={chartColors.grid}
                   vertical={false}
                 />
                 <XAxis
                   dataKey="week"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#A1A1AA", fontSize: 10 }}
+                  tick={{ fill: chartColors.textMuted, fontSize: 10 }}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#A1A1AA", fontSize: 10 }}
+                  tick={{ fill: chartColors.textMuted, fontSize: 10 }}
                   tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : v)}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "hsla(var(--bg-elevated))",
-                    border: "1px solid hsla(var(--border))",
-                    borderRadius: "var(--radius-card)",
+                    backgroundColor: chartColors.surface,
+                    border: `1px solid ${chartColors.border}`,
+                    borderRadius: 12,
                     fontSize: 12,
-                    backdropFilter: "blur(12px)",
                   }}
-                  labelStyle={{ color: "hsla(var(--text-primary))" }}
+                  labelStyle={{ color: chartColors.text }}
+                  itemStyle={{ color: chartColors.text }}
                   formatter={(value) => [
                     `${Number(value).toLocaleString()} kg`,
                     "Tonnage",
@@ -285,7 +287,7 @@ export default function StatsPage() {
                 />
                 <Bar
                   dataKey="tonnage"
-                  fill="var(--color-primary)"
+                  fill={chartColors.primary}
                   radius={[4, 4, 0, 0]}
                   animationDuration={800}
                 />
@@ -325,10 +327,10 @@ export default function StatsPage() {
                 outerRadius="70%"
                 data={muscleGroupStats}
               >
-                <PolarGrid stroke="#27272A" />
+                <PolarGrid stroke={chartColors.grid} />
                 <PolarAngleAxis
                   dataKey="muscle"
-                  tick={{ fill: "#A1A1AA", fontSize: 10, textAnchor: "middle" }}
+                  tick={{ fill: chartColors.textMuted, fontSize: 10, textAnchor: "middle" }}
                 />
                 <PolarRadiusAxis
                   angle={30}
@@ -339,21 +341,21 @@ export default function StatsPage() {
                 <Radar
                   name="Volume"
                   dataKey="volume"
-                  stroke="var(--color-primary)"
-                  fill="var(--color-primary)"
+                  stroke={chartColors.primary}
+                  fill={chartColors.primary}
                   fillOpacity={0.4}
                   animationDuration={1000}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "hsla(var(--bg-elevated))",
-                    border: "1px solid hsla(var(--border))",
-                    borderRadius: "var(--radius-card)",
+                    backgroundColor: chartColors.surface,
+                    border: `1px solid ${chartColors.border}`,
+                    borderRadius: 12,
                     fontSize: 12,
-                    backdropFilter: "blur(12px)",
                   }}
+                  itemStyle={{ color: chartColors.text }}
                   labelStyle={{
-                    color: "hsla(var(--text-primary))",
+                    color: chartColors.text,
                     textTransform: "capitalize",
                   }}
                   formatter={(value) => [
