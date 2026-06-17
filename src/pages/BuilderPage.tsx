@@ -216,9 +216,9 @@ export default function BuilderPage() {
   const getSmartDefaults = async (exerciseId: string) => {
     try {
       const sessions = await db.workoutSessions
-        .where("completed")
-        .equals(1)
+        .orderBy("date")
         .reverse()
+        .filter((s) => s.completed === true)
         .toArray();
       let bestSets = 3;
       let bestReps = 10;

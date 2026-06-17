@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { db } from "@/db";
+import { db, getPersonalRecords } from "@/db";
 import type { WorkoutSession } from "@/db";
 import type { Exercise } from "@/types/exercise";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -61,11 +61,12 @@ async function getLastExerciseData(
   exerciseId: string,
 ): Promise<{ weight: number; reps: number }[] | null> {
   try {
-    // Optimization: Order by date descending and take last 10, then filter
+    // Get the most recent completed sessions, newest first, and find the
+    // last time this exercise was performed (ghost / "previous" data).
     const sessions = await db.workoutSessions
-      .where("completed")
-      .equals(1)
+      .orderBy("date")
       .reverse()
+      .filter((s) => s.completed === true)
       .limit(10)
       .toArray();
 
@@ -300,6 +301,17 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         (Date.now() - activeWorkout.startedAt) / 1000,
       );
 
+      // Capture prior personal records so we can detect new PRs in this session.
+      let priorBests = new Map<string, number>();
+      try {
+        const records = await getPersonalRecords();
+        priorBests = new Map(
+          records.map((r) => [String(r.exerciseId), r.maxWeight]),
+        );
+      } catch {
+        /* no prior history */
+      }
+
       const session: WorkoutSession = {
         id: uid(),
         name: `Pulse Workout ${new Date().toLocaleDateString("en-US")}`,
@@ -326,6 +338,28 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       };
 
       await db.workoutSessions.add(session);
+
+      // Detect new personal records (heaviest completed set per exercise).
+      let newPrCount = 0;
+      for (const ex of session.exercises) {
+        let sessionMax = 0;
+        for (const s of ex.sets) {
+          if (s.weight > sessionMax) sessionMax = s.weight;
+        }
+        if (sessionMax <= 0) continue;
+        const prior = priorBests.get(String(ex.exerciseId)) ?? 0;
+        if (sessionMax > prior) newPrCount++;
+      }
+      if (newPrCount > 0) {
+        useToastStore
+          .getState()
+          .addToast(
+            "success",
+            newPrCount === 1
+              ? "New personal record! Keep it up."
+              : `${newPrCount} new personal records this session!`,
+          );
+      }
 
       const user = useAuthStore.getState().user;
 

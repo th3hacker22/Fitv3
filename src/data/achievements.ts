@@ -72,8 +72,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     iconName: "Moon",
     checkCriteria: async () => {
       const sessions = await db.workoutSessions
-        .where("completed")
-        .equals(1)
+        .filter((s) => s.completed === true)
         .toArray();
       return sessions.some((s) => {
         const hour = new Date(s.date).getHours();
@@ -88,8 +87,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     iconName: "Sun",
     checkCriteria: async () => {
       const sessions = await db.workoutSessions
-        .where("completed")
-        .equals(1)
+        .filter((s) => s.completed === true)
         .toArray();
       return sessions.some((s) => {
         const hour = new Date(s.date).getHours();

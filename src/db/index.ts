@@ -240,8 +240,7 @@ db.open().catch(async (err) => {
 // Get workout streak (consecutive days)
 export async function getWorkoutStreak(): Promise<number> {
   const sessions = await db.workoutSessions
-    .where("completed")
-    .equals(1)
+    .filter((s) => s.completed === true)
     .toArray();
 
   if (sessions.length === 0) return 0;
@@ -285,8 +284,7 @@ export async function getPersonalRecords(): Promise<
   }[]
 > {
   const sessions = await db.workoutSessions
-    .where("completed")
-    .equals(1)
+    .filter((s) => s.completed === true)
     .toArray();
 
   const records: Map<
@@ -296,9 +294,16 @@ export async function getPersonalRecords(): Promise<
 
   for (const session of sessions) {
     for (const ex of session.exercises) {
-      const maxSetWeight = Math.max(...ex.sets.map((s) => s.weight));
-      const current = records.get(ex.exerciseId);
+      const completedSets = ex.sets.filter((s) => s.completed);
+      if (completedSets.length === 0) continue;
 
+      let maxSetWeight = 0;
+      for (const s of completedSets) {
+        if (s.weight > maxSetWeight) maxSetWeight = s.weight;
+      }
+      if (maxSetWeight <= 0) continue;
+
+      const current = records.get(ex.exerciseId);
       if (!current || maxSetWeight > current.maxWeight) {
         records.set(ex.exerciseId, {
           exerciseName: ex.exerciseName,
@@ -320,8 +325,7 @@ export async function getWeeklyVolume(
   weeks: number = 8,
 ): Promise<{ week: string; volume: number }[]> {
   const sessions = await db.workoutSessions
-    .where("completed")
-    .equals(1)
+    .filter((s) => s.completed === true)
     .toArray();
 
   const weeklyData: Map<string, number> = new Map();
@@ -359,8 +363,7 @@ export async function getWeeklyTonnage(
   weeks: number = 4,
 ): Promise<{ week: string; tonnage: number }[]> {
   const sessions = await db.workoutSessions
-    .where("completed")
-    .equals(1)
+    .filter((s) => s.completed === true)
     .toArray();
 
   const weeklyData: Map<string, number> = new Map();
@@ -396,8 +399,7 @@ export async function getExerciseProgress(
   exerciseId: string | number,
 ): Promise<{ date: string; maxWeight: number }[]> {
   const sessions = await db.workoutSessions
-    .where("completed")
-    .equals(1)
+    .filter((s) => s.completed === true)
     .toArray();
 
   const progress: { date: string; maxWeight: number }[] = [];
@@ -425,8 +427,7 @@ export async function getEstimated1RM(
   exerciseId: string | number,
 ): Promise<{ date: string; e1rm: number }[]> {
   const sessions = await db.workoutSessions
-    .where("completed")
-    .equals(1)
+    .filter((s) => s.completed === true)
     .toArray();
 
   const progress: { date: string; e1rm: number }[] = [];
@@ -436,11 +437,12 @@ export async function getEstimated1RM(
       (e) => String(e.exerciseId) === String(exerciseId),
     );
     if (ex && ex.sets.length > 0) {
-      const bestE1rm = Math.max(
-        ...ex.sets
-          .filter((s) => s.completed)
-          .map((s) => estimateOneRepMax(s.weight, s.reps)),
-      );
+      let bestE1rm = 0;
+      for (const s of ex.sets) {
+        if (!s.completed) continue;
+        const e1rm = estimateOneRepMax(s.weight, s.reps);
+        if (e1rm > bestE1rm) bestE1rm = e1rm;
+      }
       if (bestE1rm > 0) {
         progress.push({
           date: session.date.split("T")[0],
@@ -460,8 +462,7 @@ export async function getMuscleGroupStats(
   exercises: Exercise[],
 ): Promise<{ muscle: string; volume: number }[]> {
   const sessions = await db.workoutSessions
-    .where("completed")
-    .equals(1)
+    .filter((s) => s.completed === true)
     .toArray();
 
   const muscleData: Map<string, number> = new Map();
@@ -491,8 +492,7 @@ export async function getMuscleGroupStats(
 // Get total stats
 export async function getTotalStats() {
   const sessions = await db.workoutSessions
-    .where("completed")
-    .equals(1)
+    .filter((s) => s.completed === true)
     .toArray();
 
   const validSessions = sessions.filter((s) => !s.isFreeze);
