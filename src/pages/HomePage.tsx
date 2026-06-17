@@ -96,6 +96,13 @@ export default function HomePage() {
     return `${kg}`;
   };
 
+  const templateImages: Record<string, string> = {
+    "Push Day (PPL)": "/images/push-day.jpg",
+    "Pull Day (PPL)": "/images/pull-day.jpg",
+    "Legs Day (PPL)": "/images/legs-day.jpg",
+    "Full Body Foundational": "/images/full-body.jpg",
+  };
+
   const quickStats = [
     {
       label: "Streak",
@@ -125,30 +132,35 @@ export default function HomePage() {
 
   return (
     <div className="space-y-8">
-      {/* ── Welcome Card ── */}
+      {/* ── Hero Welcome Card ── */}
       <motion.div
-        className="glass-card relative overflow-hidden rounded-[--radius-card] p-6"
+        className="relative overflow-hidden rounded-[--radius-card] border border-border"
         variants={fadeUp}
         initial="hidden"
         animate="visible"
         custom={0}
       >
-        <div className="absolute -left-10 -top-10 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
-        <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-primary/5 blur-2xl" />
+        <img
+          src="/images/hero-athlete.jpg"
+          alt="Athlete lifting dumbbells in the gym"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/80 to-bg/30" />
+        <div className="absolute inset-0 bg-gradient-to-r from-bg/70 to-transparent" />
 
-        <div className="relative z-10">
-          <div className="mb-1 flex items-center gap-2">
+        <div className="relative z-10 p-6 pt-24 sm:pt-32">
+          <div className="mb-2 flex items-center gap-2">
             <Zap className="h-5 w-5 text-primary" />
             <span className="text-sm font-medium text-primary">
               Welcome to Pulse
             </span>
           </div>
-          <h1 className="mb-2 text-2xl font-bold text-text-primary">
+          <h1 className="mb-2 text-2xl font-bold text-text-primary text-balance">
             {totalStats.totalWorkouts > 0
               ? "Keep Pushing Forward!"
               : "Start Your Fitness Journey"}
           </h1>
-          <p className="mb-5 text-sm leading-relaxed text-text-secondary">
+          <p className="mb-5 max-w-md text-sm leading-relaxed text-text-secondary">
             {totalStats.totalWorkouts > 0
               ? `You've crushed ${totalStats.totalWorkouts} workouts so far. Keep it up!`
               : "Track workouts, crush goals, and monitor progress — all in one place."}
@@ -379,40 +391,48 @@ export default function HomePage() {
           {routineTemplates.map((template, idx) => (
             <motion.div
               key={template.name}
-              className="glass-card rounded-[--radius-card] p-4 flex flex-col"
+              className="glass-card overflow-hidden rounded-[--radius-card] flex flex-col"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.6 + idx * 0.1 }}
             >
-              <div className="flex-1">
-                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">
+              <div className="relative h-28 w-full overflow-hidden">
+                <img
+                  src={templateImages[template.name] ?? "/images/full-body.jpg"}
+                  alt={template.name}
+                  className="h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-bg-card via-bg-card/40 to-transparent" />
+                <h3 className="absolute bottom-2 left-4 right-4 text-sm font-bold text-text-primary uppercase tracking-wider">
                   {template.name}
                 </h3>
-                <p className="text-xs text-text-muted mt-1">
+              </div>
+              <div className="flex flex-1 flex-col p-4">
+                <p className="flex-1 text-xs text-text-muted">
                   {template.description}
                 </p>
+                <Button
+                  onClick={async () => {
+                    if (exercises.length === 0) return;
+                    const generated = buildTemplateRoutine(template, exercises);
+                    await saveRoutine(
+                      {
+                        id: uid(),
+                        name: generated.name,
+                        exercises: generated.exercises,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                      },
+                      user?.uid,
+                    );
+                  }}
+                  variant="outline"
+                  className="w-full mt-4"
+                  icon={<Copy className="h-4 w-4" />}
+                >
+                  Add to My Routines
+                </Button>
               </div>
-              <Button
-                onClick={async () => {
-                  if (exercises.length === 0) return;
-                  const generated = buildTemplateRoutine(template, exercises);
-                  await saveRoutine(
-                    {
-                      id: uid(),
-                      name: generated.name,
-                      exercises: generated.exercises,
-                      createdAt: new Date().toISOString(),
-                      updatedAt: new Date().toISOString(),
-                    },
-                    user?.uid,
-                  );
-                }}
-                variant="outline"
-                className="w-full mt-4"
-                icon={<Copy className="h-4 w-4" />}
-              >
-                Add to My Routines
-              </Button>
             </motion.div>
           ))}
         </div>

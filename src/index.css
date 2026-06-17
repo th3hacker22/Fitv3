@@ -92,6 +92,7 @@
   --color-bg-surface: var(--c-bg-surface);
   --color-bg-surface-hover: var(--c-bg-surface-hover);
   --color-bg-elevated: var(--c-bg-elevated);
+  --color-bg-card: var(--c-bg-surface);
 
   /* ── Primary: Electric Lime ── */
   --color-primary: var(--c-primary);
