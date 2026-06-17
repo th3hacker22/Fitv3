@@ -23,6 +23,7 @@
   --c-success: #00C853;
   --c-warning: #F57C00;
   --c-danger: #D32F2F;
+  --c-info: #0284C7;
 
   --c-text-primary: #111827;
   --c-text-secondary: #4B5563;
@@ -31,6 +32,7 @@
   --c-border: rgba(0, 0, 0, 0.1);
   --c-border-hover: rgba(0, 0, 0, 0.15);
   --c-border-active: rgba(204, 255, 0, 0.8);
+  --c-toggle-off: #D1D5DB;
 
   --s-card: 0 4px 20px rgba(0, 0, 0, 0.08);
   --s-card-hover: 0 8px 30px rgba(0, 0, 0, 0.12);
@@ -64,6 +66,7 @@
   --c-success: #00E676;
   --c-warning: #FFAB00;
   --c-danger: #FF5252;
+  --c-info: #38BDF8;
 
   --c-text-primary: #FFFFFF;
   --c-text-secondary: #9CA3AF;
@@ -72,6 +75,7 @@
   --c-border: rgba(255, 255, 255, 0.06);
   --c-border-hover: rgba(255, 255, 255, 0.12);
   --c-border-active: rgba(204, 255, 0, 0.3);
+  --c-toggle-off: #3A3A3D;
 
   --s-card: 0 4px 32px rgba(0, 0, 0, 0.4);
   --s-card-hover: 0 8px 48px rgba(0, 0, 0, 0.5);
@@ -111,6 +115,7 @@
   --color-success: var(--c-success);
   --color-warning: var(--c-warning);
   --color-danger: var(--c-danger);
+  --color-info: var(--c-info);
 
   /* ── Text ── */
   --color-text-primary: var(--c-text-primary);
@@ -121,6 +126,7 @@
   --color-border: var(--c-border);
   --color-border-hover: var(--c-border-hover);
   --color-border-active: var(--c-border-active);
+  --color-toggle-off: var(--c-toggle-off);
 
   /* ── Font ── */
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;

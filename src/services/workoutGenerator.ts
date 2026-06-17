@@ -293,7 +293,11 @@ export const generateProgram = (exercises: Exercise[], profile: GeneratorProfile
       let sets = 3;
       let reps = "8-12";
       let rest = 90;
-      let tempo = "2-0-1";
+      // Goal-aware tempo (eccentric-pause-concentric):
+      // strength = controlled & explosive, hypertrophy = slower eccentric for time-under-tension.
+      let tempo = goal === "Strength" ? "2-1-X"
+                : goal === "Hypertrophy" || goal === "Recomp" ? "3-1-1"
+                : "2-0-1";
       
       const repBias = profile.repBiasOverride || (goal === "Strength" ? "low" : (goal === "Hypertrophy" || goal === "Recomp" ? "moderate" : "high"));
       if (repBias === "low") { reps = "3-6"; rest = 180; }

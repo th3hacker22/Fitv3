@@ -12,6 +12,7 @@ export interface SettingsStore {
   setWeightUnit: (unit: "kg" | "lbs") => void;
   notificationsEnabled: boolean;
   toggleNotifications: () => void;
+  setNotificationsEnabled: (enabled: boolean) => void;
   soundEnabled: boolean;
   toggleSound: () => void;
   theme: Theme;
@@ -31,6 +32,8 @@ export const useSettingsStore = create<SettingsStore>()(
       notificationsEnabled: false,
       toggleNotifications: () =>
         set((state) => ({ notificationsEnabled: !state.notificationsEnabled })),
+      setNotificationsEnabled: (enabled) =>
+        set({ notificationsEnabled: enabled }),
       soundEnabled: true,
       toggleSound: () => set((state) => ({ soundEnabled: !state.soundEnabled })),
       theme: "system",

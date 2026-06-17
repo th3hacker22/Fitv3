@@ -4,6 +4,7 @@ import { X, Timer } from "lucide-react";
 import { useWorkoutStore } from "@/store/useWorkoutStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { playTimerCompleteSound } from "@/utils/audio";
+import { sendNotification } from "@/utils/notifications";
 
 const CIRCUMFERENCE = 2 * Math.PI * 24; // r=24
 
@@ -11,6 +12,7 @@ export default function RestTimer() {
   const restTimerActive = useWorkoutStore((s) => s.restTimerActive);
   const dismissRestTimer = useWorkoutStore((s) => s.dismissRestTimer);
   const restDuration = useSettingsStore((s) => s.restDuration);
+  const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);
   const [seconds, setSeconds] = useState(restDuration);
 
   // Reset when activated
@@ -28,6 +30,11 @@ export default function RestTimer() {
       setSeconds((prev: number) => {
         if (prev <= 1) {
           playTimerCompleteSound();
+          if (notificationsEnabled) {
+            sendNotification("Rest complete", {
+              body: "Time for your next set. Let's go!",
+            });
+          }
           dismissRestTimer();
           return 0;
         }
@@ -36,7 +43,7 @@ export default function RestTimer() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [restTimerActive, seconds, dismissRestTimer]);
+  }, [restTimerActive, seconds, dismissRestTimer, notificationsEnabled]);
 
   const progress = seconds / restDuration;
   const mins = Math.floor(seconds / 60);

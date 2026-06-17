@@ -15,6 +15,11 @@ import {
 import { useSettingsStore, Theme } from "@/store/useSettingsStore";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
+import {
+  requestNotificationPermission,
+  getNotificationPermission,
+  sendNotification,
+} from "@/utils/notifications";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -35,11 +40,37 @@ export default function SettingsPage() {
     setWeightUnit,
     notificationsEnabled,
     toggleNotifications,
+    setNotificationsEnabled,
     soundEnabled,
     toggleSound,
     theme,
     setTheme
   } = useSettingsStore();
+
+  const handleNotificationsToggle = async () => {
+    // Turning OFF is always allowed.
+    if (notificationsEnabled) {
+      toggleNotifications();
+      return;
+    }
+    // Turning ON requires browser permission.
+    const perm = getNotificationPermission();
+    if (perm === "unsupported") {
+      alert("Your browser does not support notifications.");
+      return;
+    }
+    const granted = await requestNotificationPermission();
+    if (granted) {
+      setNotificationsEnabled(true);
+      sendNotification("Pulse notifications enabled", {
+        body: "We'll remind you when your rest timer is done. Let's go!",
+      });
+    } else {
+      alert(
+        "Notifications are blocked. Please enable them in your browser settings to receive workout reminders.",
+      );
+    }
+  };
 
   return (
     <div className="space-y-6 pb-6">
@@ -140,7 +171,7 @@ export default function SettingsPage() {
             onClick={toggleRamadanMode}
             className={cn(
               "relative h-7 w-12 shrink-0 rounded-full transition-colors duration-300",
-              ramadanMode ? "bg-warning" : "bg-bg-elevated",
+              ramadanMode ? "bg-warning" : "bg-toggle-off",
             )}
           >
             <motion.div
@@ -257,12 +288,12 @@ export default function SettingsPage() {
             </div>
           </div>
           <button
-            onClick={toggleNotifications}
+            onClick={handleNotificationsToggle}
             className={cn(
               "relative h-7 w-12 shrink-0 rounded-full transition-colors duration-300",
               notificationsEnabled
                 ? "bg-primary shadow-[0_0_10px_rgba(204,255,0,0.4)]"
-                : "bg-bg-elevated",
+                : "bg-toggle-off",
             )}
           >
             <motion.div
@@ -301,8 +332,8 @@ export default function SettingsPage() {
             className={cn(
               "relative h-7 w-12 shrink-0 rounded-full transition-colors duration-300",
               soundEnabled
-                ? "bg-info shadow-[0_0_10px_rgba(59,130,246,0.4)]"
-                : "bg-bg-elevated",
+                ? "bg-info shadow-[0_0_10px_rgba(56,189,248,0.4)]"
+                : "bg-toggle-off",
             )}
           >
             <motion.div

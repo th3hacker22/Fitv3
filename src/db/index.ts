@@ -1,6 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import type { Exercise } from "@/types/exercise";
 import { uid } from "@/utils/id";
+import { estimateOneRepMax } from "@/utils/fitnessMath";
 
 // ── Workout Types ──
 export interface WorkoutSession {
@@ -438,7 +439,7 @@ export async function getEstimated1RM(
       const bestE1rm = Math.max(
         ...ex.sets
           .filter((s) => s.completed)
-          .map((s) => s.weight * (1 + s.reps / 30)),
+          .map((s) => estimateOneRepMax(s.weight, s.reps)),
       );
       if (bestE1rm > 0) {
         progress.push({

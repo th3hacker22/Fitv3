@@ -145,22 +145,22 @@ export default function HomePage() {
           alt="Athlete lifting dumbbells in the gym"
           className="absolute inset-0 h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/80 to-bg/30" />
-        <div className="absolute inset-0 bg-gradient-to-r from-bg/70 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/20" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent" />
 
         <div className="relative z-10 p-6 pt-24 sm:pt-32">
           <div className="mb-2 flex items-center gap-2">
             <Zap className="h-5 w-5 text-primary" />
-            <span className="text-sm font-medium text-primary">
+            <span className="text-sm font-semibold text-primary glow-text">
               Welcome to Pulse
             </span>
           </div>
-          <h1 className="mb-2 text-2xl font-bold text-text-primary text-balance">
+          <h1 className="mb-2 text-2xl font-bold text-white text-balance">
             {totalStats.totalWorkouts > 0
               ? "Keep Pushing Forward!"
               : "Start Your Fitness Journey"}
           </h1>
-          <p className="mb-5 max-w-md text-sm leading-relaxed text-text-secondary">
+          <p className="mb-5 max-w-md text-sm leading-relaxed text-white/80">
             {totalStats.totalWorkouts > 0
               ? `You've crushed ${totalStats.totalWorkouts} workouts so far. Keep it up!`
               : "Track workouts, crush goals, and monitor progress — all in one place."}
