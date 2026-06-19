@@ -833,6 +833,7 @@ function AnatomyMapComponent({
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
                 className="w-full h-auto max-h-[62vh] sm:max-h-[70vh] mx-auto drop-shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
+                style={{ background: "var(--c-bg-surface)" }}
               >
                 <defs>
                   <filter id="ng" x="-50%" y="-50%" width="200%" height="200%">
