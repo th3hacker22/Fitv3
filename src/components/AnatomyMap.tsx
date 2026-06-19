@@ -849,6 +849,8 @@ function AnatomyMapComponent({
                     <stop offset="100%" stopColor="rgba(0,0,0,0.15)" />
                   </linearGradient>
                 </defs>
+                {/* Solid background to prevent grid/gradient showing through SVG gaps */}
+                <rect width="676.49" height="1203.49" fill="var(--color-bg-surface)" opacity="0.85" />
                 {bodyOutlineElement}
                 {muscleGroups}
                 {/* Depth overlay for 3D feel */}

@@ -46,7 +46,7 @@ export default function BodyPage() {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chartColors = useThemeColors();
-  const cleanupRef = useRef<(() => void) | undefined>();
+  const cleanupRef = useRef<(() => void) | undefined>(undefined);
 
   async function loadData() {
     try {
