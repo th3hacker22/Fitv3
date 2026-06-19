@@ -334,7 +334,7 @@ export const GeneratorWizard = () => {
       // userData.recentSessions shape would have lost.
       const { generateProgram } = await import("@/services/workoutGenerator");
 
-      let rawSessions: any[] = [];
+      let rawSessions: import("@/db/schema").WorkoutSession[] = [];
       try {
         const { db } = await import("@/db");
         // Fetch up to 30 completed sessions — enough for ACWR (28-day chronic window)
@@ -352,7 +352,7 @@ export const GeneratorWizard = () => {
       const exerciseMap = new Map(exercises.map((e) => [String(e.id), e]));
 
       // ── Load Learning Loop preferences (best-effort, non-blocking) ──
-      let learningLoop: any = undefined;
+      let learningLoop: import("@/services/learningLoop").LearningLoopSummary | undefined = undefined;
       try {
         const { buildLearningLoopSummary } = await import("@/services/learningLoop");
         learningLoop = await buildLearningLoopSummary(90);
@@ -715,7 +715,7 @@ export const GeneratorWizard = () => {
                 return (
                   <button
                     key={k}
-                    onClick={() => profile.updateProfile({ [k]: !active } as any)}
+                    onClick={() => profile.updateProfile({ [k]: !active } as Partial<import("@/store/useGeneratorStore").GeneratorProfile>)}
                     className="flex items-center gap-3 w-full p-4 bg-bg-elevated border border-border rounded-xl"
                   >
                     <div
@@ -985,7 +985,7 @@ export const GeneratorWizard = () => {
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => navigate({ to: "home" })}
+              onClick={() => navigate("home")}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-elevated text-text-secondary transition-colors hover:text-text-primary"
               aria-label="Exit generator"
             >

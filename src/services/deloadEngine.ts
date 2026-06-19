@@ -121,7 +121,7 @@ function detectPerformanceRegression(
 
 export function assessDeloadNeed(
   sessions: WorkoutSession[],
-  profile: GeneratorProfile,
+  profile: Pick<GeneratorProfile, 'age'>,
   fatigue?: FatigueAssessment,
   exerciseHistory?: Map<string, ExerciseHistoryEntry>
 ): DeloadRecommendation {

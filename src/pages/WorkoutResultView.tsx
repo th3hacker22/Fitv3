@@ -201,7 +201,7 @@ export default function WorkoutResultView() {
     const exerciseMap = new Map(exercises.map((e) => [String(e.id), e]));
 
     // ── Load Learning Loop preferences ──
-    let learningLoop: any = undefined;
+    let learningLoop: import("@/services/learningLoop").LearningLoopSummary | undefined = undefined;
     try {
       const { buildLearningLoopSummary } = await import("@/services/learningLoop");
       learningLoop = await buildLearningLoopSummary(90);

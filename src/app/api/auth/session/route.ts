@@ -11,11 +11,15 @@ export async function POST(req: NextRequest) {
     if (!uid) {
       return NextResponse.json({ error: "Missing uid" }, { status: 400 });
     }
-    // Verify UID exists in DB before issuing a JWT
-    const existing = await prisma.publicProfile.findUnique({ where: { uid } });
-    if (!existing) {
-      return NextResponse.json({ error: "Invalid uid" }, { status: 403 });
-    }
+    // Auto-create PublicProfile on first login (supports guest users)
+    await prisma.publicProfile.upsert({
+      where: { uid },
+      update: {},
+      create: {
+        uid,
+        displayName: uid.startsWith("local-guest-") ? "Guest" : uid.replace(/^local-user-/, ""),
+      },
+    });
 
     const token = await signJwt(uid);
 

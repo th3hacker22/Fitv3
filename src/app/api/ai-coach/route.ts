@@ -287,7 +287,7 @@ ${aboveMAV.map((m) => `  - ${m.muscle}: ${m.weeklySets} sets (MAV: ${m.mav})`).j
   const exerciseHistory = buildExerciseHistory(sessionsForEngine as unknown as WorkoutSession[]);
   const deloadRec = assessDeloadNeed(
     sessionsForEngine as unknown as WorkoutSession[],
-    { age: profile.age, medicalCautions: profile.medicalCautions, daysPerWeek: profile.daysPerWeek as 2 | 3 | 4 | 5 | 6 },
+    { age: profile.age },
     fatigue,
     exerciseHistory
   );
