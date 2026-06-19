@@ -985,7 +985,7 @@ export const GeneratorWizard = () => {
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => navigate("home")}
+              onClick={() => navigate({ to: "home" })}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-elevated text-text-secondary transition-colors hover:text-text-primary"
               aria-label="Exit generator"
             >

@@ -24,11 +24,11 @@ describe("AnatomyMap Performance", () => {
 
   it("updates within 200ms when muscles change", () => {
     const { rerender } = render(
-      React.createElement(AnatomyMap, { highlightedMuscles: ["chest"] })
+      React.createElement(AnatomyMap, { activeMuscles: ["chest"] })
     );
     const start = performance.now();
     rerender(
-      React.createElement(AnatomyMap, { highlightedMuscles: ["back", "biceps"] })
+      React.createElement(AnatomyMap, { activeMuscles: ["back", "biceps"] })
     );
     const elapsed = performance.now() - start;
     expect(elapsed).toBeLessThan(200);
@@ -38,7 +38,7 @@ describe("AnatomyMap Performance", () => {
     const { rerender } = render(React.createElement(AnatomyMap));
     for (let i = 0; i < 50; i++) {
       rerender(
-        React.createElement(AnatomyMap, { highlightedMuscles: [`muscle-${i}`] })
+        React.createElement(AnatomyMap, { activeMuscles: [`muscle-${i}`] })
       );
     }
   });
@@ -50,7 +50,7 @@ describe("AnatomyMap Performance", () => {
     ];
     const start = performance.now();
     render(
-      React.createElement(AnatomyMap, { highlightedMuscles: allMuscles })
+      React.createElement(AnatomyMap, { activeMuscles: allMuscles })
     );
     const elapsed = performance.now() - start;
     expect(elapsed).toBeLessThan(1000);
@@ -58,7 +58,7 @@ describe("AnatomyMap Performance", () => {
 
   it("renders without active muscles", () => {
     const start = performance.now();
-    render(React.createElement(AnatomyMap, { highlightedMuscles: [] }));
+    render(React.createElement(AnatomyMap, { activeMuscles: [] }));
     const elapsed = performance.now() - start;
     expect(elapsed).toBeLessThan(1500);
   });

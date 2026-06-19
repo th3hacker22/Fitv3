@@ -194,7 +194,7 @@ export async function generateWorkoutAI(
 ): Promise<WorkoutRoutine> {
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     useToastStore.getState().addToast("error", "AI requires internet connection");
-    return generateWorkout(availableExercises, { ...state, goal: state.goal || "" });
+    return generateWorkout(availableExercises, state);
   }
 
   try {
@@ -216,7 +216,7 @@ export async function generateWorkoutAI(
     const data = (await res.json()) as { text?: string; error?: string };
     if (data.error) {
       useToastStore.getState().addToast("error", data.error);
-      return generateWorkout(availableExercises, { ...state, goal: state.goal || "" });
+      return generateWorkout(availableExercises, state);
     }
     
     const text = data.text;
@@ -249,7 +249,7 @@ export async function generateWorkoutAI(
   } catch (error) {
     console.error("AI Workout Generation failed. Falling back:", error);
     useToastStore.getState().addToast("error", "AI service unavailable, using standard generator");
-    return generateWorkout(availableExercises, { ...state, goal: state.goal || "" });
+    return generateWorkout(availableExercises, state);
   }
 }
 
