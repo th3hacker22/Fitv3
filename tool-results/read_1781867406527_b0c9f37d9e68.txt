@@ -1,0 +1,695 @@
+     1→"use client";
+     2→import { useState, useEffect } from "react";
+     3→import { Link } from "@/router-shim";
+     4→import { motion } from "framer-motion";
+     5→import {
+     6→  ArrowLeft,
+     7→  Moon,
+     8→  Timer,
+     9→  Bell,
+    10→  Scale,
+    11→  Info,
+    12→  ChevronRight,
+    13→  Sun,
+    14→  Monitor,
+    15→  Volume2,
+    16→  Mic,
+    17→  Cloud,
+    18→  RefreshCw,
+    19→  Download,
+    20→  Upload,
+    21→  DatabaseBackup,
+    22→  Play,
+    23→} from "lucide-react";
+    24→import { useSettingsStore, Theme } from "@/store/useSettingsStore";
+    25→import { Button } from "@/components/ui-custom/Button";
+    26→import { cn } from "@/utils/cn";
+    27→import { useCloudSyncState } from "@/hooks/useCloudSyncState";
+    28→import { useAuthStore } from "@/store/useAuthStore";
+    29→import { syncAll, exportLocalBackup } from "@/lib/syncEngine";
+    30→import {
+    31→  requestNotificationPermission,
+    32→  getNotificationPermission,
+    33→  sendNotification,
+    34→} from "@/utils/notifications";
+    35→import { useTranslation } from "react-i18next";
+    36→import { useToastStore } from "@/store/useToastStore";
+    37→import { useVoiceCoach } from "@/hooks/useVoiceCoach";
+    38→import { voiceCoach } from "@/services/voiceCoach";
+    39→
+    40→const fadeUp = {
+    41→  hidden: { opacity: 0, y: 20 },
+    42→  visible: (i: number) => ({
+    43→    opacity: 1,
+    44→    y: 0,
+    45→    transition: { delay: i * 0.08, duration: 0.4, ease: "easeOut" as const },
+    46→  }),
+    47→};
+    48→
+    49→export default function SettingsPage() {
+    50→  const { t, i18n } = useTranslation();
+    51→  const {
+    52→    ramadanMode,
+    53→    toggleRamadanMode,
+    54→    restDuration,
+    55→    setRestDuration,
+    56→    weightUnit,
+    57→    setWeightUnit,
+    58→    notificationsEnabled,
+    59→    toggleNotifications,
+    60→    setNotificationsEnabled,
+    61→    soundEnabled,
+    62→    toggleSound,
+    63→    theme,
+    64→    setTheme,
+    65→  } = useSettingsStore();
+    66→
+    67→  const { isOnline, status, lastSyncedText } = useCloudSyncState();
+    68→
+    69→  const voiceCoachState = useVoiceCoach();
+    70→
+    71→  interface BeforeInstallPromptEvent extends Event {
+    72→    prompt: () => Promise<void>;
+    73→    userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+    74→  }
+    75→
+    76→  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+    77→  const [showInstallBtn, setShowInstallBtn] = useState(false);
+    78→
+    79→  useEffect(() => {
+    80→    const handleBeforeInstallPrompt = (e: Event) => {
+    81→      e.preventDefault();
+    82→      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    83→      setShowInstallBtn(true);
+    84→    };
+    85→
+    86→    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    87→
+    88→    if (
+    89→      typeof window !== "undefined" &&
+    90→      typeof window.matchMedia === "function" &&
+    91→      window.matchMedia("(display-mode: standalone)").matches
+    92→    ) {
+    93→      setShowInstallBtn(false);
+    94→    }
+    95→
+    96→    return () => {
+    97→      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    98→    };
+    99→  }, []);
+   100→
+   101→  const handleInstallClick = async () => {
+   102→    if (!deferredPrompt) return;
+   103→    deferredPrompt.prompt();
+   104→    const { outcome } = await deferredPrompt.userChoice;
+   105→    console.log(`User response to install prompt: ${outcome}`);
+   106→    setDeferredPrompt(null);
+   107→    setShowInstallBtn(false);
+   108→  };
+   109→
+   110→  const handleNotificationsToggle = async () => {
+   111→    // Turning OFF is always allowed.
+   112→    if (notificationsEnabled) {
+   113→      toggleNotifications();
+   114→      return;
+   115→    }
+   116→    // Turning ON requires browser permission.
+   117→    const perm = getNotificationPermission();
+   118→    if (perm === "unsupported") {
+   119→      alert("Your browser does not support notifications.");
+   120→      return;
+   121→    }
+   122→    const granted = await requestNotificationPermission();
+   123→    if (granted) {
+   124→      setNotificationsEnabled(true);
+   125→      sendNotification("Pulse notifications enabled", {
+   126→        body: "We'll remind you when your rest timer is done. Let's go!",
+   127→      });
+   128→    } else {
+   129→      alert(
+   130→        "Notifications are blocked. Please enable them in your browser settings to receive workout reminders."
+   131→      );
+   132→    }
+   133→  };
+   134→
+   135→  return (
+   136→    <div className="space-y-6 pb-6">
+   137→      {/* ── Back Button ── */}
+   138→      <Link
+   139→        to="/profile"
+   140→        className="inline-flex items-center gap-2 text-sm font-medium text-text-secondary transition-colors hover:text-primary uppercase tracking-wide"
+   141→      >
+   142→        <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+   143→        {t("back")}
+   144→      </Link>
+   145→
+   146→      {/* ── Page Title ── */}
+   147→      <motion.div
+   148→        initial={{ opacity: 0, y: 20 }}
+   149→        animate={{ opacity: 1, y: 0 }}
+   150→        transition={{ duration: 0.4 }}
+   151→      >
+   152→        <h1 className="text-xl font-bold text-text-primary uppercase tracking-wider">{t("settings")}</h1>
+   153→        <p className="mt-1 text-sm text-text-secondary">{t("settings_desc")}</p>
+   154→      </motion.div>
+   155→
+   156→      {/* ── Theme ── */}
+   157→      <motion.div
+   158→        className="glass-card rounded-[--radius-card] p-4"
+   159→        variants={fadeUp}
+   160→        initial="hidden"
+   161→        animate="visible"
+   162→        custom={0}
+   163→      >
+   164→        <div className="flex items-center gap-3 mb-4">
+   165→          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-muted">
+   166→            <Sun className="h-5 w-5 text-primary" />
+   167→          </div>
+   168→          <div className="min-w-0">
+   169→            <p className="text-sm font-bold text-text-primary uppercase tracking-wider truncate">
+   170→              {t("app_theme")}
+   171→            </p>
+   172→            <p className="text-xs text-text-secondary truncate">{t("theme_desc")}</p>
+   173→          </div>
+   174→        </div>
+   175→        <div className="flex p-1 bg-bg-surface-hover rounded-xl border border-border">
+   176→          {[
+   177→            { value: "light" as Theme, label: t("light"), icon: Sun },
+   178→            { value: "dark" as Theme, label: t("dark"), icon: Moon },
+   179→            { value: "system" as Theme, label: t("system"), icon: Monitor },
+   180→          ].map((option) => {
+   181→            const isSelected = theme === option.value;
+   182→            const Icon = option.icon;
+   183→            return (
+   184→              <button
+   185→                key={option.value}
+   186→                onClick={() => setTheme(option.value)}
+   187→                className={cn(
+   188→                  "flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all uppercase tracking-wider",
+   189→                  isSelected
+   190→                    ? "bg-bg-elevated text-text-primary shadow-sm ring-1 ring-border"
+   191→                    : "text-text-secondary hover:text-text-secondary"
+   192→                )}
+   193→              >
+   194→                <Icon className="h-4 w-4" />
+   195→                <span className="hidden sm:inline">{option.label}</span>
+   196→              </button>
+   197→            );
+   198→          })}
+   199→        </div>
+   200→      </motion.div>
+   201→
+   202→      {/* ── Install App (PWA) ── */}
+   203→      {showInstallBtn && (
+   204→        <motion.div
+   205→          className="glass-card rounded-[--radius-card] p-4 border border-border"
+   206→          variants={fadeUp}
+   207→          initial="hidden"
+   208→          animate="visible"
+   209→          custom={0}
+   210→        >
+   211→          <div className="flex items-center justify-between">
+   212→            <div className="flex items-center gap-3">
+   213→              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-muted">
+   214→                <Download className="h-5 w-5 text-primary" />
+   215→              </div>
+   216→              <div className="min-w-0">
+   217→                <p className="text-sm font-bold text-text-primary uppercase tracking-wider truncate">
+   218→                  {t("install_app")}
+   219→                </p>
+   220→                <p className="text-xs text-text-secondary truncate">{t("install_desc")}</p>
+   221→              </div>
+   222→            </div>
+   223→            <Button
+   224→              onClick={handleInstallClick}
+   225→              variant="primary"
+   226→              className="py-2.5 px-4 text-xs font-bold uppercase tracking-wider h-auto"
+   227→            >
+   228→              {t("install")}
+   229→            </Button>
+   230→          </div>
+   231→        </motion.div>
+   232→      )}
+   233→
+   234→      {/* ── Ramadan Mode ── */}
+   235→      <motion.div
+   236→        className="glass-card rounded-[--radius-card] p-4"
+   237→        variants={fadeUp}
+   238→        initial="hidden"
+   239→        animate="visible"
+   240→        custom={1}
+   241→      >
+   242→        <div className="flex items-center justify-between">
+   243→          <div className="flex items-center gap-3">
+   244→            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-warning/10">
+   245→              <Moon className="h-5 w-5 text-warning" />
+   246→            </div>
+   247→            <div className="min-w-0">
+   248→              <p className="text-sm font-bold text-text-primary uppercase tracking-wider truncate">
+   249→                {t("ramadan_mode")} 🌙
+   250→              </p>
+   251→              <p className="text-xs text-text-secondary truncate">{t("ramadan_desc")}</p>
+   252→            </div>
+   253→          </div>
+   254→          <button
+   255→            onClick={toggleRamadanMode}
+   256→            className={cn(
+   257→              "relative h-8 w-14 shrink-0 rounded-full transition-colors duration-300",
+   258→              ramadanMode ? "bg-warning" : "bg-toggle-off"
+   259→            )}
+   260→          >
+   261→            <motion.div
+   262→              className="absolute top-1 h-6 w-6 rounded-full bg-white shadow-md"
+   263→              animate={{ x: ramadanMode ? 28 : 4 }}
+   264→              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+   265→            />
+   266→          </button>
+   267→        </div>
+   268→        {ramadanMode && (
+   269→          <motion.p
+   270→            className="mt-3 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning border border-warning/20 uppercase tracking-wider text-center"
+   271→            initial={{ opacity: 0, height: 0 }}
+   272→            animate={{ opacity: 1, height: "auto" }}
+   273→          >
+   274→            ✨ Ramadan Mode Active! Ramadan Mubarak 🌙
+   275→          </motion.p>
+   276→        )}
+   277→      </motion.div>
+   278→
+   279→      {/* ── Rest Timer Duration ── */}
+   280→      <motion.div
+   281→        className="glass-card rounded-[--radius-card] p-4"
+   282→        variants={fadeUp}
+   283→        initial="hidden"
+   284→        animate="visible"
+   285→        custom={1}
+   286→      >
+   287→        <div className="flex items-center gap-3 mb-4">
+   288→          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-muted">
+   289→            <Timer className="h-5 w-5 text-primary" />
+   290→          </div>
+   291→          <div className="min-w-0">
+   292→            <p className="text-sm font-bold text-text-primary uppercase tracking-wider truncate">
+   293→              {t("rest_duration")}
+   294→            </p>
+   295→            <p className="text-xs text-text-secondary truncate">{t("rest_duration_desc")}</p>
+   296→          </div>
+   297→        </div>
+   298→        <div className="flex gap-2">
+   299→          {[60, 90, 120, 180].map((seconds) => (
+   300→            <Button
+   301→              key={seconds}
+   302→              onClick={() => setRestDuration(seconds)}
+   303→              variant={restDuration === seconds ? "primary" : "ghost"}
+   304→              className="flex-1 py-2 text-sm font-semibold"
+   305→            >
+   306→              {seconds >= 60 ? `${seconds / 60}m` : `${seconds}s`}
+   307→            </Button>
+   308→          ))}
+   309→        </div>
+   310→      </motion.div>
+   311→
+   312→      {/* ── Weight Unit ── */}
+   313→      <motion.div
+   314→        className="glass-card rounded-[--radius-card] p-4"
+   315→        variants={fadeUp}
+   316→        initial="hidden"
+   317→        animate="visible"
+   318→        custom={2}
+   319→      >
+   320→        <div className="flex items-center gap-3 mb-4">
+   321→          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-success/10">
+   322→            <Scale className="h-5 w-5 text-success" />
+   323→          </div>
+   324→          <div className="min-w-0">
+   325→            <p className="text-sm font-bold text-text-primary uppercase tracking-wider truncate">
+   326→              {t("weight_unit")}
+   327→            </p>
+   328→            <p className="text-xs text-text-secondary truncate">{t("weight_unit_desc")}</p>
+   329→          </div>
+   330→        </div>
+   331→        <div className="flex gap-2">
+   332→          {[
+   333→            { value: "kg" as const, label: "Kilograms (kg)" },
+   334→            { value: "lbs" as const, label: "Pounds (lbs)" },
+   335→          ].map((option) => (
+   336→            <Button
+   337→              key={option.value}
+   338→              onClick={() => setWeightUnit(option.value)}
+   339→              variant={weightUnit === option.value ? "primary" : "ghost"}
+   340→              className="flex-1 py-2.5 text-sm uppercase tracking-wider h-auto font-semibold"
+   341→            >
+   342→              {option.label}
+   343→            </Button>
+   344→          ))}
+   345→        </div>
+   346→      </motion.div>
+   347→
+   348→      {/* ── Notifications ── */}
+   349→      <motion.div
+   350→        className="glass-card rounded-[--radius-card] p-4"
+   351→        variants={fadeUp}
+   352→        initial="hidden"
+   353→        animate="visible"
+   354→        custom={3}
+   355→      >
+   356→        <div className="flex items-center justify-between">
+   357→          <div className="flex items-center gap-3">
+   358→            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-muted">
+   359→              <Bell className="h-5 w-5 text-primary" />
+   360→            </div>
+   361→            <div className="min-w-0">
+   362→              <p className="text-sm font-bold text-text-primary uppercase tracking-wider truncate">
+   363→                {t("notifications")}
+   364→              </p>
+   365→              <p className="text-xs text-text-secondary truncate">{t("notifications_desc")}</p>
+   366→            </div>
+   367→          </div>
+   368→          <button
+   369→            onClick={handleNotificationsToggle}
+   370→            className={cn(
+   371→              "relative h-8 w-14 shrink-0 rounded-full transition-colors duration-300",
+   372→              notificationsEnabled
+   373→                ? "bg-primary shadow-[0_0_10px_var(--c-primary-glow)]"
+   374→                : "bg-toggle-off"
+   375→            )}
+   376→          >
+   377→            <motion.div
+   378→              className="absolute top-1 h-6 w-6 rounded-full bg-white shadow-md"
+   379→              animate={{ x: notificationsEnabled ? 28 : 4 }}
+   380→              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+   381→            />
+   382→          </button>
+   383→        </div>
+   384→      </motion.div>
+   385→
+   386→      {/* ── Sounds ── */}
+   387→      <motion.div
+   388→        className="glass-card rounded-[--radius-card] p-4"
+   389→        variants={fadeUp}
+   390→        initial="hidden"
+   391→        animate="visible"
+   392→        custom={4}
+   393→      >
+   394→        <div className="flex items-center justify-between">
+   395→          <div className="flex items-center gap-3">
+   396→            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-info/10">
+   397→              <Volume2 className="h-5 w-5 text-info" />
+   398→            </div>
+   399→            <div className="min-w-0">
+   400→              <p className="text-sm font-bold text-text-primary uppercase tracking-wider truncate">
+   401→                {t("sound_effects")}
+   402→              </p>
+   403→              <p className="text-xs text-text-secondary truncate">{t("sound_effects_desc")}</p>
+   404→            </div>
+   405→          </div>
+   406→          <button
+   407→            onClick={toggleSound}
+   408→            className={cn(
+   409→              "relative h-8 w-14 shrink-0 rounded-full transition-colors duration-300",
+   410→              soundEnabled ? "bg-info shadow-[0_0_10px_rgba(56,189,248,0.4)]" : "bg-toggle-off"
+   411→            )}
+   412→          >
+   413→            <motion.div
+   414→              className="absolute top-1 h-6 w-6 rounded-full bg-white shadow-md"
+   415→              animate={{ x: soundEnabled ? 28 : 4 }}
+   416→              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+   417→            />
+   418→          </button>
+   419→        </div>
+   420→      </motion.div>
+   421→
+   422→      {/* ── Voice Coach ── */}
+   423→      <motion.div
+   424→        className="glass-card rounded-[--radius-card] p-4"
+   425→        variants={fadeUp}
+   426→        initial="hidden"
+   427→        animate="visible"
+   428→        custom={4}
+   429→      >
+   430→        <div className="flex items-center justify-between">
+   431→          <div className="flex items-center gap-3">
+   432→            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-muted">
+   433→              <Mic className="h-5 w-5 text-primary" />
+   434→            </div>
+   435→            <div className="min-w-0">
+   436→              <p className="text-sm font-bold text-text-primary uppercase tracking-wider truncate">
+   437→                Voice Coach 🎙️
+   438→              </p>
+   439→              <p className="text-xs text-text-secondary truncate">
+   440→                Spoken cues for rest, PRs, and milestones
+   441→              </p>
+   442→            </div>
+   443→          </div>
+   444→          <button
+   445→            onClick={() => voiceCoachState.toggle(!voiceCoachState.enabled)}
+   446→            disabled={!voiceCoachState.isSupported}
+   447→            aria-label="Toggle voice coach"
+   448→            aria-pressed={voiceCoachState.enabled}
+   449→            className={cn(
+   450→              "relative h-8 w-14 shrink-0 rounded-full transition-colors duration-300",
+   451→              voiceCoachState.enabled
+   452→                ? "bg-primary shadow-[0_0_10px_var(--c-primary-glow)]"
+   453→                : "bg-toggle-off",
+   454→              !voiceCoachState.isSupported && "opacity-50 cursor-not-allowed"
+   455→            )}
+   456→          >
+   457→            <motion.div
+   458→              className="absolute top-1 h-6 w-6 rounded-full bg-white shadow-md"
+   459→              animate={{ x: voiceCoachState.enabled ? 28 : 4 }}
+   460→              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+   461→            />
+   462→          </button>
+   463→        </div>
+   464→
+   465→        {/* Unsupported notice */}
+   466→        {!voiceCoachState.isSupported && (
+   467→          <p className="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger border border-danger/20">
+   468→            Your browser doesn't support speech synthesis. Try Chrome, Edge, or Safari.
+   469→          </p>
+   470→        )}
+   471→
+   472→        {/* Voice selector + Test button — only when enabled */}
+   473→        {voiceCoachState.enabled && voiceCoachState.isSupported && (
+   474→          <motion.div
+   475→            className="mt-4 space-y-3"
+   476→            initial={{ opacity: 0, height: 0 }}
+   477→            animate={{ opacity: 1, height: "auto" }}
+   478→          >
+   479→            <div>
+   480→              <label
+   481→                htmlFor="voice-coach-select"
+   482→                className="block text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-1.5"
+   483→              >
+   484→                Voice
+   485→              </label>
+   486→              <select
+   487→                id="voice-coach-select"
+   488→                value={voiceCoachState.selectedVoiceURI ?? ""}
+   489→                onChange={(e) => voiceCoachState.selectVoice(e.target.value)}
+   490→                className="w-full h-11 rounded-xl bg-bg-surface-hover border border-border px-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+   491→              >
+   492→                {voiceCoachState.voices.length === 0 && (
+   493→                  <option value="">Loading voices…</option>
+   494→                )}
+   495→                {voiceCoachState.voices.map((v) => (
+   496→                  <option key={v.voiceURI} value={v.voiceURI}>
+   497→                    {v.name} — {v.lang}
+   498→                  </option>
+   499→                ))}
+   500→              </select>
+   501→            </div>
+   502→
+   503→            <div className="flex items-center gap-2">
+   504→              <Button
+   505→                onClick={() =>
+   506→                  voiceCoach.speakText("That's how I sound. Let's get to work!")
+   507→                }
+   508→                variant="outline"
+   509→                className="flex-1 py-2.5 text-xs uppercase tracking-wider h-auto"
+   510→              >
+   511→                <Play className="h-4 w-4" />
+   512→                Test Voice
+   513→              </Button>
+   514→              <Button
+   515→                onClick={() => {
+   516→                  voiceCoach.stop();
+   517→                  useToastStore.getState().addToast("info", "Voice coach stopped.");
+   518→                }}
+   519→                variant="ghost"
+   520→                className="py-2.5 text-xs uppercase tracking-wider h-auto"
+   521→              >
+   522→                Stop
+   523→              </Button>
+   524→            </div>
+   525→
+   526→            <p className="text-[11px] text-text-muted flex items-start gap-1.5">
+   527→              <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-text-muted" />
+   528→              <span>
+   529→                Uses your device's built-in speech engine. Works offline. Cues fire
+   530→                on rest completion, new PRs, set completion, the halfway mark, and
+   531→                workout completion.
+   532→              </span>
+   533→            </p>
+   534→          </motion.div>
+   535→        )}
+   536→      </motion.div>
+   537→
+   538→      {/* ── Cloud Sync ── */}
+   539→      <motion.div
+   540→        className="glass-card rounded-[--radius-card] p-4"
+   541→        variants={fadeUp}
+   542→        initial="hidden"
+   543→        animate="visible"
+   544→        custom={5}
+   545→      >
+   546→        <div className="flex items-center justify-between">
+   547→          <div className="flex items-center gap-3">
+   548→            <div
+   549→              className={cn(
+   550→                "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
+   551→                !isOnline ? "bg-danger/10 text-danger" : "bg-primary/10 text-primary"
+   552→              )}
+   553→            >
+   554→              <Cloud className="h-5 w-5" />
+   555→            </div>
+   556→            <div className="min-w-0">
+   557→              <p className="text-sm font-bold text-text-primary uppercase tracking-wider truncate">
+   558→                {t("cloud_sync")}
+   559→              </p>
+   560→              <p className="text-xs text-text-secondary truncate">
+   561→                {status === "syncing" ? t("loading") : lastSyncedText}
+   562→              </p>
+   563→            </div>
+   564→          </div>
+   565→          {isOnline && (
+   566→            <button
+   567→              onClick={() => {
+   568→                const user = useAuthStore.getState().user;
+   569→                if (user) syncAll(user.uid).catch(console.error);
+   570→              }}
+   571→              disabled={status === "syncing"}
+   572→              className={cn(
+   573→                "h-11 w-11 flex items-center justify-center rounded-xl bg-bg-elevated hover:bg-bg-hover text-text-secondary transition-all active:scale-95 border border-border/50",
+   574→                status === "syncing" && "animate-spin"
+   575→              )}
+   576→            >
+   577→              <RefreshCw className="h-4 w-4" />
+   578→            </button>
+   579→          )}
+   580→        </div>
+   581→      </motion.div>
+   582→
+   583→      {/* ── Data Backup (Phase 3 improvement: export/import) ── */}
+   584→      <motion.div
+   585→        className="glass-card rounded-[--radius-card] p-4"
+   586→        variants={fadeUp}
+   587→        initial="hidden"
+   588→        animate="visible"
+   589→        custom={5}
+   590→      >
+   591→        <div className="flex items-center gap-3 mb-4">
+   592→          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-success/10">
+   593→            <DatabaseBackup className="h-5 w-5 text-success" />
+   594→          </div>
+   595→          <div className="min-w-0">
+   596→            <p className="text-sm font-bold text-text-primary uppercase tracking-wider truncate">
+   597→              Data Backup
+   598→            </p>
+   599→            <p className="text-xs text-text-secondary truncate">
+   600→              Export / import your local workout data
+   601→            </p>
+   602→          </div>
+   603→        </div>
+   604→        <div className="flex gap-2">
+   605→          <Button
+   606→            onClick={async () => {
+   607→              try {
+   608→                const backup = await exportLocalBackup();
+   609→                const blob = new Blob([JSON.stringify(backup, null, 2)], {
+   610→                  type: "application/json",
+   611→                });
+   612→                const url = URL.createObjectURL(blob);
+   613→                const a = document.createElement("a");
+   614→                a.href = url;
+   615→                a.download = `pulse-backup-${new Date().toISOString().split("T")[0]}.json`;
+   616→                a.click();
+   617→                URL.revokeObjectURL(url);
+   618→                useToastStore.getState().addToast("success", "Backup exported!");
+   619→              } catch (e) {
+   620→                console.error(e);
+   621→                useToastStore.getState().addToast("error", "Export failed");
+   622→              }
+   623→            }}
+   624→            variant="outline"
+   625→            className="flex-1 py-2.5 text-xs uppercase tracking-wider h-auto"
+   626→          >
+   627→            <Download className="h-4 w-4" />
+   628→            Export
+   629→          </Button>
+   630→          <Button
+   631→            onClick={() => {
+   632→              const input = document.createElement("input");
+   633→              input.type = "file";
+   634→              input.accept = "application/json";
+   635→              input.onchange = async (e) => {
+   636→                const file = (e.target as HTMLInputElement).files?.[0];
+   637→                if (!file) return;
+   638→                try {
+   639→                  const text = await file.text();
+   640→                  const backup = JSON.parse(text);
+   641→                  const { importLocalBackup } = await import("@/lib/syncEngine");
+   642→                  await importLocalBackup(backup);
+   643→                  useToastStore.getState().addToast("success", "Backup imported!");
+   644→                } catch (err) {
+   645→                  console.error(err);
+   646→                  useToastStore.getState().addToast("error", "Import failed — invalid file");
+   647→                }
+   648→              };
+   649→              input.click();
+   650→            }}
+   651→            variant="outline"
+   652→            className="flex-1 py-2.5 text-xs uppercase tracking-wider h-auto"
+   653→          >
+   654→            <Upload className="h-4 w-4" />
+   655→            Import
+   656→          </Button>
+   657→        </div>
+   658→      </motion.div>
+   659→
+   660→      {/* ── About ── */}
+   661→      <motion.div
+   662→        className="glass-card rounded-[--radius-card] p-4 flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer hover:ring-1 hover:ring-border/80"
+   663→        variants={fadeUp}
+   664→        initial="hidden"
+   665→        animate="visible"
+   666→        custom={5}
+   667→      >
+   668→        <div className="flex items-center gap-3">
+   669→          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-bg-elevated">
+   670→            <Info className="h-5 w-5 text-text-secondary" />
+   671→          </div>
+   672→          <div className="min-w-0">
+   673→            <p className="text-sm font-bold text-text-primary uppercase tracking-wider truncate">
+   674→              {t("about")}
+   675→            </p>
+   676→            <p className="text-xs text-text-secondary truncate">Pulse v1.0.0</p>
+   677→          </div>
+   678→        </div>
+   679→        <ChevronRight className="h-5 w-5 text-text-secondary shrink-0 rtl:rotate-180" />
+   680→      </motion.div>
+   681→
+   682→      {/* ── Footer ── */}
+   683→      <motion.p
+   684→        className="text-center text-xs text-text-secondary pt-4 uppercase tracking-widest"
+   685→        variants={fadeUp}
+   686→        initial="hidden"
+   687→        animate="visible"
+   688→        custom={5}
+   689→      >
+   690→        Crafted with ⚡ for the Fitness Community
+   691→      </motion.p>
+   692→    </div>
+   693→  );
+   694→}
+   695→

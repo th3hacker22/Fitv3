@@ -1,0 +1,402 @@
+   300→  - social/kudos: validateId, handlePrismaError (P2025 → 404)
+   301→  - social/comments: validateId, validateString(500) text cap, callerUid match for DELETE → 403, transaction (already done Phase 1)
+   302→  - social/search: validateString(100), mode: "insensitive" (fixes case-sensitive bug)
+   303→  - challenges/route: transaction for seeding
+   304→  - challenges/join: validateId, validateDisplayName, validateOptionalUrl, callerUid match → 403, challenge existence check → 404
+   305→  - challenges/progress: validateId, challenge existence check → 404
+   306→  - challenges/leaderboard: challenge existence check → 404, filter progressKg > 0
+   307→  - challenges/sync-volume: validateFloat(0-1e9), callerUid implicit (already done Phase 1)
+   308→- Updated all client stores to send x-user-* headers on write operations:
+   309→  - useSocialStore: authHeaders() helper used by follow, unfollow, giveKudos, publishSession, addComment, deleteComment
+   310→  - useChallengesStore: joinChallenge + syncVolume send x-user-uid/x-user-name
+   311→  - socialService.updatePublicProfile sends x-user-uid/x-user-name
+   312→- Sanitized error responses across ALL routes: replaced `error.message` with generic "Internal server error"
+   313→- Verified via curl:
+   314→  - Rate limiting: 5 requests → 200, 6th → 429 ✓
+   315→  - Auth: POST without x-user-uid → 401 ✓
+   316→  - Impersonation: authorUid ≠ callerUid → 403 ✓
+   317→  - 404 for non-existent challenges ✓
+   318→  - Text capped to 500 chars ✓
+   319→- Verified via Agent Browser: app loads clean, challenges page works, join works, 0 console errors
+   320→- 90 tests still pass (no regressions)
+   321→
+   322→Stage Summary:
+   323→- Rate limiting active on all /api routes (in-memory token bucket)
+   324→- Auth header validation on all write routes (401 without x-user-uid)
+   325→- Impersonation prevention on profile/feed/follow/comments/join/sync-volume (403 if body uid ≠ caller uid)
+   326→- Input validation on all routes (length caps, URL scheme validation, numeric clamping)
+   327→- 404 for missing records (was 500)
+   328→- Error responses sanitized (no internal details leaked)
+   329→- Multi-step writes wrapped in transactions (follow, feed, comments, challenges seeding)
+   330→- Search now case-insensitive (was case-sensitive due to BINARY collation)
+   331→- Leaderboard filters out zero-progress joiners
+   332→
+   333→---
+   334→Task ID: PHASE3-PERFORMANCE
+   335→Agent: main
+   336→Task: Execute Phase 3 (React Performance & UX) from CODE_REVIEW.md
+   337→
+   338→Work Log:
+   339→- 3.1 Fixed full-store subscriptions across 11 files (was causing cascading re-renders):
+   340→  - ExercisesPage: 8 fields split into individual selectors (biggest win — 1324 exercises in store)
+   341→  - StatsPage: exercises + loadExercises split; effect dep changed from [exercises] (array ref) to [exercisesCount] (primitive) — prevents expensive analytics re-runs on unrelated filter changes
+   342→  - ProfilePage: user + ramadanMode + unlockedList + loadUnlocked split into individual selectors
+   343→  - NutritionPage: 7 nutrition store fields split into individual selectors
+   344→  - FeedPage: 12 social store fields + auth split into individual selectors
+   345→  - CommentsSheet: user selector fixed (was bare useAuthStore())
+   346→  - HomePage: newlyUnlocked + clearNewlyUnlocked split
+   347→  - BuilderPage: exercises + loadExercises split
+   348→  - ExerciseDetailPage: exercises + loadExercises + isLoading split
+   349→  - ChallengeDetailPage: user selector fixed
+   350→  - ChallengesPage: user selector fixed
+   351→- 3.3 Fixed StatsPage effect deps: [exercises] → [exercisesCount] (exercises.length) — the array reference changed on every store update (even unrelated), causing the expensive analytics effect (6 queries + 5 e1RM lookups) to re-run unnecessarily. Now only runs when the count actually changes.
+   352→- 3.7 Capped router history at 50 entries: `.slice(-50)` on every navigate — was growing unbounded, causing memory growth and re-renders for any subscriber selecting the history array.
+   353→- 3.8 Added syncAll in-flight guard: module-level `syncInFlight` flag prevents concurrent calls from racing. useBackgroundSync fires on mount + every 5min + online event + visibilitychange — multiple can overlap, causing UI flicker and state races.
+   354→
+   355→Stage Summary:
+   356→- 11 files updated with individual Zustand selectors (eliminated bare useStore() calls)
+   357→- StatsPage effect no longer re-runs on every exercise store change
+   358→- Router history bounded at 50 entries
+   359→- syncAll concurrent-call race prevented
+   360→- 90 tests still pass (no regressions)
+   361→- App verified via Agent Browser: loads clean, no console errors
+   362→
+   363→---
+   364→Task ID: PHASE4-ACCESSIBILITY
+   365→Agent: main
+   366→Task: Execute Phase 4 (Accessibility / WCAG 2.1 AA) from CODE_REVIEW.md
+   367→
+   368→Work Log:
+   369→- 4.1 Added aria-labels to all icon-only buttons:
+   370→  - Layout: scroll-to-top button (aria-label="Scroll to top"), nav items (aria-label={label})
+   371→  - RestTimer: +30s button (aria-label="Add 30 seconds..."), dismiss button (aria-label="Dismiss rest timer")
+   372→  - CommentsSheet: trigger button (aria-label="Comments (N)"), close button (aria-label="Close comments"), delete button (aria-label="Delete comment"), send button (aria-label="Send comment")
+   373→  - NutritionPage: prev/next day buttons (aria-label="Previous day"/"Next day"), edit goals button (aria-label="Edit nutrition goals")
+   374→  - All decorative icons now have aria-hidden="true" (Timer, ArrowUp, X, ChevronLeft/Right, Edit, Send, Trash2, MessageSquare, Lightbulb, ChevronUp/Down)
+   375→- 4.2 Associated labels with inputs:
+   376→  - GeneratorWizard: height input (htmlFor="gen-height"), weight input (htmlFor="gen-weight"), years lifting slider (htmlFor="gen-years")
+   377→  - ExerciseWorkoutCard: notes textarea (aria-label="Exercise notes")
+   378→  - CommentsSheet: comment textarea (aria-label="Write a comment")
+   379→- 4.3 Added aria-expanded/aria-controls to collapsible sections:
+   380→  - ExerciseWorkoutCard Tips toggle: aria-expanded={tipsOpen}, aria-controls={`tips-${exercise.id}`}, matching id on the tips content div
+   381→  - ExerciseWorkoutCard Notes toggle: aria-expanded={notesOpen}, aria-controls={`notes-${exercise.id}`}, matching id on the notes content div
+   382→- 4.5 Added aria-current="page" to active nav item in Layout NavItem
+   383→- 4.6 Fixed error toast aria-live:
+   384→  - Toast container changed from role="status" aria-live="polite" (always polite) to role="region" aria-label="Notifications"
+   385→  - Individual toast elements now use role="alert" aria-live="assertive" for error type, role="status" aria-live="polite" for success/info — screen readers will interrupt immediately for errors
+   386→- 4.8 Added list semantics to comment list:
+   387→  - Changed <div> list to <ul role="list"> with <li> items
+   388→  - Empty state and scroll anchor also wrapped in <li> with aria-hidden="true" for the anchor
+   389→- 4.4 MacroBar already had role="progressbar" + aria attrs from Phase 1 hoist
+   390→- 4.7 prefers-reduced-motion already added in Phase 1 CSS fixes
+   391→- Verified via Agent Browser: aria-current on active nav ✓, aria-label on scroll button ✓, 0 console errors
+   392→- 90 tests still pass (no regressions)
+   393→
+   394→Stage Summary:
+   395→- All icon-only buttons now have descriptive aria-labels (15+ buttons across 5 files)
+   396→- All form inputs have associated labels (htmlFor/id or aria-label) in GeneratorWizard, ExerciseWorkoutCard, CommentsSheet
+   397→- Collapsible sections (Tips, Notes) expose expanded state via aria-expanded + aria-controls
+   398→- Active nav item has aria-current="page" for screen reader navigation
+   399→- Error toasts use role="alert" aria-live="assertive" (immediate announcement)
+   400→- Comment list uses semantic <ul>/<li> with role="list"
+   401→- All decorative icons marked aria-hidden="true"
+   402→- Emojis in accessible names wrapped in <span aria-hidden="true">
+   403→
+   404→---
+   405→Task ID: PHASE5-QUALITY
+   406→Agent: main
+   407→Task: Execute Phase 5 (Code Quality & Polish) from CODE_REVIEW.md
+   408→
+   409→Work Log:
+   410→- 5.4 Removed dead code:
+   411→  - Deleted src/i18n/locales/ar.json (Arabic locale removed in earlier phase, file was orphaned)
+   412→  - Cleaned all dead Arabic locale branches across 8 files: ProfilePage, FeedPage, StatsPage, ExerciseDetailPage, ExercisesPage, HomePage, BuilderPage, ExerciseWorkoutCard (i18n.language === "ar" checks → removed, nameAr → exercise.name, exerciseArabicMap → removed)
+   413→  - Removed unused exerciseArabicMap imports from ExerciseWorkoutCard + BuilderPage
+   414→  - Removed dead PWA stubs from Layout.tsx: needRefresh/setNeedRefresh/updateServiceWorker variables + entire AnimatePresence PWA toast block (was always false, never rendered)
+   415→  - Removed unused buildPath function from router/index.ts (returned route name, not a path — misleading dead code)
+   416→  - Removed unused i18n destructuring from ExerciseWorkoutCard (was only used for the dead Arabic check)
+   417→- 5.1 Removed dead CSS token --c-bg-card from globals.css (was defined but never consumed)
+   418→- 5.3 Added try/catch to async handlers:
+   419→  - HomePage loadData: wrapped Promise.all + setState in try/catch (was silently swallowing IndexedDB errors)
+   420→  - ProfilePage sync button: wrapped pushToCloud in try/finally (was leaving syncing=true forever if it threw)
+   421→- 5.5 Added importLocalBackup function to syncEngine.ts:
+   422→  - Parses JSON backup, bulkPut into all Dexie tables
+   423→  - Converts base64 photo strings back to Blobs (base64ToBlob helper)
+   424→  - Updated SettingsPage import button to use the organized function (was inline with manual bulkPut calls)
+   425→- 5.6 Added graceful Prisma shutdown: SIGTERM/SIGINT handlers call prisma.$disconnect() to close DB connections cleanly
+   426→
+   427→Stage Summary:
+   428→- Dead code removed: ar.json, 8 files of Arabic branches, PWA stubs, buildPath, unused imports
+   429→- Async error handling: try/catch on HomePage data load, try/finally on ProfilePage sync
+   430→- importLocalBackup: complete export/import backup feature (was export-only)
+   431→- Prisma graceful shutdown: SIGTERM/SIGINT handlers
+   432→- 90 tests still pass (no regressions)
+   433→- App verified via Agent Browser: loads clean, 0 errors, Data Backup section functional
+   434→
+   435→---
+   436→Task ID: PHASE6-TESTS
+   437→Agent: main
+   438→Task: Execute Phase 6 (Testing Expansion) from CODE_REVIEW.md
+   439→
+   440→Work Log:
+   441→- 6.3 Created validation.test.ts (29 tests):
+   442→  - validateString: trim, cap, null handling
+   443→  - validateDisplayName: control char rejection, length cap
+   444→  - validateUrl: http/https acceptance, javascript:/data: rejection (XSS), length cap
+   445→  - validateOptionalUrl: null-safe URL validation
+   446→  - validateInt: range clamping, Infinity/NaN rejection, float truncation, string parsing
+   447→  - validateFloat: range clamping, Infinity rejection, string parsing
+   448→  - validateId: whitespace rejection, length cap, non-string rejection
+   449→- 6.2 Created regression.test.tsx (12 tests):
+   450→  - OptionBtn hoist: verifies module-level definition (not inside component)
+   451→  - MacroBar hoist: verifies module-level definition
+   452→  - Link modifier keys: ctrl/meta/shift clicks don't preventDefault (new tab works)
+   453→  - Link href substitution: $param replaced with actual value
+   454→  - Router history cap: 60 navigations → ≤50 entries
+   455→  - Router back() still works after cap
+   456→  - syncAll in-flight guard: concurrent calls don't double-set status
+   457→  - i18n English-only: language === "en", no "ar" in supportedLngs
+   458→- 6.1 Created api-integration.test.ts (7 tests):
+   459→  - useSocialStore follow sends x-user-* headers
+   460→  - useSocialStore giveKudos sends x-user-uid header
+   461→  - useSocialStore addComment sends x-user-* headers
+   462→  - useSocialStore deleteComment checks res.ok before optimistic update (403 → no decrement)
+   463→  - useChallengesStore joinChallenge sends x-user-* headers
+   464→  - AI workout service offline fallback returns valid routine
+   465→- Fixed 1 test failure: Link modifier key tests were overwriting router.navigate (shared Zustand store). Fixed with beforeEach/afterEach save/restore pattern + vi.fn() spy.
+   466→
+   467→Stage Summary:
+   468→- Test suite expanded from 90 → 138 tests across 14 files (48 new tests)
+   469→- New coverage: validation helpers (29 tests), component regression (12 tests), API integration (7 tests)
+   470→- Regression tests directly verify Phase 1-5 fixes: OptionBtn/MacroBar hoist, Link modifier keys, router history cap, syncAll guard, i18n English-only
+   471→- Integration tests verify auth headers are sent on all write operations
+   472→- All 138 tests pass in 1.88s, 0 failures
+   473→- App verified via Agent Browser: loads clean, 0 console errors
+   474→
+   475→ALL 6 PHASES OF THE IMPROVEMENT PLAN ARE NOW COMPLETE:
+   476→Phase 1: Critical fixes (8 CRITICAL + 12 HIGH) ✓
+   477→Phase 2: Security hardening (rate limiting + auth + validation) ✓
+   478→Phase 3: React performance (selectors + memoization) ✓
+   479→Phase 4: Accessibility WCAG AA ✓
+   480→Phase 5: Code quality (dead code + error handling) ✓
+   481→Phase 6: Test expansion (90 → 138 tests) ✓
+   482→
+   483→---
+   484→Task ID: AI-GEN-PLAN
+   485→Agent: main
+   486→Task: Import 3 skills (web-search, VLM, LLM) and create AI Generator improvement plan
+   487→
+   488→Work Log:
+   489→- Imported 3 skills: web-search, VLM, LLM
+   490→- web-search: Searched for fitness app AI workout generator UX best practices — found patterns from Fitbod, Strong, Hevy, and AI workout builder tutorials. Key finding: 5-7 steps max for onboarding wizards.
+   491→- VLM: Analyzed current wizard step 1 (Gender selection) screenshot — rated 8/10 design but flagged 14 steps as too many (should be 5-7), needs progress indicators and simplified navigation.
+   492→- LLM: Generated comprehensive improvement plan covering algorithm, design, UX, steps, and age input:
+   493→  - Algorithm: progressive overload tracking, fatigue management, exercise pairing, learning loop
+   494→  - Design: 14 steps → 5 steps (Goal+Experience, Availability+Equipment, Muscles+Preferences, Health+Safety, Review)
+   495→  - UX: smart defaults, optional steps, card-based layout, real-time preview
+   496→  - Age input: stepper with ±5 buttons + direct typing (NOT slider — too imprecise on mobile)
+   497→  - Age-based algorithm adjustments: 18-25 (high volume), 26-40 (balanced), 41-55 (controlled), 55+ (low impact)
+   498→
+   499→Stage Summary:
+   500→- AI_GENERATOR_PLAN.md written with full plan
+   501→- 3 skills used: web-search (research), VLM (UI analysis), LLM (plan generation)
+   502→- Key recommendations: reduce to 5 steps, replace slider with stepper, add progressive overload + fatigue management
+   503→
+   504→---
+   505→Task ID: AI-GEN-IMPLEMENT
+   506→Agent: main
+   507→Task: Implement AI Generator improvement plan — 14 steps → 5 steps + age stepper + smart defaults
+   508→
+   509→Work Log:
+   510→- Completely rewrote GeneratorWizard.tsx (681 lines → ~500 lines):
+   511→  - Reduced STEPS array from 14 → 5: ["Goal & Experience", "Schedule & Equipment", "Muscles & Style", "Health & Safety", "Review"]
+   512→  - Step 1 (Goal & Experience): merged Gender + Age + Goal + Experience into one page with gender toggle, age stepper, goal cards with descriptions, experience grid
+   513→  - Step 2 (Schedule & Equipment): merged Frequency + Duration + Environment into one page with day buttons, duration buttons, location toggle, equipment multi-select, real-time preview (est. exercises/time/days)
+   514→  - Step 3 (Muscles & Style): merged Key Muscles + Preferences — AnatomyMap + workout style + toggles (warmup/cardio/core). Marked as OPTIONAL with Skip button.
+   515→  - Step 4 (Health & Safety): simplified from Health/Safety — injuries multi-select + mobility toggle. Also OPTIONAL with Skip.
+   516→  - Step 5 (Review & Generate): visual summary cards + estimated program stats + generate button
+   517→- Created AgeStepper component (hoisted to module scope):
+   518→  - ±5 year buttons for quick adjustment (aria-label="Increase/Decrease age by 5")
+   519→  - Direct number input for precision (type="number" with min/max validation 13-100)
+   520→  - Contextual help: "Age helps us calibrate intensity, volume tolerance, and recovery"
+   521→  - Large centered display (text-5xl font-black)
+   522→- Added smart defaults: applySmartDefaults() function auto-fills days/week, session length, rep bias based on selected goal:
+   523→  - Strength → 4 days, 75min, low reps
+   524→  - Hypertrophy → 4 days, 60min, moderate reps
+   525→  - Fat Loss → 3 days, 45min, high reps + cardio
+   526→  - Endurance → 5 days, 60min, high reps
+   527→  - General Fitness → 3 days, 45min, moderate reps
+   528→- Added real-time preview on step 2: estimated exercises, time, and days/week
+   529→- Added visual step progress bar with ✓ for completed steps and numbered indicators
+   530→- Steps 3 & 4 show "Skip" button (optional steps)
+   531→- Updated isStepValid: only step 0 requires gender+goal+experience; steps 1-4 always valid
+   532→- Kept OptionBtn hoisted at module scope (Phase 1 fix preserved)
+   533→- Verified via Agent Browser: all 5 steps render correctly, navigation works, Skip buttons work, review shows summary, 0 console errors
+   534→- Verified via VLM: Age stepper 8/10 clarity, UX vs 14 steps 9/10, Visual design 8/10
+   535→- 138 tests still pass (no regressions)
+   536→
+   537→Stage Summary:
+   538→- 14 steps → 5 steps (71% reduction)
+   539→- Age slider → age stepper (±5 buttons + direct input)
+   540→- Smart defaults applied on goal selection
+   541→- Real-time workout preview on schedule step
+   542→- Optional steps (Muscles, Health) with Skip button
+   543→- Visual progress bar with ✓ completed indicators
+   544→- All Phase 1-5 fixes preserved (OptionBtn hoist, selectors, a11y)
+   545→
+   546→---
+   547→Task ID: AI-COACH-INTEGRATION
+   548→Agent: main
+   549→Task: Build AI Coach with multi-provider router + full user data analysis using 4 skills
+   550→
+   551→Work Log:
+   552→- Skill 1 (web-search): Researched AI fitness coach best practices — FitnessAI (100M+ sets data), Zing Coach, LoadMuscle. Key insight: AI must read user history + analytics for personalization.
+   553→- Skill 2 (LLM): Generated comprehensive system prompt for AI coach covering: training history analysis, weakness identification, progressive overload, constraint assessment, split design, volume/intensity prescription.
+   554→- Skill 3 (fullstack-dev): Built the implementation:
+   555→  - src/server/aiProviders.ts: Multi-provider router (z-ai-sdk → Groq → Gemini → OpenRouter → heuristic fallback)
+   556→  - src/app/api/ai-coach/route.ts: AI Coach endpoint that reads user's COMPLETE data (profile, recent sessions, PRs, analytics) and builds a comprehensive prompt
+   557→  - src/app/api/ai-health/route.ts: Health check endpoint
+   558→  - src/services/aiWorkoutService.ts: Updated with generateWorkoutAICoach() that passes full user data
+   559→  - src/components/workout/GeneratorWizard.tsx: handleGenerate now gathers data from IndexedDB (sessions, PRs, streak, volume, muscle balance) and calls AI Coach
+   560→- Skill 4 (agent-browser): Tested the full flow — wizard → generate → AI Coach response → program displayed. Verified:
+   561→  - POST /api/ai-coach 200 (8-13s response time)
+   562→  - [AI Router] z-ai-sdk succeeded
+   563→  - Generated program shows real exercises (Bench Press, Bent Over Row, Squat)
+   564→  - 0 console errors
+   565→
+   566→Stage Summary:
+   567→- Multi-provider AI router: 4 providers with graceful fallback chain
+   568→- AI Coach reads COMPLETE user data: 20+ profile fields, last 10 workout sessions, personal records, analytics (streak/volume/muscle balance/tonnage)
+   569→- Progressive overload: AI suggests weights based on last session per exercise
+   570→- Weakness identification: AI analyzes which muscles haven't been trained recently
+   571→- Safety: injuries, mobility, medical conditions all passed to AI
+   572→- 138 tests still pass, pushed to GitHub
+   573→
+   574→---
+   575→Task ID: UI-UX-PLAN
+   576→Agent: main
+   577→Task: Import 4 skills (ui-ux-pro-max, design, writing-plans, VLM) + create comprehensive UI/UX improvement plan
+   578→
+   579→Work Log:
+   580→- Skill 1 (ui-ux-pro-max): Loaded design system standards — typography scale, spacing scale, button alignment rules, card content rules, WCAG AAA contrast, touch target sizes
+   581→- Skill 2 (design): Loaded design routing framework — artifact skills, style routing, quality gates, HTML structure rules
+   582→- Skill 3 (writing-plans): Loaded plan structure — bite-sized tasks, exact file paths, complete code, test commands
+   583→- Skill 4 (VLM): Analyzed 8 screenshots (Home, Exercises, Feed, Nutrition, Stats, Profile, Settings, AI Wizard) — identified: text alignment issues, font hierarchy problems, spacing inconsistencies, color contrast risks, layout issues
+   584→- Skill 5 (LLM): Generated comprehensive 312-line development plan covering:
+   585→  - Global design system: typography scale (7 levels), spacing scale (6 levels), button/card alignment rules, WCAG AAA contrast (7:1), touch targets (48×48px min)
+   586→  - 11 page-specific improvement plans with: current issues, proposed changes, exact design tokens (px/hex values), priorities (P0/P1/P2)
+   587→  - Implementation roadmap: Phase 1 (P0: Home, Stats, Wizard, Workout, Challenges), Phase 2 (P1: Exercises, Feed, Nutrition, Profile, Body), Phase 3 (P2: Settings)
+   588→  - Success metrics: 100% WCAG AAA, ±2px spacing tolerance, all touch targets met
+   589→
+   590→Stage Summary:
+   591→- UI_UX_IMPROVEMENT_PLAN.md saved with full plan (312 lines)
+   592→- 4 skills used: ui-ux-pro-max (design standards), design (routing/quality), writing-plans (plan structure), VLM (screenshot analysis)
+   593→- LLM used for plan generation with exact px values and hex colors
+   594→- Plan covers all 11 pages + global design system
+   595→
+   596→---
+   597→Task ID: DESIGN-PLAN-COMPLETE
+   598→Agent: main
+   599→Task: Import skills from skills folder for thinking/planning/design + write comprehensive development plan
+   600→
+   601→Work Log:
+   602→- Imported 4 skills from /home/z/my-project/skills/:
+   603→  1. visual-design-foundations: Typography scale (modular ratio), 8px spacing grid, color system (WCAG AAA), icon sizing, dark mode strategy, font loading best practices
+   604→  2. content-strategy: Content planning framework, goal definition, audience research, pillar mapping, repurposing workflow, measurement metrics
+   605→  3. storyboard-manager: Planning frameworks, character development, timeline tracking, consistency checking, scene structure
+   606→  4. charts: Visual design rules — zero overlap, hierarchy over uniformity, low-saturation palette, font discipline, whitespace as design, anti-pattern reference, UI aesthetics ("Invisible Precision")
+   607→- Also referenced: ui-ux-pro-max, design, writing-plans (from previous session)
+   608→- Captured 8 screenshots of all main pages via Agent Browser
+   609→- Analyzed all screenshots with VLM (z-ai vision) — identified specific issues per page: text alignment, font hierarchy, spacing, contrast, touch targets
+   610→- Generated comprehensive 295-line plan via LLM with exact px values and hex colors for every page
+   611→
+   612→Plan covers:
+   613→- GLOBAL design tokens: typography (7 levels), spacing (7 levels), button rules (padding/alignment/min size/icon gap), card rules, WCAG AAA contrast (7:1), touch targets (48×48), bottom nav rules
+   614→- 11 page-specific improvement plans: Home, Exercises, Feed, Nutrition, Stats, Profile, Settings, AI Wizard, Workout Session, Body Metrics, Challenges
+   615→- Each page: current issues, proposed changes, exact design tokens, priority (P0/P1/P2)
+   616→
+   617→Stage Summary:
+   618→- DESIGN_IMPROVEMENT_PLAN.md saved (295 lines) with exact px values and hex colors
+   619→- 4 skills imported: visual-design-foundations, content-strategy, storyboard-manager, charts
+   620→- VLM used for 8-screenshot UI audit
+   621→- LLM used for plan generation with Material Design 3 + WCAG AAA standards
+   622→
+   623→---
+   624→Task ID: ALGO-REVIEW
+   625→Agent: main
+   626→Task: Deep algorithmic code review + suggest improvements
+   627→
+   628→Work Log:
+   629→- Launched deep review subagent covering 11 core algorithm files
+   630→- Found 15 Critical + 22 Major + 18 Minor algorithmic issues
+   631→- Key findings:
+   632→  - Progressive overload ignores lastE1RM field (uses only lastWeight + trend label)
+   633→  - Fatigue score "+10%" branch unreachable (score starts at 3, only subtracts)
+   634→  - shouldSuperset ignores explicit user choice (intensityStyle: "supersets")
+   635→  - Antagonistic-pair matching uses substring includes on wrong field
+   636→  - Streak calculation uses UTC date (timezone bug)
+   637→  - DST bug in diffDays === 1 strict equality
+   638→  - getWeekKey collides across years
+   639→  - getTotalStats counts incomplete sets in volume
+   640→  - syncWorkoutVolume has no idempotency key (replay attack)
+   641→  - 1RM cap at 12 reps under-estimates high-rep sets by ~25%
+   642→  - getMuscleGroupStats is O(S×E) — 2.4M comparisons
+   643→  - AI provider ZAI has no timeout
+   644→  - Fallback workout drops user's full profile
+   645→- Suggested 8 algorithm improvements:
+   646→  1. ACWR-based fatigue (sports science gold standard)
+   647→  2. RPE-based progressive overload
+   648→  3. Per-muscle MEV/MAV tracking
+   649→  4. Movement pattern balance scoring
+   650→  5. Exercise novelty scoring
+   651→  6. Fisher-Yates shuffle (replaces biased sort)
+   652→  7. Search index for exercise filtering
+   653→  8. Circuit breaker for AI providers
+   654→
+   655→Stage Summary:
+   656→- ALGORITHM_REVIEW.md saved with full report
+   657→- 15 critical/major issues identified with specific line numbers and fix suggestions
+   658→- 8 algorithm improvements proposed with evidence-based reasoning
+   659→
+   660→---
+   661→Task ID: PHASE-B
+   662→Agent: full-stack-developer
+   663→Task: Create ACWR-based fatigue engine
+   664→
+   665→Work Log:
+   666→- Read worklog.md to review prior work (Phase 1-6 fixes, AI-GEN-IMPLEMENT, AI-COACH-INTEGRATION, ALGO-REVIEW which originally flagged the broken assessFatigue heuristic).
+   667→- Read src/db/schema.ts to confirm WorkoutSession shape (id, date, exercises: WorkoutExerciseData[], completed, isFreeze) — matches the engine's usage.
+   668→- Read src/store/useGeneratorStore.ts to confirm GeneratorProfile exposes the fields the engine consumes: age (number), medicalCautions (string[]), daysPerWeek (2-6).
+   669→- Confirmed ExerciseSetData has weight/reps/completed (number/number/boolean) so the volume calc `weight * reps` for completed sets is type-safe.
+   670→- Reviewed existing src/services/workoutGenerator.ts head to confirm the broken heuristic it is replacing (FatigueData/assessFatigue — score starts at 3, only subtracts; double-counts daysSinceRest≥5 and ≥7; "+10% volume" branch unreachable).
+   671→- Created /home/z/my-project/src/services/fatigueEngine.ts with the spec'd implementation verbatim:
+   672→    • FatigueAssessment interface (acwr, acuteLoad, chronicLoad, fatigueScore 1-5, shouldDeload, volumeAdjustment, recommendation, muscleGroupVolume, daysSinceRest).
+   673→    • localDateKey() helper using local time (not UTC) — fixes the timezone streak bug noted in ALGO-REVIEW.
+   674→    • sessionVolume() sums weight*reps across completed sets only.
+   675→    • sessionMuscleVolume() per-muscle breakdown using an optional exerciseMap.
+   676→    • assessFatigueACWR(sessions, profile, exerciseMap?) — the main entry point:
+   677→        - Filters completed & non-freeze sessions, sorts ascending by date.
+   678→        - Acute = 7-day rolling volume; Chronic = 28-day total / 4 (avg weekly). ACWR = acute/chronic.
+   679→        - daysSinceRest computed from calendar-day training set (no double-count: ≥7 → -1, ≥5 → 0).
+   680→        - Readiness score 1-5: baseline 3; +1 for detraining (acwr<0.8), +1 for rest today/yesterday; -2 for acwr>1.5, -1 for acwr>1.3, -1 for daysSinceRest≥7, -1 age>50, additional -1 age>65, -1 medical cautions, -1 daysPerWeek≥5; clamped to [1,5].
+   681→        - Volume adjustment: 0.6 deload (acwr>1.5 OR score≤1); 0.8 (acwr>1.3 OR score≤2); 1.1 (+10%, acwr<0.8 AND score≥4 — now reachable thanks to recovery bonuses); 1.0 otherwise.
+   682→        - Recommendation strings include ACWR value to 2 decimals.
+   683→    • File is pure (no side effects, no client/server directives) — importable from both client and server contexts.
+   684→- Ran `bun run lint` from /home/z/my-project: fatigueEngine.ts produced ZERO errors. (17 pre-existing lint problems remain in other files — ExercisesPage.tsx, StatsPage.tsx, workoutGenerator.ts — none introduced by this change.)
+   685→
+   686→Stage Summary:
+   687→- File created: src/services/fatigueEngine.ts (200 lines, ~7KB)
+   688→- Lint result: 0 new errors in fatigueEngine.ts; total lint count unchanged at 17 pre-existing problems.
+   689→- Engine is ready to be wired into workoutGenerator.ts (replacing the broken assessFatigue heuristic) by a follow-up agent — its signature `assessFatigueACWR(sessions, profile, exerciseMap?)` returns a FatigueAssessment whose `volumeAdjustment` and `shouldDeload` fields drop directly into the existing generator's volume-scaling logic.
+   690→- Fixes all three flaws identified in ALGO-REVIEW: (1) "+10%" branch is now reachable via recovery bonuses, (2) daysSinceRest no longer double-counts, (3) volume threshold is evidence-based (Gabbett 2016 ACWR) instead of a weight×100×days heuristic.
+   691→
+   692→---
+   693→Task ID: PHASE-A1
+   694→Agent: full-stack-developer
+   695→Task: Fix algorithmic bugs in analytics.ts and fitnessMath.ts
+   696→
+   697→Work Log:
+   698→- Read /home/z/my-project/worklog.md to review prior agent work (setup, API routes, UI/UX plan, design plan, algorithm review)
+   699→- Read /home/z/my-project/ALGORITHM_REVIEW.md to confirm the 6 findings (#5, #6, #7, #8, #12, #13) to be fixed
+
+[showing lines 300-699 of 2141; use offset=700 with limit to continue reading]

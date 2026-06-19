@@ -1,0 +1,721 @@
+     1→import { useState, useEffect } from "react";
+     2→import { format, subDays, addDays } from "date-fns";
+     3→import { motion, AnimatePresence } from "framer-motion";
+     4→import { Button } from "@/components/ui/Button";
+     5→import {
+     6→  ChevronLeft,
+     7→  ChevronRight,
+     8→  Plus,
+     9→  Apple,
+    10→  Flame,
+    11→  Edit,
+    12→  Trash2,
+    13→  Calculator,
+    14→} from "lucide-react";
+    15→import { useNutritionStore } from "@/store/useNutritionStore";
+    16→import { useAuthStore } from "@/store/useAuthStore";
+    17→import { cn } from "@/utils/cn";
+    18→import type { FoodEntry } from "@/db";
+    19→
+    20→export default function NutritionPage() {
+    21→  const [currentDate, setCurrentDate] = useState(new Date());
+    22→  const [showAddModal, setShowAddModal] = useState(false);
+    23→  const [showGoalModal, setShowGoalModal] = useState(false);
+    24→
+    25→  const { entries, goal, loadEntries, loadGoal, addFoodEntry, deleteFoodEntry, setGoal } =
+    26→    useNutritionStore();
+    27→  const user = useAuthStore((s) => s.user);
+    28→
+    29→  const [showCalculator, setShowCalculator] = useState(false);
+    30→  const [calcWeight, setCalcWeight] = useState(70);
+    31→  const [calcHeight, setCalcHeight] = useState(170);
+    32→  const [calcAge, setCalcAge] = useState(25);
+    33→  const [calcGender, setCalcGender] = useState<"male" | "female">("male");
+    34→  const [calcActivity, setCalcActivity] = useState<
+    35→    "sedentary" | "light" | "moderate" | "active" | "extra"
+    36→  >("moderate");
+    37→  const [calcGoal, setCalcGoal] = useState<"lose" | "maintain" | "gain">("lose");
+    38→
+    39→  const calculateMacros = () => {
+    40→    let bmr = 10 * calcWeight + 6.25 * calcHeight - 5 * calcAge;
+    41→    if (calcGender === "male") {
+    42→      bmr += 5;
+    43→    } else {
+    44→      bmr -= 161;
+    45→    }
+    46→
+    47→    const activityFactors = {
+    48→      sedentary: 1.2,
+    49→      light: 1.375,
+    50→      moderate: 1.55,
+    51→      active: 1.725,
+    52→      extra: 1.9,
+    53→    };
+    54→    const factor = activityFactors[calcActivity] || 1.2;
+    55→    const tdee = bmr * factor;
+    56→
+    57→    let calories = tdee;
+    58→    if (calcGoal === "lose") {
+    59→      calories -= 500;
+    60→    } else if (calcGoal === "gain") {
+    61→      calories += 300;
+    62→    }
+    63→    calories = Math.max(1200, Math.round(calories));
+    64→
+    65→    let protein = Math.round(2.0 * calcWeight);
+    66→    const proteinKcal = protein * 4;
+    67→    if (proteinKcal > calories * 0.35) {
+    68→      protein = Math.round((calories * 0.3) / 4);
+    69→    } else if (proteinKcal < calories * 0.15) {
+    70→      protein = Math.round((calories * 0.2) / 4);
+    71→    }
+    72→
+    73→    const fatKcal = calories * 0.25;
+    74→    const fat = Math.round(fatKcal / 9);
+    75→
+    76→    const carbKcal = calories - protein * 4 - fat * 9;
+    77→    const carbs = Math.max(0, Math.round(carbKcal / 4));
+    78→
+    79→    return { calories, protein, carbs, fat };
+    80→  };
+    81→
+    82→  useEffect(() => {
+    83→    const formattedDate = format(currentDate, "yyyy-MM-dd");
+    84→    loadEntries(formattedDate);
+    85→  }, [currentDate, loadEntries]);
+    86→
+    87→  useEffect(() => {
+    88→    loadGoal();
+    89→  }, [loadGoal]);
+    90→
+    91→  const handlePrevDay = () => setCurrentDate((prev) => subDays(prev, 1));
+    92→  const handleNextDay = () => setCurrentDate((prev) => addDays(prev, 1));
+    93→
+    94→  const safeGoal = goal || {
+    95→    dailyCalories: 2000,
+    96→    protein: 150,
+    97→    carbs: 200,
+    98→    fat: 65,
+    99→    id: "temp",
+   100→    updatedAt: "",
+   101→  };
+   102→
+   103→  const totalCalories = entries.reduce((acc, sum) => acc + sum.calories, 0);
+   104→  const totalProtein = entries.reduce((acc, sum) => acc + sum.protein, 0);
+   105→  const totalCarbs = entries.reduce((acc, sum) => acc + sum.carbs, 0);
+   106→  const totalFat = entries.reduce((acc, sum) => acc + sum.fat, 0);
+   107→
+   108→  const mealTypes = ["breakfast", "lunch", "dinner", "snack"] as const;
+   109→
+   110→  const handleAddSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+   111→    e.preventDefault();
+   112→    const formData = new FormData(e.currentTarget);
+   113→    await addFoodEntry(
+   114→      {
+   115→        date: format(currentDate, "yyyy-MM-dd"),
+   116→        name: formData.get("name") as string,
+   117→        calories: Number(formData.get("calories")),
+   118→        protein: Number(formData.get("protein")),
+   119→        carbs: Number(formData.get("carbs")),
+   120→        fat: Number(formData.get("fat")),
+   121→        mealType: formData.get("mealType") as FoodEntry["mealType"],
+   122→      },
+   123→      user?.uid
+   124→    );
+   125→    setShowAddModal(false);
+   126→  };
+   127→
+   128→  const handleGoalSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+   129→    e.preventDefault();
+   130→    const formData = new FormData(e.currentTarget);
+   131→    await setGoal(
+   132→      {
+   133→        dailyCalories: Number(formData.get("calories")),
+   134→        protein: Number(formData.get("protein")),
+   135→        carbs: Number(formData.get("carbs")),
+   136→        fat: Number(formData.get("fat")),
+   137→      },
+   138→      user?.uid
+   139→    );
+   140→    setShowGoalModal(false);
+   141→  };
+   142→
+   143→  const MacroBar = ({
+   144→    label,
+   145→    current,
+   146→    max,
+   147→    color,
+   148→  }: {
+   149→    label: string;
+   150→    current: number;
+   151→    max: number;
+   152→    color: string;
+   153→  }) => {
+   154→    const percent = Math.min(100, Math.max(0, (current / max) * 100)) || 0;
+   155→    return (
+   156→      <div className="flex flex-col gap-1">
+   157→        <div className="flex justify-between text-xs font-bold text-text-secondary uppercase tracking-wider">
+   158→          <span>{label}</span>
+   159→          <span>
+   160→            {current} / {max}g
+   161→          </span>
+   162→        </div>
+   163→        <div className="h-2 w-full rounded-full bg-border overflow-hidden">
+   164→          <motion.div
+   165→            initial={{ width: 0 }}
+   166→            animate={{ width: `${percent}%` }}
+   167→            className={`h-full ${color}`}
+   168→          />
+   169→        </div>
+   170→      </div>
+   171→    );
+   172→  };
+   173→
+   174→  return (
+   175→    <motion.div
+   176→      className="mx-auto flex w-full max-w-lg flex-col gap-6 pb-24" // Extra padding for footer + fab
+   177→      initial={{ opacity: 0, y: 10 }}
+   178→      animate={{ opacity: 1, y: 0 }}
+   179→    >
+   180→      {/* Header */}
+   181→      <div className="flex flex-col gap-1">
+   182→        <h1 className="text-2xl font-black text-text-primary uppercase tracking-tight">
+   183→          Nutrition
+   184→        </h1>
+   185→        <p className="text-sm text-text-muted">Track your daily intake</p>
+   186→      </div>
+   187→
+   188→      {/* Date Picker */}
+   189→      <div className="flex items-center justify-between bg-bg-elevated rounded-xl p-2 border border-border">
+   190→        <button
+   191→          onClick={handlePrevDay}
+   192→          className="p-2 text-text-muted hover:text-text-primary transition-colors"
+   193→        >
+   194→          <ChevronLeft className="w-5 h-5" />
+   195→        </button>
+   196→        <span className="font-bold text-sm text-text-primary uppercase tracking-wider">
+   197→          {format(currentDate, "MMM dd, yyyy")}
+   198→        </span>
+   199→        <button
+   200→          onClick={handleNextDay}
+   201→          className="p-2 text-text-muted hover:text-text-primary transition-colors"
+   202→        >
+   203→          <ChevronRight className="w-5 h-5" />
+   204→        </button>
+   205→      </div>
+   206→
+   207→      {/* Summary Widget */}
+   208→      <div className="glass-card p-5 rounded-2xl flex flex-col gap-6">
+   209→        <div className="flex justify-between items-start">
+   210→          <div>
+   211→            <div className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1">
+   212→              Calories Remaining
+   213→            </div>
+   214→            <div className="text-3xl font-black text-text-primary">
+   215→              {Math.max(0, safeGoal.dailyCalories - totalCalories)}
+   216→            </div>
+   217→            <div className="text-xs text-text-muted mt-1">
+   218→              {totalCalories} consumed • Goal: {safeGoal.dailyCalories}
+   219→            </div>
+   220→          </div>
+   221→          <button
+   222→            onClick={() => setShowGoalModal(true)}
+   223→            className="p-2 rounded-lg bg-bg text-text-muted hover:text-text-primary transition-colors"
+   224→          >
+   225→            <Edit className="w-4 h-4" />
+   226→          </button>
+   227→        </div>
+   228→
+   229→        <div className="space-y-4">
+   230→          <MacroBar
+   231→            label="Protein"
+   232→            current={totalProtein}
+   233→            max={safeGoal.protein}
+   234→            color="bg-primary"
+   235→          />
+   236→          <MacroBar label="Carbs" current={totalCarbs} max={safeGoal.carbs} color="bg-secondary" />
+   237→          <MacroBar label="Fat" current={totalFat} max={safeGoal.fat} color="bg-warning" />
+   238→        </div>
+   239→      </div>
+   240→
+   241→      {/* Meals List */}
+   242→      <div className="flex flex-col gap-4">
+   243→        {mealTypes.map((meal) => {
+   244→          const mealEntries = entries.filter((e) => e.mealType === meal);
+   245→          const mealCals = mealEntries.reduce((acc, sum) => acc + sum.calories, 0);
+   246→
+   247→          return (
+   248→            <div key={meal} className="border border-border/50 rounded-2xl p-4 bg-bg">
+   249→              <div className="flex justify-between items-center mb-3">
+   250→                <h3 className="font-bold text-sm text-text-primary uppercase tracking-wider mb-0">
+   251→                  {meal}
+   252→                </h3>
+   253→                <span className="text-xs font-bold text-text-muted">{mealCals} kcal</span>
+   254→              </div>
+   255→
+   256→              {mealEntries.length === 0 ? (
+   257→                <div className="text-xs text-text-muted/50 italic">No entries yet</div>
+   258→              ) : (
+   259→                <div className="flex flex-col gap-2">
+   260→                  {mealEntries.map((entry) => (
+   261→                    <div
+   262→                      key={entry.id}
+   263→                      className="flex justify-between items-center group bg-bg-elevated/30 p-2 rounded-lg"
+   264→                    >
+   265→                      <div>
+   266→                        <div className="text-sm font-semibold text-text-secondary">
+   267→                          {entry.name}
+   268→                        </div>
+   269→                        <div className="text-[10px] text-text-muted font-mono mt-0.5">
+   270→                          {entry.protein}P • {entry.carbs}C • {entry.fat}F
+   271→                        </div>
+   272→                      </div>
+   273→                      <div className="flex items-center gap-3">
+   274→                        <span className="text-sm font-bold text-text-primary">
+   275→                          {entry.calories}
+   276→                        </span>
+   277→                        <button
+   278→                          onClick={() => deleteFoodEntry(entry.id, user?.uid)}
+   279→                          className="opacity-0 group-hover:opacity-100 text-danger/70 hover:text-danger transition-opacity"
+   280→                        >
+   281→                          <Trash2 className="w-4 h-4" />
+   282→                        </button>
+   283→                      </div>
+   284→                    </div>
+   285→                  ))}
+   286→                </div>
+   287→              )}
+   288→            </div>
+   289→          );
+   290→        })}
+   291→      </div>
+   292→
+   293→      {/* Floating Add Action */}
+   294→      <div className="fixed bottom-20 left-0 right-0 pointer-events-none flex justify-center z-40">
+   295→        <Button
+   296→          onClick={() => setShowAddModal(true)}
+   297→          variant="primary"
+   298→          className="pointer-events-auto rounded-full px-6 py-4 font-bold uppercase tracking-wider shadow-lg shadow-primary/20 backdrop-blur-md"
+   299→          icon={<Plus className="h-5 w-5" />}
+   300→        >
+   301→          Add Food
+   302→        </Button>
+   303→      </div>
+   304→
+   305→      {/* Add Food Modal */}
+   306→      <AnimatePresence>
+   307→        {showAddModal && (
+   308→          <motion.div
+   309→            initial={{ opacity: 0 }}
+   310→            animate={{ opacity: 1 }}
+   311→            exit={{ opacity: 0 }}
+   312→            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+   313→          >
+   314→            <motion.div
+   315→              initial={{ scale: 0.95 }}
+   316→              animate={{ scale: 1 }}
+   317→              exit={{ scale: 0.95 }}
+   318→              className="glass-card w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-border"
+   319→            >
+   320→              <h2 className="text-lg font-black text-text-primary uppercase tracking-wider mb-4">
+   321→                Add Food
+   322→              </h2>
+   323→              <form onSubmit={handleAddSubmit} className="flex flex-col gap-4">
+   324→                <input
+   325→                  required
+   326→                  name="name"
+   327→                  type="text"
+   328→                  placeholder="Food Name"
+   329→                  className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   330→                />
+   331→                <div className="grid grid-cols-2 gap-3">
+   332→                  <input
+   333→                    required
+   334→                    name="calories"
+   335→                    type="number"
+   336→                    placeholder="Calories"
+   337→                    className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   338→                  />
+   339→                  <select
+   340→                    required
+   341→                    name="mealType"
+   342→                    className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   343→                  >
+   344→                    <option value="breakfast">Breakfast</option>
+   345→                    <option value="lunch">Lunch</option>
+   346→                    <option value="dinner">Dinner</option>
+   347→                    <option value="snack">Snack</option>
+   348→                  </select>
+   349→                </div>
+   350→                <div className="grid grid-cols-3 gap-3">
+   351→                  <input
+   352→                    required
+   353→                    name="protein"
+   354→                    type="number"
+   355→                    placeholder="Protein (g)"
+   356→                    className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   357→                  />
+   358→                  <input
+   359→                    required
+   360→                    name="carbs"
+   361→                    type="number"
+   362→                    placeholder="Carbs (g)"
+   363→                    className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   364→                  />
+   365→                  <input
+   366→                    required
+   367→                    name="fat"
+   368→                    type="number"
+   369→                    placeholder="Fat (g)"
+   370→                    className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   371→                  />
+   372→                </div>
+   373→                <div className="flex gap-3 mt-2">
+   374→                  <button
+   375→                    type="button"
+   376→                    onClick={() => setShowAddModal(false)}
+   377→                    className="flex-1 rounded-xl bg-bg-elevated py-3 text-sm font-bold text-text-primary uppercase tracking-wider hover:bg-bg-elevated/50"
+   378→                  >
+   379→                    Cancel
+   380→                  </button>
+   381→                  <Button
+   382→                    type="submit"
+   383→                    variant="primary"
+   384→                    className="flex-1 w-full py-3 text-sm font-black uppercase tracking-wider"
+   385→                  >
+   386→                    Add
+   387→                  </Button>
+   388→                </div>
+   389→              </form>
+   390→            </motion.div>
+   391→          </motion.div>
+   392→        )}
+   393→      </AnimatePresence>
+   394→
+   395→      {/* Edit Goals Modal */}
+   396→      <AnimatePresence>
+   397→        {showGoalModal && (
+   398→          <motion.div
+   399→            initial={{ opacity: 0 }}
+   400→            animate={{ opacity: 1 }}
+   401→            exit={{ opacity: 0 }}
+   402→            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+   403→          >
+   404→            <motion.div
+   405→              initial={{ scale: 0.95 }}
+   406→              animate={{ scale: 1 }}
+   407→              exit={{ scale: 0.95 }}
+   408→              className="glass-card w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-border"
+   409→            >
+   410→              <div className="flex items-center justify-between mb-4">
+   411→                <h2 className="text-lg font-black text-text-primary uppercase tracking-wider">
+   412→                  {showCalculator ? "Calculate Goals" : "Edit Goals"}
+   413→                </h2>
+   414→                <button
+   415→                  type="button"
+   416→                  onClick={() => setShowCalculator(!showCalculator)}
+   417→                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+   418→                >
+   419→                  {showCalculator ? (
+   420→                    <>Manual Edit</>
+   421→                  ) : (
+   422→                    <>
+   423→                      <Calculator className="w-3.5 h-3.5" />
+   424→                      Auto-Calc
+   425→                    </>
+   426→                  )}
+   427→                </button>
+   428→              </div>
+   429→
+   430→              {showCalculator ? (
+   431→                <div className="flex flex-col gap-4 text-left">
+   432→                  {/* Gender Selection */}
+   433→                  <div>
+   434→                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+   435→                      Gender
+   436→                    </label>
+   437→                    <div className="grid grid-cols-2 gap-2">
+   438→                      <button
+   439→                        type="button"
+   440→                        onClick={() => setCalcGender("male")}
+   441→                        className={cn(
+   442→                          "py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer",
+   443→                          calcGender === "male"
+   444→                            ? "bg-primary text-primary-text border-primary shadow-sm"
+   445→                            : "bg-bg-elevated text-text-secondary border-border"
+   446→                        )}
+   447→                      >
+   448→                        Male
+   449→                      </button>
+   450→                      <button
+   451→                        type="button"
+   452→                        onClick={() => setCalcGender("female")}
+   453→                        className={cn(
+   454→                          "py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer",
+   455→                          calcGender === "female"
+   456→                            ? "bg-primary text-primary-text border-primary shadow-sm"
+   457→                            : "bg-bg-elevated text-text-secondary border-border"
+   458→                        )}
+   459→                      >
+   460→                        Female
+   461→                      </button>
+   462→                    </div>
+   463→                  </div>
+   464→
+   465→                  {/* Weight, Height, Age Inputs */}
+   466→                  <div className="grid grid-cols-3 gap-2">
+   467→                    <div>
+   468→                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+   469→                        Weight (kg)
+   470→                      </label>
+   471→                      <input
+   472→                        type="number"
+   473→                        required
+   474→                        min="30"
+   475→                        max="300"
+   476→                        value={calcWeight}
+   477→                        onChange={(e) => setCalcWeight(Number(e.target.value))}
+   478→                        className="w-full rounded-xl border border-border bg-bg-elevated px-3 py-2.5 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+   479→                      />
+   480→                    </div>
+   481→                    <div>
+   482→                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+   483→                        Height (cm)
+   484→                      </label>
+   485→                      <input
+   486→                        type="number"
+   487→                        required
+   488→                        min="100"
+   489→                        max="250"
+   490→                        value={calcHeight}
+   491→                        onChange={(e) => setCalcHeight(Number(e.target.value))}
+   492→                        className="w-full rounded-xl border border-border bg-bg-elevated px-3 py-2.5 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+   493→                      />
+   494→                    </div>
+   495→                    <div>
+   496→                      <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+   497→                        Age (yrs)
+   498→                      </label>
+   499→                      <input
+   500→                        type="number"
+   501→                        required
+   502→                        min="10"
+   503→                        max="100"
+   504→                        value={calcAge}
+   505→                        onChange={(e) => setCalcAge(Number(e.target.value))}
+   506→                        className="w-full rounded-xl border border-border bg-bg-elevated px-3 py-2.5 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+   507→                      />
+   508→                    </div>
+   509→                  </div>
+   510→
+   511→                  {/* Activity Level Dropdown */}
+   512→                  <div>
+   513→                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+   514→                      Activity Level
+   515→                    </label>
+   516→                    <select
+   517→                      value={calcActivity}
+   518→                      onChange={(e) => setCalcActivity(e.target.value as "sedentary" | "light" | "moderate" | "active" | "extra")}
+   519→                      className="w-full rounded-xl border border-border bg-bg-elevated px-3 py-2.5 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors cursor-pointer capitalize"
+   520→                    >
+   521→                      <option value="sedentary">Sedentary (No exercise)</option>
+   522→                      <option value="light">Lightly Active (1-3 days/wk)</option>
+   523→                      <option value="moderate">Moderately Active (3-5 days/wk)</option>
+   524→                      <option value="active">Very Active (6-7 days/wk)</option>
+   525→                      <option value="extra">Extra Active (Hard labor/workouts)</option>
+   526→                    </select>
+   527→                  </div>
+   528→
+   529→                  {/* Fitness Goal Tabs */}
+   530→                  <div>
+   531→                    <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+   532→                      Goal
+   533→                    </label>
+   534→                    <div className="grid grid-cols-3 gap-2">
+   535→                      {(["lose", "maintain", "gain"] as const).map((g) => (
+   536→                        <button
+   537→                          key={g}
+   538→                          type="button"
+   539→                          onClick={() => setCalcGoal(g)}
+   540→                          className={cn(
+   541→                            "py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer capitalize",
+   542→                            calcGoal === g
+   543→                              ? "bg-primary text-primary-text border-primary shadow-sm"
+   544→                              : "bg-bg-elevated text-text-secondary border-border"
+   545→                          )}
+   546→                        >
+   547→                          {g === "lose"
+   548→                            ? "Lose Fat"
+   549→                            : g === "maintain"
+   550→                              ? "Maintain"
+   551→                              : "Build Muscle"}
+   552→                        </button>
+   553→                      ))}
+   554→                    </div>
+   555→                  </div>
+   556→
+   557→                  {/* Results Preview */}
+   558→                  {(() => {
+   559→                    const results = calculateMacros();
+   560→                    const protKcal = results.protein * 4;
+   561→                    const carbKcal = results.carbs * 4;
+   562→                    const fatKcal = results.fat * 9;
+   563→                    const totalKcal = protKcal + carbKcal + fatKcal || 1;
+   564→                    const pPct = Math.round((protKcal / totalKcal) * 100);
+   565→                    const fPct = Math.round((fatKcal / totalKcal) * 100);
+   566→                    const cPct = 100 - pPct - fPct;
+   567→
+   568→                    return (
+   569→                      <div className="mt-2 p-4 rounded-2xl bg-bg border border-border flex flex-col gap-3">
+   570→                        <div className="flex justify-between items-center">
+   571→                          <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
+   572→                            Estimated Needs
+   573→                          </span>
+   574→                          <span className="text-base font-black text-primary">
+   575→                            {results.calories} kcal
+   576→                          </span>
+   577→                        </div>
+   578→
+   579→                        {/* Progress bar split */}
+   580→                        <div className="h-2 w-full rounded-full bg-border flex overflow-hidden">
+   581→                          <div
+   582→                            className="bg-primary h-full transition-all duration-300"
+   583→                            style={{ width: `${pPct}%` }}
+   584→                          />
+   585→                          <div
+   586→                            className="bg-secondary h-full transition-all duration-300"
+   587→                            style={{ width: `${cPct}%` }}
+   588→                          />
+   589→                          <div
+   590→                            className="bg-warning h-full transition-all duration-300"
+   591→                            style={{ width: `${fPct}%` }}
+   592→                          />
+   593→                        </div>
+   594→
+   595→                        <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+   596→                          <div className="flex flex-col gap-0.5">
+   597→                            <span className="font-bold text-primary">Protein ({pPct}%)</span>
+   598→                            <span className="font-black text-text-primary">{results.protein}g</span>
+   599→                          </div>
+   600→                          <div className="flex flex-col gap-0.5">
+   601→                            <span className="font-bold text-secondary">Carbs ({cPct}%)</span>
+   602→                            <span className="font-black text-text-primary">{results.carbs}g</span>
+   603→                          </div>
+   604→                          <div className="flex flex-col gap-0.5">
+   605→                            <span className="font-bold text-warning">Fat ({fPct}%)</span>
+   606→                            <span className="font-black text-text-primary">{results.fat}g</span>
+   607→                          </div>
+   608→                        </div>
+   609→                      </div>
+   610→                    );
+   611→                  })()}
+   612→
+   613→                  {/* Apply & Save Button */}
+   614→                  <div className="flex gap-3 mt-2">
+   615→                    <button
+   616→                      type="button"
+   617→                      onClick={() => setShowGoalModal(false)}
+   618→                      className="flex-1 rounded-xl bg-bg-elevated py-3 text-sm font-bold text-text-primary uppercase tracking-wider hover:bg-bg-elevated/50 cursor-pointer"
+   619→                    >
+   620→                      Cancel
+   621→                    </button>
+   622→                    <Button
+   623→                      type="button"
+   624→                      onClick={async () => {
+   625→                        const results = calculateMacros();
+   626→                        await setGoal(
+   627→                          {
+   628→                            dailyCalories: results.calories,
+   629→                            protein: results.protein,
+   630→                            carbs: results.carbs,
+   631→                            fat: results.fat,
+   632→                          },
+   633→                          user?.uid
+   634→                        );
+   635→                        setShowGoalModal(false);
+   636→                      }}
+   637→                      variant="primary"
+   638→                      className="flex-1 py-3 text-sm font-black uppercase tracking-wider"
+   639→                    >
+   640→                      Apply & Save
+   641→                    </Button>
+   642→                  </div>
+   643→                </div>
+   644→              ) : (
+   645→                <form onSubmit={handleGoalSubmit} className="flex flex-col gap-4">
+   646→                  <div>
+   647→                    <label className="text-xs font-bold text-text-muted mb-1 block uppercase">
+   648→                      Daily Calories
+   649→                    </label>
+   650→                    <input
+   651→                      required
+   652→                      defaultValue={safeGoal.dailyCalories}
+   653→                      name="calories"
+   654→                      type="number"
+   655→                      className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   656→                    />
+   657→                  </div>
+   658→                  <div className="grid grid-cols-3 gap-3">
+   659→                    <div>
+   660→                      <label className="text-xs font-bold text-text-muted mb-1 block uppercase text-primary">
+   661→                        Protein (g)
+   662→                      </label>
+   663→                      <input
+   664→                        required
+   665→                        defaultValue={safeGoal.protein}
+   666→                        name="protein"
+   667→                        type="number"
+   668→                        className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   669→                      />
+   670→                    </div>
+   671→                    <div>
+   672→                      <label className="text-xs font-bold text-text-muted mb-1 block uppercase text-secondary">
+   673→                        Carbs (g)
+   674→                      </label>
+   675→                      <input
+   676→                        required
+   677→                        defaultValue={safeGoal.carbs}
+   678→                        name="carbs"
+   679→                        type="number"
+   680→                        className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   681→                      />
+   682→                    </div>
+   683→                    <div>
+   684→                      <label className="text-xs font-bold text-text-muted mb-1 block uppercase text-warning">
+   685→                        Fat (g)
+   686→                      </label>
+   687→                      <input
+   688→                        required
+   689→                        defaultValue={safeGoal.fat}
+   690→                        name="fat"
+   691→                        type="number"
+   692→                        className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   693→                      />
+   694→                    </div>
+   695→                  </div>
+   696→                  <div className="flex gap-3 mt-4">
+   697→                    <button
+   698→                      type="button"
+   699→                      onClick={() => setShowGoalModal(false)}
+   700→                      className="flex-1 rounded-xl bg-bg-elevated py-3 text-sm font-bold text-text-primary uppercase tracking-wider hover:bg-bg-elevated/50"
+   701→                    >
+   702→                      Cancel
+   703→                    </button>
+   704→                    <Button
+   705→                      type="submit"
+   706→                      variant="primary"
+   707→                      className="flex-1 w-full py-3 text-sm font-black uppercase tracking-wider"
+   708→                    >
+   709→                      Save
+   710→                    </Button>
+   711→                  </div>
+   712→                </form>
+   713→              )}
+   714→            </motion.div>
+   715→          </motion.div>
+   716→        )}
+   717→      </AnimatePresence>
+   718→    </motion.div>
+   719→  );
+   720→}
+   721→

@@ -1,0 +1,673 @@
+     1→     1→"use client";
+     2→     2→import { useState, useEffect } from "react";
+     3→     3→import { motion, AnimatePresence } from "framer-motion";
+     4→     4→import {
+     5→     5→  Loader2,
+     6→     6→  ArrowLeft,
+     7→     7→  ArrowRight,
+     8→     8→  CheckCircle2,
+     9→     9→  ChevronDown,
+    10→    10→  ChevronUp,
+    11→    11→  AlertTriangle,
+    12→    12→} from "lucide-react";
+    13→    13→import { useGeneratorStore } from "../../store/useGeneratorStore";
+    14→    14→import { useExerciseStore } from "../../store/useExerciseStore";
+    15→    15→import { useSettingsStore } from "../../store/useSettingsStore";
+    16→    16→import AnatomyMap from "../AnatomyMap";
+    17→    17→import { generateProgram } from "../../services/workoutGenerator";
+    18→    18→import { useRouter } from "@/router";
+    19→    19→import { Button } from "../ui/Button";
+    20→    20→
+    21→    21→const STEPS = [
+    22→    22→  "Gender",
+    23→    23→  "Age",
+    24→    24→  "Body Stats",
+    25→    25→  "Body Fat",
+    26→    26→  "Experience",
+    27→    27→  "Goal",
+    28→    28→  "Physique Focus",
+    29→    29→  "Key Muscles",
+    30→    30→  "Frequency",
+    31→    31→  "Duration",
+    32→    32→  "Environment",
+    33→    33→  "Health/Safety",
+    34→    34→  "Preferences",
+    35→    35→  "Review",
+    36→    36→];
+    37→    37→
+    38→    38→function cn(...classes: (string | undefined | null | false)[]) {
+    39→    39→  return classes.filter(Boolean).join(" ");
+    40→    40→}
+    41→    41→
+    42→    42→export const GeneratorWizard = () => {
+    43→    43→  const navigate = useRouter((s) => s.navigate);
+    44→    44→  const [currentStep, setCurrentStep] = useState(0);
+    45→    45→  const [isGenerating, setIsGenerating] = useState(false);
+    46→    46→  const [advancedHealthOpen, setAdvancedHealthOpen] = useState(false);
+    47→    47→
+    48→    48→  const profile = useGeneratorStore();
+    49→    49→  const { exercises, loadExercises } = useExerciseStore();
+    50→    50→  const weightUnit = useSettingsStore((s) => s.weightUnit);
+    51→    51→
+    52→    52→  useEffect(() => {
+    53→    53→    loadExercises();
+    54→    54→  }, [loadExercises]);
+    55→    55→
+    56→    56→  const handleNext = () => {
+    57→    57→    if (currentStep < STEPS.length - 1) setCurrentStep(currentStep + 1);
+    58→    58→  };
+    59→    59→  const handleBack = () => {
+    60→    60→    if (currentStep > 0) setCurrentStep(currentStep - 1);
+    61→    61→  };
+    62→    62→
+    63→    63→  const handleGenerate = async () => {
+    64→    64→    if (exercises.length === 0) return;
+    65→    65→    setIsGenerating(true);
+    66→    66→    try {
+    67→    67→      // Simulate slight delay for "AI" feel
+    68→    68→      await new Promise((r) => setTimeout(r, 1000));
+    69→    69→      const program = generateProgram(exercises, profile);
+    70→    70→      profile.setProgram(program);
+    71→    71→      profile.updateProfile({ generatorSeed: Math.random() });
+    72→    72→      navigate("generator-result");
+    73→    73→    } catch (error) {
+    74→    74→      console.error(error);
+    75→    75→    } finally {
+    76→    76→      setIsGenerating(false);
+    77→    77→    }
+    78→    78→  };
+    79→    79→
+    80→    80→  const OptionBtn = ({
+    81→    81→    active,
+    82→    82→    onClick,
+    83→    83→    label,
+    84→    84→    desc,
+    85→    85→  }: {
+    86→    86→    active: boolean;
+    87→    87→    onClick: () => void;
+    88→    88→    label: string;
+    89→    89→    desc?: string;
+    90→    90→  }) => (
+    91→    91→    <button
+    92→    92→      onClick={onClick}
+    93→    93→      className={cn(
+    94→    94→        "w-full p-4 border rounded-xl text-left transition-all mb-3 last:mb-0",
+    95→    95→        active
+    96→    96→          ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_rgba(204,255,0,0.15)]"
+    97→    97→          : "border-border bg-bg-elevated text-text-muted hover:border-border-active hover:text-text-primary"
+    98→    98→      )}
+    99→    99→    >
+   100→   100→      <div className="font-bold tracking-wide uppercase text-sm">{label}</div>
+   101→   101→      {desc && (
+   102→   102→        <div className={cn("text-xs mt-1", active ? "text-primary/80" : "text-text-muted/70")}>
+   103→   103→          {desc}
+   104→   104→        </div>
+   105→   105→      )}
+   106→   106→    </button>
+   107→   107→  );
+   108→   108→
+   109→   109→  const renderStep = () => {
+   110→   110→    switch (currentStep) {
+   111→   111→      case 0: // Gender
+   112→   112→        return (
+   113→   113→          <div className="space-y-6">
+   114→   114→            <div className="space-y-2">
+   115→   115→              <h2 className="text-xl font-black italic tracking-tight uppercase">
+   116→   116→                Biological Gender
+   117→   117→              </h2>
+   118→   118→              <p className="text-xs text-text-muted">Used for baseline metabolic/volume estimates.</p>
+   119→   119→            </div>
+   120→   120→            <div className="flex gap-4">
+   121→   121→              <OptionBtn
+   122→   122→                active={profile.gender === "male"}
+   123→   123→                onClick={() => profile.updateProfile({ gender: "male" })}
+   124→   124→                label="Male"
+   125→   125→              />
+   126→   126→              <OptionBtn
+   127→   127→                active={profile.gender === "female"}
+   128→   128→                onClick={() => profile.updateProfile({ gender: "female" })}
+   129→   129→                label="Female"
+   130→   130→              />
+   131→   131→            </div>
+   132→   132→          </div>
+   133→   133→        );
+   134→   134→      case 1: // Age
+   135→   135→        return (
+   136→   136→          <div className="space-y-6">
+   137→   137→            <div className="space-y-2">
+   138→   138→              <h2 className="text-xl font-black italic tracking-tight uppercase">
+   139→   139→                Your Age
+   140→   140→              </h2>
+   141→   141→            </div>
+   142→   142→            <div className="flex flex-col items-center gap-4 py-4">
+   143→   143→              <p className="text-6xl font-black italic text-primary">{profile.age}</p>
+   144→   144→              <input
+   145→   145→                type="range"
+   146→   146→                min="15"
+   147→   147→                max="90"
+   148→   148→                value={profile.age}
+   149→   149→                onChange={(e) => profile.updateProfile({ age: parseInt(e.target.value) })}
+   150→   150→                className="w-full accent-primary"
+   151→   151→              />
+   152→   152→            </div>
+   153→   153→          </div>
+   154→   154→        );
+   155→   155→      case 2: // Body Stats
+   156→   156→        return (
+   157→   157→          <div className="space-y-4">
+   158→   158→            <h2 className="text-xl font-black italic tracking-tight uppercase">Body Stats</h2>
+   159→   159→            <div className="space-y-4 bg-bg-elevated p-4 rounded-xl border border-border">
+   160→   160→              <div>
+   161→   161→                <label className="text-xs font-bold text-text-muted uppercase tracking-wider block mb-2">
+   162→   162→                  Height (cm)
+   163→   163→                </label>
+   164→   164→                <input
+   165→   165→                  type="number"
+   166→   166→                  value={profile.heightCm}
+   167→   167→                  onChange={(e) =>
+   168→   168→                    profile.updateProfile({ heightCm: parseInt(e.target.value) || 0 })
+   169→   169→                  }
+   170→   170→                  className="w-full bg-bg border border-border rounded-lg p-3 text-text-primary focus:border-primary outline-none"
+   171→   171→                />
+   172→   172→              </div>
+   173→   173→              <div>
+   174→   174→                <label className="text-xs font-bold text-text-muted uppercase tracking-wider block mb-2">
+   175→   175→                  Weight ({weightUnit})
+   176→   176→                </label>
+   177→   177→                <input
+   178→   178→                  type="number"
+   179→   179→                  value={
+   180→   180→                    weightUnit === "lbs" ? Math.round(profile.weightKg * 2.20462) : profile.weightKg
+   181→   181→                  }
+   182→   182→                  onChange={(e) => {
+   183→   183→                    const val = parseInt(e.target.value) || 0;
+   184→   184→                    profile.updateProfile({
+   185→   185→                      weightKg: weightUnit === "lbs" ? Math.round(val / 2.20462) : val,
+   186→   186→                    });
+   187→   187→                  }}
+   188→   188→                  className="w-full bg-bg border border-border rounded-lg p-3 text-text-primary focus:border-primary outline-none"
+   189→   189→                />
+   190→   190→              </div>
+   191→   191→            </div>
+   192→   192→          </div>
+   193→   193→        );
+   194→   194→      case 3: // Body Fat
+   195→   195→        return (
+   196→   196→          <div className="space-y-4">
+   197→   197→            <h2 className="text-xl font-black italic tracking-tight uppercase">
+   198→   198→              Estimated Body Fat
+   199→   199→            </h2>
+   200→   200→            {(["low", "medium", "high", "unknown"] as const).map((l) => (
+   201→   201→              <OptionBtn
+   202→   202→                key={l}
+   203→   203→                active={profile.bodyFatLevel === l}
+   204→   204→                onClick={() => profile.updateProfile({ bodyFatLevel: l })}
+   205→   205→                label={l}
+   206→   206→              />
+   207→   207→            ))}
+   208→   208→          </div>
+   209→   209→        );
+   210→   210→      case 4: // Experience
+   211→   211→        return (
+   212→   212→          <div className="space-y-4">
+   213→   213→            <h2 className="text-xl font-black italic tracking-tight uppercase">
+   214→   214→              Training Experience
+   215→   215→            </h2>
+   216→   216→            <div className="mb-4">
+   217→   217→              <label className="text-xs font-bold text-text-muted uppercase tracking-wider block mb-2">
+   218→   218→                Years lifting: {profile.trainingYears}
+   219→   219→              </label>
+   220→   220→              <input
+   221→   221→                type="range"
+   222→   222→                min="0"
+   223→   223→                max="20"
+   224→   224→                step="0.5"
+   225→   225→                value={profile.trainingYears}
+   226→   226→                onChange={(e) =>
+   227→   227→                  profile.updateProfile({ trainingYears: parseFloat(e.target.value) })
+   228→   228→                }
+   229→   229→                className="w-full accent-primary"
+   230→   230→              />
+   231→   231→            </div>
+   232→   232→            {(["Novice", "Beginner", "Intermediate", "Advanced"] as const).map((l) => (
+   233→   233→              <OptionBtn
+   234→   234→                key={l}
+   235→   235→                active={profile.fitnessLevel === l}
+   236→   236→                onClick={() => profile.updateProfile({ fitnessLevel: l })}
+   237→   237→                label={l}
+   238→   238→              />
+   239→   239→            ))}
+   240→   240→          </div>
+   241→   241→        );
+   242→   242→      case 5: // Goal
+   243→   243→        return (
+   244→   244→          <div className="space-y-4">
+   245→   245→            <h2 className="text-xl font-black italic tracking-tight uppercase">Primary Goal</h2>
+   246→   246→            {(
+   247→   247→              [
+   248→   248→                "Strength",
+   249→   249→                "Hypertrophy",
+   250→   250→                "Fat Loss",
+   251→   251→                "Recomp",
+   252→   252→                "General Fitness",
+   253→   253→                "Endurance",
+   254→   254→              ] as const
+   255→   255→            ).map((g) => (
+   256→   256→              <OptionBtn
+   257→   257→                key={g}
+   258→   258→                active={profile.goal === g}
+   259→   259→                onClick={() => profile.updateProfile({ goal: g })}
+   260→   260→                label={g}
+   261→   261→              />
+   262→   262→            ))}
+   263→   263→          </div>
+   264→   264→        );
+   265→   265→      case 6: // Physique Focus
+   266→   266→        return (
+   267→   267→          <div className="space-y-4">
+   268→   268→            <h2 className="text-xl font-black italic tracking-tight uppercase">Physique Focus</h2>
+   269→   269→            <div className="grid grid-cols-2 gap-3">
+   270→   270→              {(
+   271→   271→                ["balanced", "upper", "lower", "push", "pull", "glutes", "arms", "core"] as const
+   272→   272→              ).map((f) => (
+   273→   273→                <OptionBtn
+   274→   274→                  key={f}
+   275→   275→                  active={profile.physiqueFocus === f}
+   276→   276→                  onClick={() => profile.updateProfile({ physiqueFocus: f })}
+   277→   277→                  label={f}
+   278→   278→                />
+   279→   279→              ))}
+   280→   280→            </div>
+   281→   281→          </div>
+   282→   282→        );
+   283→   283→      case 7: // Muscles
+   284→   284→        return (
+   285→   285→          <div className="space-y-4 flex flex-col">
+   286→   286→            <div className="shrink-0">
+   287→   287→              <h2 className="text-xl font-black italic tracking-tight uppercase">
+   288→   288→                Priority Muscles
+   289→   289→              </h2>
+   290→   290→              <p className="text-xs text-text-muted">
+   291→   291→                Tap to emphasize (receives extra volume). Optional.
+   292→   292→              </p>
+   293→   293→            </div>
+   294→   294→            {/* AnatomyMap renders its own scrollable container; let it size
+   295→   295→                naturally instead of clamping to 300px which cut off the upper
+   296→   296→                half of the body. */}
+   297→   297→            <AnatomyMap
+   298→   298→              highlightedMuscles={profile.priorityMuscles}
+   299→   299→              onMuscleSelect={(m) => m && profile.toggleMuscle(m)}
+   300→   300→            />
+   301→   301→            {profile.priorityMuscles.length > 0 && (
+   302→   302→              <div className="flex flex-wrap gap-2 text-xs font-bold text-primary shrink-0">
+   303→   303→                {profile.priorityMuscles.map((m) => (
+   304→   304→                  <span key={m} className="px-2 border border-primary/30 rounded">
+   305→   305→                    {m}
+   306→   306→                  </span>
+   307→   307→                ))}
+   308→   308→              </div>
+   309→   309→            )}
+   310→   310→          </div>
+   311→   311→        );
+   312→   312→      case 8: // Frequency
+   313→   313→        return (
+   314→   314→          <div className="space-y-4">
+   315→   315→            <h2 className="text-xl font-black italic tracking-tight uppercase">Days Per Week</h2>
+   316→   316→            <div className="grid grid-cols-5 gap-2 mt-8">
+   317→   317→              {([2, 3, 4, 5, 6] as const).map((d) => (
+   318→   318→                <button
+   319→   319→                  key={d}
+   320→   320→                  onClick={() => profile.updateProfile({ daysPerWeek: d })}
+   321→   321→                  className={cn(
+   322→   322→                    "p-4 border rounded-xl text-xl font-black italic transition-all",
+   323→   323→                    profile.daysPerWeek === d
+   324→   324→                      ? "bg-primary/20 border-primary text-primary"
+   325→   325→                      : "border-border text-text-muted bg-bg-elevated"
+   326→   326→                  )}
+   327→   327→                >
+   328→   328→                  {d}
+   329→   329→                </button>
+   330→   330→              ))}
+   331→   331→            </div>
+   332→   332→          </div>
+   333→   333→        );
+   334→   334→      case 9: // Duration
+   335→   335→        return (
+   336→   336→          <div className="space-y-4">
+   337→   337→            <h2 className="text-xl font-black italic tracking-tight uppercase">Session Length</h2>
+   338→   338→            <p className="text-xs text-text-muted">How many minutes per workout?</p>
+   339→   339→            <div className="grid grid-cols-2 gap-3 mt-4">
+   340→   340→              {([30, 45, 60, 75, 90] as const).map((m) => (
+   341→   341→                <OptionBtn
+   342→   342→                  key={m}
+   343→   343→                  active={profile.sessionLengthMin === m}
+   344→   344→                  onClick={() => profile.updateProfile({ sessionLengthMin: m })}
+   345→   345→                  label={`${m} Min`}
+   346→   346→                />
+   347→   347→              ))}
+   348→   348→            </div>
+   349→   349→          </div>
+   350→   350→        );
+   351→   351→      case 10: // Environment
+   352→   352→        return (
+   353→   353→          <div className="space-y-4 overflow-y-auto pr-2" style={{ maxHeight: "400px" }}>
+   354→   354→            <h2 className="text-xl font-black italic tracking-tight uppercase">Environment</h2>
+   355→   355→            <div className="flex gap-2 mb-4">
+   356→   356→              {(["home", "gym", "outdoor"] as const).map((loc) => (
+   357→   357→                <button
+   358→   358→                  key={loc}
+   359→   359→                  onClick={() => profile.updateProfile({ location: loc })}
+   360→   360→                  className={cn(
+   361→   361→                    "flex-1 py-2 rounded font-bold uppercase text-xs border",
+   362→   362→                    profile.location === loc
+   363→   363→                      ? "bg-primary/20 text-primary border-primary"
+   364→   364→                      : "bg-bg text-text-muted border-border"
+   365→   365→                  )}
+   366→   366→                >
+   367→   367→                  {loc}
+   368→   368→                </button>
+   369→   369→              ))}
+   370→   370→            </div>
+   371→   371→            <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+   372→   372→              Available Equipment
+   373→   373→            </h3>
+   374→   374→            {[
+   375→   375→              "Full Gym",
+   376→   376→              "Bodyweight",
+   377→   377→              "Dumbbells",
+   378→   378→              "Barbell",
+   379→   379→              "Kettlebell",
+   380→   380→              "Machines",
+   381→   381→              "Cables",
+   382→   382→              "Bands",
+   383→   383→              "Pull-up Bar",
+   384→   384→              "Bench",
+   385→   385→            ].map((eq) => (
+   386→   386→              <OptionBtn
+   387→   387→                key={eq}
+   388→   388→                active={profile.equipment.includes(eq)}
+   389→   389→                onClick={() => profile.toggleEquipment(eq)}
+   390→   390→                label={eq}
+   391→   391→              />
+   392→   392→            ))}
+   393→   393→          </div>
+   394→   394→        );
+   395→   395→      case 11: // Health
+   396→   396→        return (
+   397→   397→          <div className="space-y-4 overflow-y-auto pr-2" style={{ maxHeight: "400px" }}>
+   398→   398→            <h2 className="text-xl font-black italic tracking-tight uppercase text-danger">
+   399→   399→              Safety & Limits
+   400→   400→            </h2>
+   401→   401→            <p className="text-xs text-text-muted">We will filter out contraindicated movements.</p>
+   402→   402→
+   403→   403→            <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mt-4">
+   404→   404→              Previous Injuries
+   405→   405→            </h3>
+   406→   406→            <div className="flex flex-wrap gap-2 mb-4">
+   407→   407→              {[
+   408→   408→                "none",
+   409→   409→                "lower back",
+   410→   410→                "knee",
+   411→   411→                "shoulder",
+   412→   412→                "elbow",
+   413→   413→                "wrist",
+   414→   414→                "neck",
+   415→   415→                "hip",
+   416→   416→                "ankle",
+   417→   417→              ].map((inj) => {
+   418→   418→                const isActive = profile.injuries.includes(inj);
+   419→   419→                return (
+   420→   420→                  <button
+   421→   421→                    key={inj}
+   422→   422→                    onClick={() => {
+   423→   423→                      if (inj === "none") profile.updateProfile({ injuries: ["none"] });
+   424→   424→                      else {
+   425→   425→                        const newInj = profile.injuries.filter((i) => i !== "none");
+   426→   426→                        profile.updateProfile({
+   427→   427→                          injuries: isActive ? newInj.filter((i) => i !== inj) : [...newInj, inj],
+   428→   428→                        });
+   429→   429→                      }
+   430→   430→                    }}
+   431→   431→                    className={cn(
+   432→   432→                      "px-3 py-1.5 rounded-full text-xs font-bold uppercase border transition-colors",
+   433→   433→                      isActive
+   434→   434→                        ? "bg-danger/20 text-danger border-danger/50"
+   435→   435→                        : "bg-bg text-text-muted border-border"
+   436→   436→                    )}
+   437→   437→                  >
+   438→   438→                    {inj}
+   439→   439→                  </button>
+   440→   440→                );
+   441→   441→              })}
+   442→   442→            </div>
+   443→   443→
+   444→   444→            <button
+   445→   445→              onClick={() => profile.updateProfile({ mobilityLimited: !profile.mobilityLimited })}
+   446→   446→              className="flex items-center gap-3 p-3 bg-bg-elevated border border-border rounded-xl"
+   447→   447→            >
+   448→   448→              <div
+   449→   449→                className={cn(
+   450→   450→                  "w-5 h-5 rounded flex items-center justify-center border",
+   451→   451→                  profile.mobilityLimited ? "bg-primary border-primary text-black" : "border-border"
+   452→   452→                )}
+   453→   453→              >
+   454→   454→                {profile.mobilityLimited && <CheckCircle2 className="w-4 h-4" />}
+   455→   455→              </div>
+   456→   456→              <span className="text-sm font-bold">I have limited mobility</span>
+   457→   457→            </button>
+   458→   458→
+   459→   459→            <button
+   460→   460→              onClick={() => setAdvancedHealthOpen(!advancedHealthOpen)}
+   461→   461→              className="flex items-center justify-between w-full p-3 bg-bg-elevated border border-border rounded-xl mt-4"
+   462→   462→            >
+   463→   463→              <span className="text-sm font-bold text-text-secondary">Medical Conditions</span>
+   464→   464→              {advancedHealthOpen ? (
+   465→   465→                <ChevronUp className="w-4 h-4" />
+   466→   466→              ) : (
+   467→   467→                <ChevronDown className="w-4 h-4" />
+   468→   468→              )}
+   469→   469→            </button>
+   470→   470→            {advancedHealthOpen && (
+   471→   471→              <div className="p-3 bg-bg rounded-xl border border-border flex flex-wrap gap-2">
+   472→   472→                {["hypertension", "pregnancy", "hernia", "recent surgery"].map((cond) => {
+   473→   473→                  const isActive = profile.medicalCautions.includes(cond);
+   474→   474→                  return (
+   475→   475→                    <button
+   476→   476→                      key={cond}
+   477→   477→                      onClick={() => {
+   478→   478→                        profile.updateProfile({
+   479→   479→                          medicalCautions: isActive
+   480→   480→                            ? profile.medicalCautions.filter((c) => c !== cond)
+   481→   481→                            : [...profile.medicalCautions, cond],
+   482→   482→                        });
+   483→   483→                      }}
+   484→   484→                      className={cn(
+   485→   485→                        "px-3 py-1.5 rounded-full text-xs font-bold uppercase border",
+   486→   486→                        isActive
+   487→   487→                          ? "bg-warning/20 text-warning border-warning/50"
+   488→   488→                          : "bg-bg-elevated text-text-muted border-border"
+   489→   489→                      )}
+   490→   490→                    >
+   491→   491→                      {cond}
+   492→   492→                    </button>
+   493→   493→                  );
+   494→   494→                })}
+   495→   495→              </div>
+   496→   496→            )}
+   497→   497→          </div>
+   498→   498→        );
+   499→   499→      case 12: // Prefs
+   500→   500→        return (
+   501→   501→          <div className="space-y-4">
+   502→   502→            <h2 className="text-xl font-black italic tracking-tight uppercase">Preferences</h2>
+   503→   503→
+   504→   504→            <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider">Style</h3>
+   505→   505→            <div className="grid grid-cols-3 gap-2">
+   506→   506→              {(["straight sets", "supersets", "circuits"] as const).map((st) => (
+   507→   507→                <OptionBtn
+   508→   508→                  key={st}
+   509→   509→                  active={profile.intensityStyle === st}
+   510→   510→                  onClick={() => profile.updateProfile({ intensityStyle: st })}
+   511→   511→                  label={st}
+   512→   512→                />
+   513→   513→              ))}
+   514→   514→            </div>
+   515→   515→
+   516→   516→            <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mt-4">
+   517→   517→              Include:
+   518→   518→            </h3>
+   519→   519→            <div className="space-y-2">
+   520→   520→              {[
+   521→   521→                { k: "includeWarmup", l: "Warm-up Routine" },
+   522→   522→                { k: "includeCoreFinisher", l: "Core Finisher" },
+   523→   523→                { k: "includeCardio", l: "Post-Workout Cardio" },
+   524→   524→              ].map(({ k, l }) => {
+   525→   525→                const pKey = k as keyof typeof profile;
+   526→   526→                const active = !!profile[pKey];
+   527→   527→                return (
+   528→   528→                  <button
+   529→   529→                    key={k}
+   530→   530→                    onClick={() => profile.updateProfile({ [k]: !active })}
+   531→   531→                    className="flex items-center gap-3 w-full p-3 bg-bg-elevated border border-border rounded-xl"
+   532→   532→                  >
+   533→   533→                    <div
+   534→   534→                      className={cn(
+   535→   535→                        "w-5 h-5 rounded flex items-center justify-center border",
+   536→   536→                        active ? "bg-primary border-primary text-black" : "border-border"
+   537→   537→                      )}
+   538→   538→                    >
+   539→   539→                      {active && <CheckCircle2 className="w-4 h-4" />}
+   540→   540→                    </div>
+   541→   541→                    <span className="text-sm font-bold text-text-secondary">{l}</span>
+   542→   542→                  </button>
+   543→   543→                );
+   544→   544→              })}
+   545→   545→            </div>
+   546→   546→          </div>
+   547→   547→        );
+   548→   548→      case 13: // Review
+   549→   549→        return (
+   550→   550→          <div className="space-y-4">
+   551→   551→            <h2 className="text-xl font-black italic tracking-tight uppercase text-primary mb-4 flex items-center gap-2">
+   552→   552→              <CheckCircle2 /> Ready
+   553→   553→            </h2>
+   554→   554→            <div className="bg-bg-elevated border border-border rounded-xl p-4 text-sm space-y-3">
+   555→   555→              <div className="flex justify-between border-b border-border/50 pb-2">
+   556→   556→                <span className="text-text-muted font-bold">Goal</span>
+   557→   557→                <span className="text-text-primary capitalize">{profile.goal || "Not set"}</span>
+   558→   558→              </div>
+   559→   559→              <div className="flex justify-between border-b border-border/50 pb-2">
+   560→   560→                <span className="text-text-muted font-bold">Split</span>
+   561→   561→                <span className="text-text-primary">
+   562→   562→                  {profile.daysPerWeek} Days / {profile.sessionLengthMin} Min
+   563→   563→                </span>
+   564→   564→              </div>
+   565→   565→              <div className="flex justify-between border-b border-border/50 pb-2">
+   566→   566→                <span className="text-text-muted font-bold">Experience</span>
+   567→   567→                <span className="text-text-primary capitalize">{profile.fitnessLevel}</span>
+   568→   568→              </div>
+   569→   569→              <div className="flex justify-between">
+   570→   570→                <span className="text-text-muted font-bold">Focus</span>
+   571→   571→                <span className="text-text-primary capitalize">{profile.physiqueFocus}</span>
+   572→   572→              </div>
+   573→   573→            </div>
+   574→   574→
+   575→   575→            {profile.injuries.length > 0 && profile.injuries[0] !== "none" && (
+   576→   576→              <div className="p-3 bg-warning/10 border border-warning/20 rounded-xl flex items-start gap-3 mt-4">
+   577→   577→                <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+   578→   578→                <p className="text-xs text-warning/90 font-medium">
+   579→   579→                  We will optimize your program to avoid exasperating your listed injuries:{" "}
+   580→   580→                  <span className="font-bold">{profile.injuries.join(", ")}</span>.
+   581→   581→                </p>
+   582→   582→              </div>
+   583→   583→            )}
+   584→   584→          </div>
+   585→   585→        );
+   586→   586→      default:
+   587→   587→        return null;
+   588→   588→    }
+   589→   589→  };
+   590→   590→
+   591→   591→  const isStepValid = () => {
+   592→   592→    switch (currentStep) {
+   593→   593→      case 0:
+   594→   594→        return !!profile.gender;
+   595→   595→      case 3:
+   596→   596→        return !!profile.bodyFatLevel;
+   597→   597→      case 4:
+   598→   598→        return !!profile.fitnessLevel;
+   599→   599→      case 5:
+   600→   600→        return !!profile.goal;
+   601→   601→      default:
+   602→   602→        return true;
+   603→   603→    }
+   604→   604→  };
+   605→   605→
+   606→   606→  return (
+   607→   607→    <div className="max-w-md mx-auto p-4 sm:p-6 bg-bg-card rounded-[2rem] shadow-2xl border border-border flex flex-col min-h-[600px]">
+   608→   608→      <div className="mb-4 shrink-0">
+   609→   609→        <div className="flex items-center justify-between mb-3">
+   610→   610→          <h1 className="text-2xl font-black italic tracking-tighter uppercase">AI Generator</h1>
+   611→   611→          <p className="text-[10px] font-bold text-primary px-2 py-1 bg-primary/10 rounded-md">
+   612→   612→            STEP {currentStep + 1} OF {STEPS.length}
+   613→   613→          </p>
+   614→   614→        </div>
+   615→   615→        <div className="h-1 bg-bg-elevated rounded-full overflow-hidden">
+   616→   616→          <div
+   617→   617→            className="h-full bg-primary transition-all duration-300"
+   618→   618→            style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
+   619→   619→          />
+   620→   620→        </div>
+   621→   621→      </div>
+   622→   622→
+   623→   623→      {/* Content area: relative positioning with overflow-y-auto so long
+   624→   624→          steps (like the anatomy map) scroll naturally instead of clipping. */}
+   625→   625→      <div className="flex-1 relative" style={{ minHeight: "420px" }}>
+   626→   626→        <AnimatePresence mode="popLayout" initial={false}>
+   627→   627→          <motion.div
+   628→   628→            key={currentStep}
+   629→   629→            initial={{ opacity: 0, x: 20 }}
+   630→   630→            animate={{ opacity: 1, x: 0 }}
+   631→   631→            exit={{ opacity: 0, x: -20 }}
+   632→   632→            transition={{ duration: 0.25, ease: "easeOut" }}
+   633→   633→            className="overflow-y-auto no-scrollbar pb-10"
+   634→   634→          >
+   635→   635→            {renderStep()}
+   636→   636→          </motion.div>
+   637→   637→        </AnimatePresence>
+   638→   638→      </div>
+   639→   639→
+   640→   640→      <div className="mt-4 pt-4 border-t border-border/50 shrink-0 flex gap-3 bg-bg-card">
+   641→   641→        <Button
+   642→   642→          onClick={handleBack}
+   643→   643→          disabled={currentStep === 0 || isGenerating}
+   644→   644→          variant="outline"
+   645→   645→          className="flex-1 border-border text-text-secondary"
+   646→   646→          icon={<ArrowLeft className="w-4 h-4" />}
+   647→   647→        ></Button>
+   648→   648→        {currentStep === STEPS.length - 1 ? (
+   649→   649→          <Button
+   650→   650→            onClick={handleGenerate}
+   651→   651→            disabled={exercises.length === 0 || isGenerating}
+   652→   652→            variant="primary"
+   653→   653→            className="flex-[3] font-black uppercase tracking-widest text-xs"
+   654→   654→            icon={isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+   655→   655→          >
+   656→   656→            {isGenerating ? "Building..." : "Generate Program"}
+   657→   657→          </Button>
+   658→   658→        ) : (
+   659→   659→          <Button
+   660→   660→            onClick={handleNext}
+   661→   661→            disabled={!isStepValid()}
+   662→   662→            variant="primary"
+   663→   663→            className="flex-[3] font-black uppercase tracking-widest text-xs opacity-90"
+   664→   664→            icon={<ArrowRight className="w-4 h-4" />}
+   665→   665→          >
+   666→   666→            Next
+   667→   667→          </Button>
+   668→   668→        )}
+   669→   669→      </div>
+   670→   670→    </div>
+   671→   671→  );
+   672→   672→};
+   673→   673→

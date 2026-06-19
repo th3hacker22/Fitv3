@@ -1,0 +1,888 @@
+     1→"use client";
+     2→import { useState, useEffect, useMemo } from "react";
+     3→import { format, subDays, addDays } from "date-fns";
+     4→import { motion, AnimatePresence } from "framer-motion";
+     5→import { Button } from "@/components/ui-custom/Button";
+     6→import {
+     7→  ChevronLeft,
+     8→  ChevronRight,
+     9→  Plus,
+    10→  Apple,
+    11→  Flame,
+    12→  Edit,
+    13→  Trash2,
+    14→  Calculator,
+    15→  Dumbbell,
+    16→  Droplet,
+    17→  Sun,
+    18→  Moon,
+    19→  Coffee,
+    20→  Utensils,
+    21→  Settings,
+    22→} from "lucide-react";
+    23→import { useNutritionStore } from "@/store/useNutritionStore";
+    24→import { useAuthStore } from "@/store/useAuthStore";
+    25→import { cn } from "@/utils/cn";
+    26→import type { FoodEntry } from "@/db";
+    27→
+    28→// Hoisted to module scope — defining MacroBar inside the component caused
+    29→// silent remounts on every render, making the progress bars re-animate from
+    30→// 0% to their value on every parent state change (entry add, day switch, etc).
+    31→function MacroBar({
+    32→  label,
+    33→  current,
+    34→  max,
+    35→  color,
+    36→}: {
+    37→  label: string;
+    38→  current: number;
+    39→  max: number;
+    40→  color: string;
+    41→}) {
+    42→  const percent = Math.min(100, Math.max(0, (current / max) * 100)) || 0;
+    43→  return (
+    44→    <div className="flex flex-col gap-1">
+    45→      <div className="flex justify-between text-xs font-bold text-text-secondary uppercase tracking-wider">
+    46→        <span>{label}</span>
+    47→        <span>
+    48→          {current} / {max}g
+    49→        </span>
+    50→      </div>
+    51→      <div
+    52→        className="h-2 w-full rounded-full bg-border overflow-hidden"
+    53→        role="progressbar"
+    54→        aria-label={label}
+    55→        aria-valuenow={current}
+    56→        aria-valuemin={0}
+    57→        aria-valuemax={max}
+    58→      >
+    59→        <motion.div
+    60→          initial={{ width: 0 }}
+    61→          animate={{ width: `${percent}%` }}
+    62→          className={`h-full ${color}`}
+    63→        />
+    64→      </div>
+    65→    </div>
+    66→  );
+    67→}
+    68→
+    69→export default function NutritionPage() {
+    70→  const [currentDate, setCurrentDate] = useState(new Date());
+    71→  const [showAddModal, setShowAddModal] = useState(false);
+    72→  const [showGoalModal, setShowGoalModal] = useState(false);
+    73→
+    74→  // Individual selectors — bare useNutritionStore() re-rendered the page on
+    75→  // every store change, including unrelated isLoading state transitions.
+    76→  const entries = useNutritionStore((s) => s.entries);
+    77→  const goal = useNutritionStore((s) => s.goal);
+    78→  const loadEntries = useNutritionStore((s) => s.loadEntries);
+    79→  const loadGoal = useNutritionStore((s) => s.loadGoal);
+    80→  const addFoodEntry = useNutritionStore((s) => s.addFoodEntry);
+    81→  const deleteFoodEntry = useNutritionStore((s) => s.deleteFoodEntry);
+    82→  const setGoal = useNutritionStore((s) => s.setGoal);
+    83→  const user = useAuthStore((s) => s.user);
+    84→
+    85→  const [showCalculator, setShowCalculator] = useState(false);
+    86→  const [calcWeight, setCalcWeight] = useState(70);
+    87→  const [calcHeight, setCalcHeight] = useState(170);
+    88→  const [calcAge, setCalcAge] = useState(25);
+    89→  const [calcGender, setCalcGender] = useState<"male" | "female">("male");
+    90→  const [calcActivity, setCalcActivity] = useState<
+    91→    "sedentary" | "light" | "moderate" | "active" | "extra"
+    92→  >("moderate");
+    93→  const [calcGoal, setCalcGoal] = useState<"lose" | "maintain" | "gain">("lose");
+    94→
+    95→  const calculateMacros = () => {
+    96→    let bmr = 10 * calcWeight + 6.25 * calcHeight - 5 * calcAge;
+    97→    if (calcGender === "male") {
+    98→      bmr += 5;
+    99→    } else {
+   100→      bmr -= 161;
+   101→    }
+   102→
+   103→    const activityFactors = {
+   104→      sedentary: 1.2,
+   105→      light: 1.375,
+   106→      moderate: 1.55,
+   107→      active: 1.725,
+   108→      extra: 1.9,
+   109→    };
+   110→    const factor = activityFactors[calcActivity] || 1.2;
+   111→    const tdee = bmr * factor;
+   112→
+   113→    let calories = tdee;
+   114→    if (calcGoal === "lose") {
+   115→      calories -= 500;
+   116→    } else if (calcGoal === "gain") {
+   117→      calories += 300;
+   118→    }
+   119→    calories = Math.max(1200, Math.round(calories));
+   120→
+   121→    let protein = Math.round(2.0 * calcWeight);
+   122→    const proteinKcal = protein * 4;
+   123→    if (proteinKcal > calories * 0.35) {
+   124→      protein = Math.round((calories * 0.3) / 4);
+   125→    } else if (proteinKcal < calories * 0.15) {
+   126→      protein = Math.round((calories * 0.2) / 4);
+   127→    }
+   128→
+   129→    const fatKcal = calories * 0.25;
+   130→    const fat = Math.round(fatKcal / 9);
+   131→
+   132→    const carbKcal = calories - protein * 4 - fat * 9;
+   133→    const carbs = Math.max(0, Math.round(carbKcal / 4));
+   134→
+   135→    return { calories, protein, carbs, fat };
+   136→  };
+   137→
+   138→  useEffect(() => {
+   139→    const formattedDate = format(currentDate, "yyyy-MM-dd");
+   140→    loadEntries(formattedDate);
+   141→  }, [currentDate, loadEntries]);
+   142→
+   143→  useEffect(() => {
+   144→    loadGoal();
+   145→  }, [loadGoal]);
+   146→
+   147→  const handlePrevDay = () => setCurrentDate((prev) => subDays(prev, 1));
+   148→  const handleNextDay = () => setCurrentDate((prev) => addDays(prev, 1));
+   149→
+   150→  const safeGoal = goal || {
+   151→    dailyCalories: 2000,
+   152→    protein: 150,
+   153→    carbs: 200,
+   154→    fat: 65,
+   155→    id: "temp",
+   156→    updatedAt: "",
+   157→  };
+   158→
+   159→  const totalCalories = entries.reduce((acc, sum) => acc + sum.calories, 0);
+   160→  const totalProtein = entries.reduce((acc, sum) => acc + sum.protein, 0);
+   161→  const totalCarbs = entries.reduce((acc, sum) => acc + sum.carbs, 0);
+   162→  const totalFat = entries.reduce((acc, sum) => acc + sum.fat, 0);
+   163→
+   164→  const mealTypes = ["breakfast", "lunch", "dinner", "snack"] as const;
+   165→
+   166→  const handleAddSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+   167→    e.preventDefault();
+   168→    const formData = new FormData(e.currentTarget);
+   169→    await addFoodEntry(
+   170→      {
+   171→        date: format(currentDate, "yyyy-MM-dd"),
+   172→        name: formData.get("name") as string,
+   173→        calories: Number(formData.get("calories")),
+   174→        protein: Number(formData.get("protein")),
+   175→        carbs: Number(formData.get("carbs")),
+   176→        fat: Number(formData.get("fat")),
+   177→        mealType: formData.get("mealType") as FoodEntry["mealType"],
+   178→      },
+   179→      user?.uid
+   180→    );
+   181→    setShowAddModal(false);
+   182→  };
+   183→
+   184→  const handleGoalSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+   185→    e.preventDefault();
+   186→    const formData = new FormData(e.currentTarget);
+   187→    await setGoal(
+   188→      {
+   189→        dailyCalories: Number(formData.get("calories")),
+   190→        protein: Number(formData.get("protein")),
+   191→        carbs: Number(formData.get("carbs")),
+   192→        fat: Number(formData.get("fat")),
+   193→      },
+   194→      user?.uid
+   195→    );
+   196→    setShowGoalModal(false);
+   197→  };
+   198→
+   199→  return (
+   200→    <motion.div
+   201→      className="mx-auto flex w-full max-w-lg flex-col gap-5 pb-24"
+   202→      initial={{ opacity: 0, y: 10 }}
+   203→      animate={{ opacity: 1, y: 0 }}
+   204→    >
+   205→      {/* Header */}
+   206→      <div className="flex flex-col gap-1">
+   207→        <h1 className="text-2xl font-black italic uppercase tracking-tighter text-text-primary">
+   208→          NUTRITION
+   209→        </h1>
+   210→        <p className="text-xs text-text-secondary">Track your daily fuel</p>
+   211→      </div>
+   212→
+   213→      {/* Date Picker */}
+   214→      <div className="flex items-center justify-between rounded-xl border border-border bg-bg-elevated/50 p-2">
+   215→        <button
+   216→          onClick={handlePrevDay}
+   217→          aria-label="Previous day"
+   218→          className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary transition-colors hover:text-text-primary"
+   219→        >
+   220→          <ChevronLeft className="h-4 w-4" />
+   221→        </button>
+   222→        <span className="text-xs font-bold uppercase tracking-widest text-text-primary">
+   223→          {format(currentDate, "MMM dd, yyyy")}
+   224→        </span>
+   225→        <button
+   226→          onClick={handleNextDay}
+   227→          aria-label="Next day"
+   228→          className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary transition-colors hover:text-text-primary"
+   229→        >
+   230→          <ChevronRight className="h-4 w-4" />
+   231→        </button>
+   232→      </div>
+   233→
+   234→      {/* Calorie Ring */}
+   235→      <div className="flex flex-col items-center justify-center">
+   236→        <div className="relative flex h-[180px] w-[180px] items-center justify-center">
+   237→          {/* Background ring */}
+   238→          <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 200 200">
+   239→            <circle cx="100" cy="100" fill="none" r="90" stroke="#1f2937" strokeWidth="10" />
+   240→          </svg>
+   241→          {/* Progress ring */}
+   242→          <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 200 200">
+   243→            <motion.circle
+   244→              cx="100"
+   245→              cy="100"
+   246→              fill="none"
+   247→              r="90"
+   248→              stroke={totalCalories > safeGoal.dailyCalories ? "#ff5252" : "#ccff00"}
+   249→              strokeWidth="10"
+   250→              strokeLinecap="round"
+   251→              strokeDasharray={2 * Math.PI * 90}
+   252→              initial={{ strokeDashoffset: 2 * Math.PI * 90 }}
+   253→              animate={{
+   254→                strokeDashoffset:
+   255→                  2 * Math.PI * 90 -
+   256→                  (2 * Math.PI * 90 * Math.min(100, (totalCalories / safeGoal.dailyCalories) * 100)) / 100,
+   257→              }}
+   258→              transition={{ duration: 1, ease: "easeOut" }}
+   259→              style={{ filter: `drop-shadow(0 0 8px ${totalCalories > safeGoal.dailyCalories ? "rgba(255,82,82,0.5)" : "rgba(204,255,0,0.5)"})` }}
+   260→            />
+   261→          </svg>
+   262→          {/* Center text */}
+   263→          <div className="z-10 flex flex-col items-center justify-center text-center">
+   264→            <span
+   265→              className={`text-3xl font-black italic tabular-nums ${totalCalories > safeGoal.dailyCalories ? "text-danger" : "text-primary"}`}
+   266→              style={{ textShadow: "0 0 10px rgba(204,255,0,0.3)" }}
+   267→            >
+   268→              {totalCalories}
+   269→            </span>
+   270→            <span className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-text-secondary">
+   271→              of {safeGoal.dailyCalories} kcal
+   272→            </span>
+   273→            <button
+   274→              onClick={() => setShowGoalModal(true)}
+   275→              className="mt-2 flex h-7 w-7 items-center justify-center rounded-lg bg-bg-elevated text-text-secondary transition-colors hover:text-primary"
+   276→              aria-label="Edit goals"
+   277→            >
+   278→              <Settings className="h-3.5 w-3.5" />
+   279→            </button>
+   280→          </div>
+   281→        </div>
+   282→      </div>
+   283→
+   284→      {/* Macro Breakdown (3 cards) */}
+   285→      <div className="grid grid-cols-3 gap-3">
+   286→        {/* Protein */}
+   287→        <div className="glass-card flex flex-col gap-2 rounded-xl border-t-2 border-t-primary p-3">
+   288→          <div className="flex items-center justify-between">
+   289→            <Dumbbell className="h-3.5 w-3.5 text-primary" />
+   290→            <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary">Protein</span>
+   291→          </div>
+   292→          <div className="text-sm font-black italic tabular-nums text-primary">
+   293→            {totalProtein}
+   294→            <span className="text-[9px] font-normal text-text-secondary">/{safeGoal.protein}g</span>
+   295→          </div>
+   296→          <div className="h-1 w-full overflow-hidden rounded-full bg-bg-elevated">
+   297→            <motion.div
+   298→              className="h-full rounded-full bg-primary"
+   299→              style={{ boxShadow: "0 0 6px rgba(204,255,0,0.4)" }}
+   300→              initial={{ width: 0 }}
+   301→              animate={{ width: `${Math.min(100, (totalProtein / safeGoal.protein) * 100)}%` }}
+   302→              transition={{ duration: 0.8 }}
+   303→            />
+   304→          </div>
+   305→        </div>
+   306→        {/* Carbs */}
+   307→        <div className="glass-card flex flex-col gap-2 rounded-xl border-t-2 border-t-secondary p-3">
+   308→          <div className="flex items-center justify-between">
+   309→            <Flame className="h-3.5 w-3.5 text-secondary" />
+   310→            <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary">Carbs</span>
+   311→          </div>
+   312→          <div className="text-sm font-black italic tabular-nums text-secondary">
+   313→            {totalCarbs}
+   314→            <span className="text-[9px] font-normal text-text-secondary">/{safeGoal.carbs}g</span>
+   315→          </div>
+   316→          <div className="h-1 w-full overflow-hidden rounded-full bg-bg-elevated">
+   317→            <motion.div
+   318→              className="h-full rounded-full bg-secondary"
+   319→              style={{ boxShadow: "0 0 6px rgba(0,240,255,0.4)" }}
+   320→              initial={{ width: 0 }}
+   321→              animate={{ width: `${Math.min(100, (totalCarbs / safeGoal.carbs) * 100)}%` }}
+   322→              transition={{ duration: 0.8, delay: 0.1 }}
+   323→            />
+   324→          </div>
+   325→        </div>
+   326→        {/* Fat */}
+   327→        <div className="glass-card flex flex-col gap-2 rounded-xl border-t-2 border-t-warning p-3">
+   328→          <div className="flex items-center justify-between">
+   329→            <Apple className="h-3.5 w-3.5 text-warning" />
+   330→            <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary">Fat</span>
+   331→          </div>
+   332→          <div className="text-sm font-black italic tabular-nums text-warning">
+   333→            {totalFat}
+   334→            <span className="text-[9px] font-normal text-text-secondary">/{safeGoal.fat}g</span>
+   335→          </div>
+   336→          <div className="h-1 w-full overflow-hidden rounded-full bg-bg-elevated">
+   337→            <motion.div
+   338→              className="h-full rounded-full bg-warning"
+   339→              style={{ boxShadow: "0 0 6px rgba(255,171,0,0.4)" }}
+   340→              initial={{ width: 0 }}
+   341→              animate={{ width: `${Math.min(100, (totalFat / safeGoal.fat) * 100)}%` }}
+   342→              transition={{ duration: 0.8, delay: 0.2 }}
+   343→            />
+   344→          </div>
+   345→        </div>
+   346→      </div>
+   347→
+   348→      {/* Meals List */}
+   349→      <div className="space-y-3">
+   350→        <div className="flex items-center justify-between border-b border-border pb-2">
+   351→          <h2 className="text-sm font-bold uppercase italic text-text-primary">Today's Fuel</h2>
+   352→          <span className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">
+   353→            {entries.length} entries
+   354→          </span>
+   355→        </div>
+   356→        {mealTypes.map((meal) => {
+   357→          const mealEntries = entries.filter((e) => e.mealType === meal);
+   358→          const mealCals = mealEntries.reduce((acc, sum) => acc + sum.calories, 0);
+   359→          const mealIcons: Record<string, React.ElementType> = {
+   360→            breakfast: Sun,
+   361→            lunch: Utensils,
+   362→            dinner: Moon,
+   363→            snack: Coffee,
+   364→          };
+   365→          const MealIcon = mealIcons[meal] || Utensils;
+   366→
+   367→          return (
+   368→            <div key={meal} className="glass-card flex flex-col gap-3 rounded-xl p-4">
+   369→              <div className="flex items-center justify-between">
+   370→                <div className="flex items-center gap-3">
+   371→                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-bg-elevated">
+   372→                    <MealIcon className="h-4 w-4 text-text-secondary" />
+   373→                  </div>
+   374→                  <div>
+   375→                    <h3 className="text-sm font-bold capitalize text-text-primary">{meal}</h3>
+   376→                    {mealEntries.length > 0 && (
+   377→                      <p className="text-[10px] text-text-secondary">
+   378→                        {mealEntries.map((e) => e.name).join(", ")}
+   379→                      </p>
+   380→                    )}
+   381→                  </div>
+   382→                </div>
+   383→                <div className="text-right">
+   384→                  <span className="text-base font-black italic text-primary">{mealCals}</span>
+   385→                  <span className="ml-1 text-[9px] font-bold uppercase text-text-secondary">KCAL</span>
+   386→                </div>
+   387→              </div>
+   388→
+   389→              {mealEntries.length === 0 ? (
+   390→                <button
+   391→                  onClick={() => setShowAddModal(true)}
+   392→                  className="flex items-center gap-2 rounded-lg border border-dashed border-border py-2 text-xs text-text-secondary transition-colors hover:border-primary/30 hover:text-primary"
+   393→                >
+   394→                  <Plus className="h-3 w-3" />
+   395→                  Add food
+   396→                </button>
+   397→              ) : (
+   398→                <div className="flex flex-col gap-1.5">
+   399→                  {mealEntries.map((entry) => (
+   400→                    <div
+   401→                      key={entry.id}
+   402→                      className="group flex items-center justify-between rounded-lg bg-bg-elevated/30 p-2"
+   403→                    >
+   404→                      <div className="min-w-0 flex-1">
+   405→                        <div className="truncate text-xs font-semibold text-text-primary">{entry.name}</div>
+   406→                        <div className="text-[9px] font-mono text-text-secondary">
+   407→                          {entry.protein}P • {entry.carbs}C • {entry.fat}F
+   408→                        </div>
+   409→                      </div>
+   410→                      <div className="flex items-center gap-2">
+   411→                        <span className="text-xs font-bold text-text-primary">{entry.calories}</span>
+   412→                        <button
+   413→                          onClick={() => deleteFoodEntry(entry.id, user?.uid)}
+   414→                          aria-label="Delete food entry"
+   415→                          className="flex h-7 w-7 items-center justify-center rounded-lg text-text-secondary opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
+   416→                        >
+   417→                          <Trash2 className="h-3 w-3" />
+   418→                        </button>
+   419→                      </div>
+   420→                    </div>
+   421→                  ))}
+   422→                </div>
+   423→              )}
+   424→            </div>
+   425→          );
+   426→        })}
+   427→      </div>
+   428→
+   429→      {/* Water Tracker */}
+   430→      <div className="glass-card rounded-xl p-4">
+   431→        <div className="mb-3 flex items-center justify-between">
+   432→          <div className="flex items-center gap-2">
+   433→            <Droplet className="h-4 w-4 text-secondary" />
+   434→            <h2 className="text-sm font-bold uppercase italic text-text-primary">Hydration</h2>
+   435→          </div>
+   436→          <span className="text-[10px] font-bold text-secondary">
+   437→            {Math.min(8, Math.floor(totalCalories / 200))} / 8 glasses
+   438→          </span>
+   439→        </div>
+   440→        <div className="flex items-center justify-between gap-1">
+   441→          {Array.from({ length: 8 }).map((_, i) => {
+   442→            const filled = i < Math.min(8, Math.floor(totalCalories / 200));
+   443→            return (
+   444→              <button
+   445→                key={i}
+   446→                className="transition-transform active:scale-90"
+   447→                aria-label={`Glass ${i + 1}`}
+   448→              >
+   449→                <Droplet
+   450→                  className={`h-7 w-7 ${filled ? "text-secondary" : "text-text-muted"}`}
+   451→                  fill={filled ? "currentColor" : "none"}
+   452→                  style={filled ? { filter: "drop-shadow(0 0 6px rgba(0,240,255,0.4))" } : undefined}
+   453→                />
+   454→              </button>
+   455→            );
+   456→          })}
+   457→        </div>
+   458→      </div>
+   459→
+   460→      {/* Floating Add Button */}
+   461→      <div className="fixed bottom-24 left-0 right-0 z-40 flex justify-center">
+   462→        <Button
+   463→          onClick={() => setShowAddModal(true)}
+   464→          variant="primary"
+   465→          className="pointer-events-auto flex items-center gap-2 rounded-full px-6 py-3.5 text-xs font-black uppercase tracking-widest shadow-lg shadow-primary/20 backdrop-blur-md"
+   466→          icon={<Plus className="h-4 w-4" />}
+   467→        >
+   468→          Quick Add
+   469→        </Button>
+   470→      </div>
+   471→
+   472→      {/* Add Food Modal */}
+   473→      <AnimatePresence>
+   474→        {showAddModal && (
+   475→          <motion.div
+   476→            initial={{ opacity: 0 }}
+   477→            animate={{ opacity: 1 }}
+   478→            exit={{ opacity: 0 }}
+   479→            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+   480→          >
+   481→            <motion.div
+   482→              initial={{ scale: 0.95 }}
+   483→              animate={{ scale: 1 }}
+   484→              exit={{ scale: 0.95 }}
+   485→              className="glass-card w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-border"
+   486→            >
+   487→              <h2 className="text-lg font-black text-text-primary uppercase tracking-wider mb-4">
+   488→                Add Food
+   489→              </h2>
+   490→              <form onSubmit={handleAddSubmit} className="flex flex-col gap-4">
+   491→                <input
+   492→                  required
+   493→                  name="name"
+   494→                  type="text"
+   495→                  placeholder="Food Name"
+   496→                  className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   497→                />
+   498→                <div className="grid grid-cols-2 gap-3">
+   499→                  <input
+   500→                    required
+   501→                    name="calories"
+   502→                    type="number"
+   503→                    placeholder="Calories"
+   504→                    className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   505→                  />
+   506→                  <select
+   507→                    required
+   508→                    name="mealType"
+   509→                    className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   510→                  >
+   511→                    <option value="breakfast">Breakfast</option>
+   512→                    <option value="lunch">Lunch</option>
+   513→                    <option value="dinner">Dinner</option>
+   514→                    <option value="snack">Snack</option>
+   515→                  </select>
+   516→                </div>
+   517→                <div className="grid grid-cols-3 gap-3">
+   518→                  <input
+   519→                    required
+   520→                    name="protein"
+   521→                    type="number"
+   522→                    placeholder="Protein (g)"
+   523→                    className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   524→                  />
+   525→                  <input
+   526→                    required
+   527→                    name="carbs"
+   528→                    type="number"
+   529→                    placeholder="Carbs (g)"
+   530→                    className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   531→                  />
+   532→                  <input
+   533→                    required
+   534→                    name="fat"
+   535→                    type="number"
+   536→                    placeholder="Fat (g)"
+   537→                    className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   538→                  />
+   539→                </div>
+   540→                <div className="flex gap-3 mt-2">
+   541→                  <button
+   542→                    type="button"
+   543→                    onClick={() => setShowAddModal(false)}
+   544→                    className="flex-1 rounded-xl bg-bg-elevated py-3 text-sm font-bold text-text-primary uppercase tracking-wider hover:bg-bg-elevated/50"
+   545→                  >
+   546→                    Cancel
+   547→                  </button>
+   548→                  <Button
+   549→                    type="submit"
+   550→                    variant="primary"
+   551→                    className="flex-1 w-full py-3 text-sm font-black uppercase tracking-wider"
+   552→                  >
+   553→                    Add
+   554→                  </Button>
+   555→                </div>
+   556→              </form>
+   557→            </motion.div>
+   558→          </motion.div>
+   559→        )}
+   560→      </AnimatePresence>
+   561→
+   562→      {/* Edit Goals Modal */}
+   563→      <AnimatePresence>
+   564→        {showGoalModal && (
+   565→          <motion.div
+   566→            initial={{ opacity: 0 }}
+   567→            animate={{ opacity: 1 }}
+   568→            exit={{ opacity: 0 }}
+   569→            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+   570→          >
+   571→            <motion.div
+   572→              initial={{ scale: 0.95 }}
+   573→              animate={{ scale: 1 }}
+   574→              exit={{ scale: 0.95 }}
+   575→              className="glass-card w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-border"
+   576→            >
+   577→              <div className="flex items-center justify-between mb-4">
+   578→                <h2 className="text-lg font-black text-text-primary uppercase tracking-wider">
+   579→                  {showCalculator ? "Calculate Goals" : "Edit Goals"}
+   580→                </h2>
+   581→                <button
+   582→                  type="button"
+   583→                  onClick={() => setShowCalculator(!showCalculator)}
+   584→                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-xs font-bold uppercase tracking-wider cursor-pointer"
+   585→                >
+   586→                  {showCalculator ? (
+   587→                    <>Manual Edit</>
+   588→                  ) : (
+   589→                    <>
+   590→                      <Calculator className="w-3.5 h-3.5" />
+   591→                      Auto-Calc
+   592→                    </>
+   593→                  )}
+   594→                </button>
+   595→              </div>
+   596→
+   597→              {showCalculator ? (
+   598→                <div className="flex flex-col gap-4 text-left">
+   599→                  {/* Gender Selection */}
+   600→                  <div>
+   601→                    <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-1">
+   602→                      Gender
+   603→                    </label>
+   604→                    <div className="grid grid-cols-2 gap-2">
+   605→                      <button
+   606→                        type="button"
+   607→                        onClick={() => setCalcGender("male")}
+   608→                        className={cn(
+   609→                          "py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer",
+   610→                          calcGender === "male"
+   611→                            ? "bg-primary text-primary-text border-primary shadow-sm"
+   612→                            : "bg-bg-elevated text-text-secondary border-border"
+   613→                        )}
+   614→                      >
+   615→                        Male
+   616→                      </button>
+   617→                      <button
+   618→                        type="button"
+   619→                        onClick={() => setCalcGender("female")}
+   620→                        className={cn(
+   621→                          "py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer",
+   622→                          calcGender === "female"
+   623→                            ? "bg-primary text-primary-text border-primary shadow-sm"
+   624→                            : "bg-bg-elevated text-text-secondary border-border"
+   625→                        )}
+   626→                      >
+   627→                        Female
+   628→                      </button>
+   629→                    </div>
+   630→                  </div>
+   631→
+   632→                  {/* Weight, Height, Age Inputs */}
+   633→                  <div className="grid grid-cols-3 gap-2">
+   634→                    <div>
+   635→                      <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-1">
+   636→                        Weight (kg)
+   637→                      </label>
+   638→                      <input
+   639→                        type="number"
+   640→                        required
+   641→                        min="30"
+   642→                        max="300"
+   643→                        value={calcWeight}
+   644→                        onChange={(e) => setCalcWeight(Number(e.target.value))}
+   645→                        className="w-full rounded-xl border border-border bg-bg-elevated px-3 py-2.5 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+   646→                      />
+   647→                    </div>
+   648→                    <div>
+   649→                      <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-1">
+   650→                        Height (cm)
+   651→                      </label>
+   652→                      <input
+   653→                        type="number"
+   654→                        required
+   655→                        min="100"
+   656→                        max="250"
+   657→                        value={calcHeight}
+   658→                        onChange={(e) => setCalcHeight(Number(e.target.value))}
+   659→                        className="w-full rounded-xl border border-border bg-bg-elevated px-3 py-2.5 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+   660→                      />
+   661→                    </div>
+   662→                    <div>
+   663→                      <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-1">
+   664→                        Age (yrs)
+   665→                      </label>
+   666→                      <input
+   667→                        type="number"
+   668→                        required
+   669→                        min="10"
+   670→                        max="100"
+   671→                        value={calcAge}
+   672→                        onChange={(e) => setCalcAge(Number(e.target.value))}
+   673→                        className="w-full rounded-xl border border-border bg-bg-elevated px-3 py-2.5 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+   674→                      />
+   675→                    </div>
+   676→                  </div>
+   677→
+   678→                  {/* Activity Level Dropdown */}
+   679→                  <div>
+   680→                    <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-1">
+   681→                      Activity Level
+   682→                    </label>
+   683→                    <select
+   684→                      value={calcActivity}
+   685→                      onChange={(e) => setCalcActivity(e.target.value as "sedentary" | "light" | "moderate" | "active" | "extra")}
+   686→                      className="w-full rounded-xl border border-border bg-bg-elevated px-3 py-2.5 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors cursor-pointer capitalize"
+   687→                    >
+   688→                      <option value="sedentary">Sedentary (No exercise)</option>
+   689→                      <option value="light">Lightly Active (1-3 days/wk)</option>
+   690→                      <option value="moderate">Moderately Active (3-5 days/wk)</option>
+   691→                      <option value="active">Very Active (6-7 days/wk)</option>
+   692→                      <option value="extra">Extra Active (Hard labor/workouts)</option>
+   693→                    </select>
+   694→                  </div>
+   695→
+   696→                  {/* Fitness Goal Tabs */}
+   697→                  <div>
+   698→                    <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-1">
+   699→                      Goal
+   700→                    </label>
+   701→                    <div className="grid grid-cols-3 gap-2">
+   702→                      {(["lose", "maintain", "gain"] as const).map((g) => (
+   703→                        <button
+   704→                          key={g}
+   705→                          type="button"
+   706→                          onClick={() => setCalcGoal(g)}
+   707→                          className={cn(
+   708→                            "py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer capitalize",
+   709→                            calcGoal === g
+   710→                              ? "bg-primary text-primary-text border-primary shadow-sm"
+   711→                              : "bg-bg-elevated text-text-secondary border-border"
+   712→                          )}
+   713→                        >
+   714→                          {g === "lose"
+   715→                            ? "Lose Fat"
+   716→                            : g === "maintain"
+   717→                              ? "Maintain"
+   718→                              : "Build Muscle"}
+   719→                        </button>
+   720→                      ))}
+   721→                    </div>
+   722→                  </div>
+   723→
+   724→                  {/* Results Preview */}
+   725→                  {(() => {
+   726→                    const results = calculateMacros();
+   727→                    const protKcal = results.protein * 4;
+   728→                    const carbKcal = results.carbs * 4;
+   729→                    const fatKcal = results.fat * 9;
+   730→                    const totalKcal = protKcal + carbKcal + fatKcal || 1;
+   731→                    const pPct = Math.round((protKcal / totalKcal) * 100);
+   732→                    const fPct = Math.round((fatKcal / totalKcal) * 100);
+   733→                    const cPct = 100 - pPct - fPct;
+   734→
+   735→                    return (
+   736→                      <div className="mt-2 p-4 rounded-2xl bg-bg border border-border flex flex-col gap-3">
+   737→                        <div className="flex justify-between items-center">
+   738→                          <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">
+   739→                            Estimated Needs
+   740→                          </span>
+   741→                          <span className="text-base font-black text-primary">
+   742→                            {results.calories} kcal
+   743→                          </span>
+   744→                        </div>
+   745→
+   746→                        {/* Progress bar split */}
+   747→                        <div className="h-2 w-full rounded-full bg-border flex overflow-hidden">
+   748→                          <div
+   749→                            className="bg-primary h-full transition-all duration-300"
+   750→                            style={{ width: `${pPct}%` }}
+   751→                          />
+   752→                          <div
+   753→                            className="bg-secondary h-full transition-all duration-300"
+   754→                            style={{ width: `${cPct}%` }}
+   755→                          />
+   756→                          <div
+   757→                            className="bg-warning h-full transition-all duration-300"
+   758→                            style={{ width: `${fPct}%` }}
+   759→                          />
+   760→                        </div>
+   761→
+   762→                        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+   763→                          <div className="flex flex-col gap-0.5">
+   764→                            <span className="font-bold text-primary">Protein ({pPct}%)</span>
+   765→                            <span className="font-black text-text-primary">{results.protein}g</span>
+   766→                          </div>
+   767→                          <div className="flex flex-col gap-0.5">
+   768→                            <span className="font-bold text-secondary">Carbs ({cPct}%)</span>
+   769→                            <span className="font-black text-text-primary">{results.carbs}g</span>
+   770→                          </div>
+   771→                          <div className="flex flex-col gap-0.5">
+   772→                            <span className="font-bold text-warning">Fat ({fPct}%)</span>
+   773→                            <span className="font-black text-text-primary">{results.fat}g</span>
+   774→                          </div>
+   775→                        </div>
+   776→                      </div>
+   777→                    );
+   778→                  })()}
+   779→
+   780→                  {/* Apply & Save Button */}
+   781→                  <div className="flex gap-3 mt-2">
+   782→                    <button
+   783→                      type="button"
+   784→                      onClick={() => setShowGoalModal(false)}
+   785→                      className="flex-1 rounded-xl bg-bg-elevated py-3 text-sm font-bold text-text-primary uppercase tracking-wider hover:bg-bg-elevated/50 cursor-pointer"
+   786→                    >
+   787→                      Cancel
+   788→                    </button>
+   789→                    <Button
+   790→                      type="button"
+   791→                      onClick={async () => {
+   792→                        const results = calculateMacros();
+   793→                        await setGoal(
+   794→                          {
+   795→                            dailyCalories: results.calories,
+   796→                            protein: results.protein,
+   797→                            carbs: results.carbs,
+   798→                            fat: results.fat,
+   799→                          },
+   800→                          user?.uid
+   801→                        );
+   802→                        setShowGoalModal(false);
+   803→                      }}
+   804→                      variant="primary"
+   805→                      className="flex-1 py-3 text-sm font-black uppercase tracking-wider"
+   806→                    >
+   807→                      Apply & Save
+   808→                    </Button>
+   809→                  </div>
+   810→                </div>
+   811→              ) : (
+   812→                <form onSubmit={handleGoalSubmit} className="flex flex-col gap-4">
+   813→                  <div>
+   814→                    <label className="text-xs font-bold text-text-secondary mb-1 block uppercase">
+   815→                      Daily Calories
+   816→                    </label>
+   817→                    <input
+   818→                      required
+   819→                      defaultValue={safeGoal.dailyCalories}
+   820→                      name="calories"
+   821→                      type="number"
+   822→                      className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   823→                    />
+   824→                  </div>
+   825→                  <div className="grid grid-cols-3 gap-3">
+   826→                    <div>
+   827→                      <label className="text-xs font-bold text-text-secondary mb-1 block uppercase text-primary">
+   828→                        Protein (g)
+   829→                      </label>
+   830→                      <input
+   831→                        required
+   832→                        defaultValue={safeGoal.protein}
+   833→                        name="protein"
+   834→                        type="number"
+   835→                        className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   836→                      />
+   837→                    </div>
+   838→                    <div>
+   839→                      <label className="text-xs font-bold text-text-secondary mb-1 block uppercase text-secondary">
+   840→                        Carbs (g)
+   841→                      </label>
+   842→                      <input
+   843→                        required
+   844→                        defaultValue={safeGoal.carbs}
+   845→                        name="carbs"
+   846→                        type="number"
+   847→                        className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   848→                      />
+   849→                    </div>
+   850→                    <div>
+   851→                      <label className="text-xs font-bold text-text-secondary mb-1 block uppercase text-warning">
+   852→                        Fat (g)
+   853→                      </label>
+   854→                      <input
+   855→                        required
+   856→                        defaultValue={safeGoal.fat}
+   857→                        name="fat"
+   858→                        type="number"
+   859→                        className="w-full rounded-xl border border-border bg-bg p-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+   860→                      />
+   861→                    </div>
+   862→                  </div>
+   863→                  <div className="flex gap-3 mt-4">
+   864→                    <button
+   865→                      type="button"
+   866→                      onClick={() => setShowGoalModal(false)}
+   867→                      className="flex-1 rounded-xl bg-bg-elevated py-3 text-sm font-bold text-text-primary uppercase tracking-wider hover:bg-bg-elevated/50"
+   868→                    >
+   869→                      Cancel
+   870→                    </button>
+   871→                    <Button
+   872→                      type="submit"
+   873→                      variant="primary"
+   874→                      className="flex-1 w-full py-3 text-sm font-black uppercase tracking-wider"
+   875→                    >
+   876→                      Save
+   877→                    </Button>
+   878→                  </div>
+   879→                </form>
+   880→              )}
+   881→            </motion.div>
+   882→          </motion.div>
+   883→        )}
+   884→      </AnimatePresence>
+   885→    </motion.div>
+   886→  );
+   887→}
+   888→

@@ -1,0 +1,972 @@
+     1→"use client";
+     2→import { useState, useEffect } from "react";
+     3→import { motion, AnimatePresence } from "framer-motion";
+     4→import {
+     5→  Loader2,
+     6→  ArrowLeft,
+     7→  ArrowRight,
+     8→  CheckCircle2,
+     9→  ChevronDown,
+    10→  ChevronUp,
+    11→  AlertTriangle,
+    12→  Minus,
+    13→  Plus,
+    14→  SkipForward,
+    15→} from "lucide-react";
+    16→import { useGeneratorStore } from "@/store/useGeneratorStore";
+    17→import { useExerciseStore } from "@/store/useExerciseStore";
+    18→import { useSettingsStore } from "@/store/useSettingsStore";
+    19→import AnatomyMap from "@/components/AnatomyMap";
+    20→import { generateProgram } from "@/services/workoutGenerator";
+    21→import { useRouter } from "@/router";
+    22→import { Button } from "@/components/ui-custom/Button";
+    23→
+    24→// ═══════════════════════════════════════════════════════════════
+    25→// 5-STEP WIZARD (reduced from 14 steps)
+    26→// ═══════════════════════════════════════════════════════════════
+    27→const STEPS = ["Goal & Experience", "Schedule & Equipment", "Muscles & Style", "Health & Safety", "Review"];
+    28→
+    29→function cn(...classes: (string | undefined | null | false)[]) {
+    30→  return classes.filter(Boolean).join(" ");
+    31→}
+    32→
+    33→// ── Option Button (hoisted to module scope) ──
+    34→function OptionBtn({
+    35→  active,
+    36→  onClick,
+    37→  label,
+    38→  desc,
+    39→  compact,
+    40→}: {
+    41→  active: boolean;
+    42→  onClick: () => void;
+    43→  label: string;
+    44→  desc?: string;
+    45→  compact?: boolean;
+    46→}) {
+    47→  return (
+    48→    <button
+    49→      onClick={onClick}
+    50→      className={cn(
+    51→        "w-full border rounded-xl text-left transition-all",
+    52→        compact ? "p-3" : "p-4 mb-2.5 last:mb-0",
+    53→        active
+    54→          ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_var(--c-primary-glow)]"
+    55→          : "border-border bg-bg-elevated text-text-secondary hover:border-border-active hover:text-text-primary"
+    56→      )}
+    57→    >
+    58→      <div className={cn("font-bold tracking-wide uppercase", compact ? "text-xs" : "text-sm")}>
+    59→        {label}
+    60→      </div>
+    61→      {desc && (
+    62→        <div className={cn("text-xs mt-0.5", active ? "text-primary/80" : "text-text-secondary/70")}>
+    63→          {desc}
+    64→        </div>
+    65→      )}
+    66→    </button>
+    67→  );
+    68→}
+    69→
+    70→// ── Age Stepper (replaces slider — more precise on mobile) ──
+    71→function AgeStepper({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+    72→  return (
+    73→    <div className="flex flex-col items-center gap-3 py-4">
+    74→      <div className="flex items-center gap-6">
+    75→        <button
+    76→          onClick={() => onChange(Math.max(13, value - 1))}
+    77→          aria-label="Decrease age by 1"
+    78→          className="flex h-12 w-12 items-center justify-center rounded-xl bg-bg-elevated border border-border text-text-primary hover:bg-bg-surface-hover active:scale-95 transition-all"
+    79→        >
+    80→          <Minus className="h-5 w-5" aria-hidden="true" />
+    81→          <span className="sr-only">-1</span>
+    82→        </button>
+    83→
+    84→        <div className="flex flex-col items-center min-w-[100px]">
+    85→          <input
+    86→            type="number"
+    87→            value={value}
+    88→            onChange={(e) => {
+    89→              const v = parseInt(e.target.value) || 0;
+    90→              onChange(Math.min(100, Math.max(13, v)));
+    91→            }}
+    92→            aria-label="Age in years"
+    93→            className="w-20 bg-transparent text-center text-5xl font-black italic text-primary outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+    94→          />
+    95→          <span className="text-xs text-text-secondary uppercase tracking-wider font-bold">years old</span>
+    96→        </div>
+    97→
+    98→        <button
+    99→          onClick={() => onChange(Math.min(100, value + 1))}
+   100→          aria-label="Increase age by 1"
+   101→          className="flex h-12 w-12 items-center justify-center rounded-xl bg-bg-elevated border border-border text-text-primary hover:bg-bg-surface-hover active:scale-95 transition-all"
+   102→        >
+   103→          <Plus className="h-5 w-5" aria-hidden="true" />
+   104→          <span className="sr-only">+1</span>
+   105→        </button>
+   106→      </div>
+   107→      <p className="text-xs text-text-secondary text-center max-w-[250px] leading-relaxed">
+   108→        Age helps us calibrate intensity, volume tolerance, and recovery recommendations.
+   109→      </p>
+   110→    </div>
+   111→  );
+   112→}
+   113→
+   114→// ── Smart defaults based on goal ──
+   115→function applySmartDefaults(
+   116→  goal: string,
+   117→  profile: ReturnType<typeof useGeneratorStore.getState>
+   118→) {
+   119→  const updates: Partial<ReturnType<typeof useGeneratorStore.getState>> = {};
+   120→  switch (goal) {
+   121→    case "Strength":
+   122→      updates.daysPerWeek = 4;
+   123→      updates.sessionLengthMin = 75;
+   124→      updates.repBiasOverride = "low";
+   125→      break;
+   126→    case "Hypertrophy":
+   127→    case "Recomp":
+   128→      updates.daysPerWeek = 4;
+   129→      updates.sessionLengthMin = 60;
+   130→      updates.repBiasOverride = "moderate";
+   131→      break;
+   132→    case "Fat Loss":
+   133→      updates.daysPerWeek = 3;
+   134→      updates.sessionLengthMin = 45;
+   135→      updates.includeCardio = true;
+   136→      updates.repBiasOverride = "high";
+   137→      break;
+   138→    case "Endurance":
+   139→      updates.daysPerWeek = 5;
+   140→      updates.sessionLengthMin = 60;
+   141→      updates.repBiasOverride = "high";
+   142→      break;
+   143→    case "General Fitness":
+   144→      updates.daysPerWeek = 3;
+   145→      updates.sessionLengthMin = 45;
+   146→      updates.repBiasOverride = "moderate";
+   147→      break;
+   148→  }
+   149→  profile.updateProfile(updates);
+   150→}
+   151→
+   152→export const GeneratorWizard = () => {
+   153→  const navigate = useRouter((s) => s.navigate);
+   154→  const [currentStep, setCurrentStep] = useState(0);
+   155→  const [isGenerating, setIsGenerating] = useState(false);
+   156→
+   157→  const profile = useGeneratorStore();
+   158→  const exercises = useExerciseStore((s) => s.exercises);
+   159→  const loadExercises = useExerciseStore((s) => s.loadExercises);
+   160→  const weightUnit = useSettingsStore((s) => s.weightUnit);
+   161→
+   162→  useEffect(() => {
+   163→    loadExercises();
+   164→  }, [loadExercises]);
+   165→
+   166→  const handleNext = () => {
+   167→    if (currentStep < STEPS.length - 1) setCurrentStep(currentStep + 1);
+   168→  };
+   169→  const handleBack = () => {
+   170→    if (currentStep > 0) setCurrentStep(currentStep - 1);
+   171→  };
+   172→
+   173→  const handleGenerate = async () => {
+   174→    if (exercises.length === 0) return;
+   175→    setIsGenerating(true);
+   176→    try {
+   177→      // ── Try AI Coach first (reads user's complete data) ──
+   178→      // If AI is unavailable, falls back to heuristic generateProgram.
+   179→      const { generateWorkoutAICoach } = await import("@/services/aiWorkoutService");
+   180→
+   181→      // Gather user's complete data from IndexedDB
+   182→      let userData: {
+   183→        recentSessions: Array<{
+   184→          date: string;
+   185→          name: string;
+   186→          exercises: Array<{
+   187→            exerciseId: string;
+   188→            exerciseName: string;
+   189→            sets: Array<{ weight: number; reps: number; completed: boolean }>;
+   190→          }>;
+   191→          duration: number;
+   192→          completed: boolean;
+   193→        }>;
+   194→        personalRecords: Array<{
+   195→          exerciseId: string;
+   196→          exerciseName: string;
+   197→          maxWeight: number;
+   198→          max1RM: number;
+   199→          date: string;
+   200→        }>;
+   201→        analytics: {
+   202→          streak: number;
+   203→          totalWorkouts: number;
+   204→          totalVolume: number;
+   205→          totalDuration: number;
+   206→          muscleGroupStats: Array<{ muscle: string; volume: number }>;
+   207→          weeklyTonnage: Array<{ week: string; tonnage: number }>;
+   208→        };
+   209→      } = {
+   210→        recentSessions: [],
+   211→        personalRecords: [],
+   212→        analytics: {
+   213→          streak: 0,
+   214→          totalWorkouts: 0,
+   215→          totalVolume: 0,
+   216→          totalDuration: 0,
+   217→          muscleGroupStats: [],
+   218→          weeklyTonnage: [],
+   219→        },
+   220→      };
+   221→
+   222→      try {
+   223→        const { db, getWorkoutStreak, getPersonalRecords, getTotalStats, getMuscleGroupStats, getWeeklyTonnage } =
+   224→          await import("@/db");
+   225→        const [sessions, prs, streak, stats, muscleStats, tonnage] = await Promise.all([
+   226→          db.workoutSessions.filter((s) => s.completed === true).reverse().limit(10).toArray(),
+   227→          getPersonalRecords(),
+   228→          getWorkoutStreak(),
+   229→          getTotalStats(),
+   230→          getMuscleGroupStats(exercises),
+   231→          getWeeklyTonnage(4),
+   232→        ]);
+   233→
+   234→        userData = {
+   235→          recentSessions: sessions.map((s) => ({
+   236→            date: s.date,
+   237→            name: s.name,
+   238→            exercises: s.exercises.map((e) => ({
+   239→              exerciseId: String(e.exerciseId),
+   240→              exerciseName: e.exerciseName,
+   241→              sets: e.sets.map((set) => ({
+   242→                weight: set.weight,
+   243→                reps: set.reps,
+   244→                completed: set.completed,
+   245→              })),
+   246→            })),
+   247→            duration: s.duration,
+   248→            completed: s.completed,
+   249→          })),
+   250→          personalRecords: prs,
+   251→          analytics: {
+   252→            streak,
+   253→            totalWorkouts: stats.totalWorkouts,
+   254→            totalVolume: stats.totalVolume,
+   255→            totalDuration: stats.totalDuration,
+   256→            muscleGroupStats: muscleStats,
+   257→            weeklyTonnage: tonnage,
+   258→          },
+   259→        };
+   260→      } catch (err) {
+   261→        console.warn("Could not load user data for AI coach, using profile only:", err);
+   262→      }
+   263→
+   264→      // Build the AI profile from the wizard
+   265→      const aiProfile = {
+   266→        gender: profile.gender,
+   267→        age: profile.age,
+   268→        goal: profile.goal,
+   269→        fitnessLevel: profile.fitnessLevel,
+   270→        trainingYears: profile.trainingYears,
+   271→        equipment: profile.equipment,
+   272→        priorityMuscles: profile.priorityMuscles,
+   273→        physiqueFocus: profile.physiqueFocus,
+   274→        injuries: profile.injuries,
+   275→        medicalCautions: profile.medicalCautions,
+   276→        mobilityLimited: profile.mobilityLimited,
+   277→        daysPerWeek: profile.daysPerWeek,
+   278→        sessionLengthMin: profile.sessionLengthMin,
+   279→        intensityStyle: profile.intensityStyle,
+   280→        includeCardio: profile.includeCardio,
+   281→        includeWarmup: profile.includeWarmup,
+   282→        includeCoreFinisher: profile.includeCoreFinisher,
+   283→        bodyFatLevel: profile.bodyFatLevel,
+   284→        heightCm: profile.heightCm,
+   285→        weightKg: profile.weightKg,
+   286→      };
+   287→
+   288→      const result = await generateWorkoutAICoach(
+   289→        aiProfile,
+   290→        exercises,
+   291→        userData,
+   292→        `Generate a ${profile.goal} workout for ${profile.daysPerWeek} days/week, ${profile.sessionLengthMin} min/session`
+   293→      );
+   294→
+   295→      // Convert AI routine to program format
+   296→      const program = {
+   297→        title: `${profile.goal || "Custom"} AI Program`,
+   298→        summary: `Personalized by AI Coach (via ${result.provider}). Analyzed ${userData.recentSessions.length} recent sessions.`,
+   299→        weeklyDays: [
+   300→          {
+   301→            name: "AI Generated Day 1",
+   302→            focus: profile.priorityMuscles.length > 0 ? profile.priorityMuscles : ["Full Body"],
+   303→            exercises: result.routine.exercises.map((e, i) => ({
+   304→              exercise: e.exercise,
+   305→              sets: e.sets,
+   306→              reps: e.reps,
+   307→              restSeconds: e.restSeconds || 90,
+   308→              tempo: "2-0-1",
+   309→              role: (i === 0 ? "compound" : "isolation") as "compound" | "isolation",
+   310→              note: e.progression,
+   311→            })),
+   312→            estimatedMinutes: profile.sessionLengthMin,
+   313→          },
+   314→        ],
+   315→        progressionModel: "AI-driven progressive overload based on your training history",
+   316→        warnings: profile.injuries.length > 0 && profile.injuries[0] !== "none"
+   317→          ? [`Program optimized to avoid aggravating: ${profile.injuries.join(", ")}`]
+   318→          : ["Always consult a physical therapist before beginning a new strenuous routine."],
+   319→      };
+   320→
+   321→      profile.setProgram(program);
+   322→      profile.updateProfile({ generatorSeed: Math.random() });
+   323→      navigate("generator-result");
+   324→    } catch (error) {
+   325→      console.error("Generation failed, falling back to heuristic:", error);
+   326→      // Fallback to heuristic — pass RAW sessions to the new ACWR + RPE engines.
+   327→      // The engines build exercise history + fatigue assessment internally,
+   328→      // preserving RPE / estimated1RM / set-completion data that the simplified
+   329→      // userData.recentSessions shape would have lost.
+   330→      const { generateProgram } = await import("@/services/workoutGenerator");
+   331→
+   332→      let rawSessions: any[] = [];
+   333→      try {
+   334→        const { db } = await import("@/db");
+   335→        // Fetch up to 30 completed sessions — enough for ACWR (28-day chronic window)
+   336→        // and 3-session trend detection.
+   337→        rawSessions = await db.workoutSessions
+   338→          .filter((s) => s.completed === true)
+   339→          .reverse()
+   340→          .limit(30)
+   341→          .toArray();
+   342→      } catch (dbErr) {
+   343→        console.warn("Could not load raw sessions for engine:", dbErr);
+   344→      }
+   345→
+   346→      // Build exerciseMap for per-muscle volume lookup.
+   347→      const exerciseMap = new Map(exercises.map((e) => [String(e.id), e]));
+   348→
+   349→      // ── Load Learning Loop preferences (best-effort, non-blocking) ──
+   350→      let learningLoop: any = undefined;
+   351→      try {
+   352→        const { buildLearningLoopSummary } = await import("@/services/learningLoop");
+   353→        learningLoop = await buildLearningLoopSummary(90);
+   354→      } catch (llErr) {
+   355→        console.warn("Could not load learning loop summary:", llErr);
+   356→      }
+   357→
+   358→      const program = generateProgram(exercises, profile, {
+   359→        sessions: rawSessions,
+   360→        exerciseMap,
+   361→        learningLoop,
+   362→      });
+   363→      profile.setProgram(program);
+   364→      profile.updateProfile({ generatorSeed: Math.random() });
+   365→      navigate("generator-result");
+   366→    } finally {
+   367→      setIsGenerating(false);
+   368→    }
+   369→  };
+   370→
+   371→  // ── Estimated workout preview ──
+   372→  const estimatedMinutes = profile.sessionLengthMin;
+   373→  const estimatedExercises = Math.max(3, Math.min(8, Math.floor(profile.sessionLengthMin / 10)));
+   374→  const estimatedVolume = estimatedExercises * 3 * 10; // rough estimate
+   375→
+   376→  const renderStep = () => {
+   377→    switch (currentStep) {
+   378→      // ═══════════════════════════════════════════════════
+   379→      // STEP 1: Goal & Experience (merged 7 → 1)
+   380→      // ═══════════════════════════════════════════════════
+   381→      case 0:
+   382→        return (
+   383→          <div className="space-y-6">
+   384→            {/* Gender + Age in a compact row */}
+   385→            <div>
+   386→              <h2 className="text-xl font-black italic tracking-tight uppercase mb-1">
+   387→                Tell us about you
+   388→              </h2>
+   389→              <p className="text-xs text-text-secondary mb-4">
+   390→                We'll use this to personalize your workout plan.
+   391→              </p>
+   392→
+   393→              {/* Gender toggle */}
+   394→              <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-2">
+   395→                Biological Gender
+   396→              </label>
+   397→              <div className="flex gap-3 mb-6">
+   398→                {(["male", "female"] as const).map((g) => (
+   399→                  <OptionBtn
+   400→                    key={g}
+   401→                    compact
+   402→                    active={profile.gender === g}
+   403→                    onClick={() => profile.updateProfile({ gender: g })}
+   404→                    label={g}
+   405→                  />
+   406→                ))}
+   407→              </div>
+   408→
+   409→              {/* Age stepper */}
+   410→              <label htmlFor="age-stepper" className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-1">
+   411→                Your Age
+   412→              </label>
+   413→              <AgeStepper value={profile.age} onChange={(v) => profile.updateProfile({ age: v })} />
+   414→            </div>
+   415→
+   416→            {/* Goal */}
+   417→            <div>
+   418→              <h2 className="text-base font-black italic tracking-tight uppercase mb-3">
+   419→                Primary Goal
+   420→              </h2>
+   421→              <div className="grid grid-cols-1 gap-2">
+   422→                {([
+   423→                  ["Strength", "Build raw power and lift heavier"],
+   424→                  ["Hypertrophy", "Maximize muscle growth and size"],
+   425→                  ["Fat Loss", "Burn fat while preserving muscle"],
+   426→                  ["Recomp", "Build muscle and lose fat simultaneously"],
+   427→                  ["General Fitness", "Stay active and feel great"],
+   428→                  ["Endurance", "Improve stamina and conditioning"],
+   429→                ] as const).map(([g, desc]) => (
+   430→                  <OptionBtn
+   431→                    key={g}
+   432→                    active={profile.goal === g}
+   433→                    onClick={() => {
+   434→                      profile.updateProfile({ goal: g });
+   435→                      applySmartDefaults(g, profile);
+   436→                    }}
+   437→                    label={g}
+   438→                    desc={desc}
+   439→                  />
+   440→                ))}
+   441→              </div>
+   442→            </div>
+   443→
+   444→            {/* Experience */}
+   445→            <div>
+   446→              <h2 className="text-base font-black italic tracking-tight uppercase mb-3">
+   447→                Experience Level
+   448→              </h2>
+   449→              <div className="grid grid-cols-2 gap-2">
+   450→                {(["Novice", "Beginner", "Intermediate", "Advanced"] as const).map((l) => (
+   451→                  <OptionBtn
+   452→                    key={l}
+   453→                    compact
+   454→                    active={profile.fitnessLevel === l}
+   455→                    onClick={() =>
+   456→                      profile.updateProfile({
+   457→                        fitnessLevel: l,
+   458→                        trainingYears:
+   459→                          l === "Novice" ? 0 : l === "Beginner" ? 1 : l === "Intermediate" ? 3 : 6,
+   460→                      })
+   461→                    }
+   462→                    label={l}
+   463→                  />
+   464→                ))}
+   465→              </div>
+   466→            </div>
+   467→          </div>
+   468→        );
+   469→
+   470→      // ═══════════════════════════════════════════════════
+   471→      // STEP 2: Schedule & Equipment (merged 3 → 1)
+   472→      // ═══════════════════════════════════════════════════
+   473→      case 1:
+   474→        return (
+   475→          <div className="space-y-6">
+   476→            <div>
+   477→              <h2 className="text-xl font-black italic tracking-tight uppercase mb-1">
+   478→                Schedule & Equipment
+   479→              </h2>
+   480→              <p className="text-xs text-text-secondary mb-4">
+   481→                Smart defaults applied based on your goal ({profile.goal}).
+   482→              </p>
+   483→            </div>
+   484→
+   485→            {/* Days per week */}
+   486→            <div>
+   487→              <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-2">
+   488→                Days Per Week
+   489→              </label>
+   490→              <div className="grid grid-cols-5 gap-2">
+   491→                {([2, 3, 4, 5, 6] as const).map((d) => (
+   492→                  <button
+   493→                    key={d}
+   494→                    onClick={() => profile.updateProfile({ daysPerWeek: d })}
+   495→                    className={cn(
+   496→                      "py-4 border rounded-xl text-2xl font-black italic transition-all",
+   497→                      profile.daysPerWeek === d
+   498→                        ? "bg-primary/20 border-primary text-primary"
+   499→                        : "border-border text-text-secondary bg-bg-elevated hover:text-text-primary"
+   500→                    )}
+   501→                  >
+   502→                    {d}
+   503→                  </button>
+   504→                ))}
+   505→              </div>
+   506→            </div>
+   507→
+   508→            {/* Session length */}
+   509→            <div>
+   510→              <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-2">
+   511→                Session Length
+   512→              </label>
+   513→              <div className="grid grid-cols-5 gap-2">
+   514→                {([30, 45, 60, 75, 90] as const).map((m) => (
+   515→                  <button
+   516→                    key={m}
+   517→                    onClick={() => profile.updateProfile({ sessionLengthMin: m })}
+   518→                    className={cn(
+   519→                      "py-3 border rounded-xl text-xs font-bold uppercase tracking-wider transition-all",
+   520→                      profile.sessionLengthMin === m
+   521→                        ? "bg-primary/20 border-primary text-primary"
+   522→                        : "border-border text-text-secondary bg-bg-elevated hover:text-text-primary"
+   523→                    )}
+   524→                  >
+   525→                    {m >= 60 ? `${m / 60}h` : `${m}m`}
+   526→                  </button>
+   527→                ))}
+   528→              </div>
+   529→            </div>
+   530→
+   531→            {/* Location */}
+   532→            <div>
+   533→              <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-2">
+   534→                Where do you train?
+   535→              </label>
+   536→              <div className="flex gap-2">
+   537→                {(["gym", "home", "outdoor"] as const).map((loc) => (
+   538→                  <OptionBtn
+   539→                    key={loc}
+   540→                    compact
+   541→                    active={profile.location === loc}
+   542→                    onClick={() => profile.updateProfile({ location: loc })}
+   543→                    label={loc}
+   544→                  />
+   545→                ))}
+   546→              </div>
+   547→            </div>
+   548→
+   549→            {/* Equipment */}
+   550→            <div>
+   551→              <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-2">
+   552→                Available Equipment (select all that apply)
+   553→              </label>
+   554→              <div className="grid grid-cols-2 gap-2">
+   555→                {[
+   556→                  "Full Gym",
+   557→                  "Bodyweight",
+   558→                  "Dumbbells",
+   559→                  "Barbell",
+   560→                  "Kettlebell",
+   561→                  "Machines",
+   562→                  "Cables",
+   563→                  "Bands",
+   564→                ].map((eq) => (
+   565→                  <OptionBtn
+   566→                    key={eq}
+   567→                    compact
+   568→                    active={profile.equipment.includes(eq)}
+   569→                    onClick={() => profile.toggleEquipment(eq)}
+   570→                    label={eq}
+   571→                  />
+   572→                ))}
+   573→              </div>
+   574→            </div>
+   575→
+   576→            {/* Real-time preview */}
+   577→            <div className="glass-card rounded-xl p-4 bg-primary/5 border border-primary/20">
+   578→              <p className="text-xs font-bold text-primary uppercase tracking-widest mb-2">
+   579→                Preview
+   580→              </p>
+   581→              <div className="flex justify-between text-xs">
+   582→                <div>
+   583→                  <p className="text-text-secondary">Est. exercises</p>
+   584→                  <p className="font-bold text-text-primary text-lg">{estimatedExercises}</p>
+   585→                </div>
+   586→                <div>
+   587→                  <p className="text-text-secondary">Est. time</p>
+   588→                  <p className="font-bold text-text-primary text-lg">{estimatedMinutes}m</p>
+   589→                </div>
+   590→                <div>
+   591→                  <p className="text-text-secondary">Days/week</p>
+   592→                  <p className="font-bold text-text-primary text-lg">{profile.daysPerWeek}</p>
+   593→                </div>
+   594→              </div>
+   595→            </div>
+   596→          </div>
+   597→        );
+   598→
+   599→      // ═══════════════════════════════════════════════════
+   600→      // STEP 3: Muscles & Style (optional — can skip)
+   601→      // ═══════════════════════════════════════════════════
+   602→      case 2:
+   603→        return (
+   604→          <div className="space-y-6">
+   605→            <div>
+   606→              <h2 className="text-xl font-black italic tracking-tight uppercase mb-1">
+   607→                Muscles & Style
+   608→              </h2>
+   609→              <p className="text-xs text-text-secondary mb-2">
+   610→                Optional — tap to emphasize specific muscle groups.
+   611→              </p>
+   612→            </div>
+   613→
+   614→            {/* Anatomy Map */}
+   615→            <AnatomyMap
+   616→              highlightedMuscles={profile.priorityMuscles}
+   617→              onMuscleSelect={(m) => m && profile.toggleMuscle(m)}
+   618→            />
+   619→
+   620→            {profile.priorityMuscles.length > 0 && (
+   621→              <div className="flex flex-wrap gap-2 text-xs font-bold text-primary">
+   622→                {profile.priorityMuscles.map((m) => (
+   623→                  <span key={m} className="px-2 border border-primary/30 rounded">
+   624→                    {m}
+   625→                  </span>
+   626→                ))}
+   627→              </div>
+   628→            )}
+   629→
+   630→            {/* Workout style */}
+   631→            <div>
+   632→              <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-2">
+   633→                Workout Style
+   634→              </label>
+   635→              <div className="grid grid-cols-3 gap-2">
+   636→                {(["straight sets", "supersets", "circuits"] as const).map((st) => (
+   637→                  <OptionBtn
+   638→                    key={st}
+   639→                    compact
+   640→                    active={profile.intensityStyle === st}
+   641→                    onClick={() => profile.updateProfile({ intensityStyle: st })}
+   642→                    label={st}
+   643→                  />
+   644→                ))}
+   645→              </div>
+   646→            </div>
+   647→
+   648→            {/* Toggles */}
+   649→            <div className="space-y-2">
+   650→              {[
+   651→                { k: "includeWarmup", l: "Warm-up Routine" },
+   652→                { k: "includeCoreFinisher", l: "Core Finisher" },
+   653→                { k: "includeCardio", l: "Post-Workout Cardio" },
+   654→              ].map(({ k, l }) => {
+   655→                const active = !!profile[k as keyof typeof profile];
+   656→                return (
+   657→                  <button
+   658→                    key={k}
+   659→                    onClick={() => profile.updateProfile({ [k]: !active } as any)}
+   660→                    className="flex items-center gap-3 w-full p-4 bg-bg-elevated border border-border rounded-xl"
+   661→                  >
+   662→                    <div
+   663→                      className={cn(
+   664→                        "w-5 h-5 rounded flex items-center justify-center border",
+   665→                        active ? "bg-primary border-primary text-black" : "border-border"
+   666→                      )}
+   667→                    >
+   668→                      {active && <CheckCircle2 className="w-4 h-4" aria-hidden="true" />}
+   669→                    </div>
+   670→                    <span className="text-sm font-bold text-text-secondary">{l}</span>
+   671→                  </button>
+   672→                );
+   673→              })}
+   674→            </div>
+   675→          </div>
+   676→        );
+   677→
+   678→      // ═══════════════════════════════════════════════════
+   679→      // STEP 4: Health & Safety (can skip)
+   680→      // ═══════════════════════════════════════════════════
+   681→      case 3:
+   682→        return (
+   683→          <div className="space-y-6">
+   684→            <div>
+   685→              <h2 className="text-xl font-black italic tracking-tight uppercase mb-1">
+   686→                Health & Safety
+   687→              </h2>
+   688→              <p className="text-xs text-text-secondary mb-4">
+   689→                We'll filter out exercises that may aggravate injuries.
+   690→              </p>
+   691→            </div>
+   692→
+   693→            {/* Injuries */}
+   694→            <div>
+   695→              <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-2">
+   696→                Previous Injuries (select all that apply)
+   697→              </label>
+   698→              <div className="flex flex-wrap gap-2">
+   699→                {[
+   700→                  "none",
+   701→                  "lower back",
+   702→                  "knee",
+   703→                  "shoulder",
+   704→                  "elbow",
+   705→                  "wrist",
+   706→                  "neck",
+   707→                  "hip",
+   708→                  "ankle",
+   709→                ].map((inj) => {
+   710→                  const isActive = profile.injuries.includes(inj);
+   711→                  return (
+   712→                    <button
+   713→                      key={inj}
+   714→                      onClick={() => {
+   715→                        if (inj === "none") profile.updateProfile({ injuries: ["none"] });
+   716→                        else {
+   717→                          const newInj = profile.injuries.filter((i) => i !== "none");
+   718→                          profile.updateProfile({
+   719→                            injuries: isActive
+   720→                              ? newInj.filter((i) => i !== inj)
+   721→                              : [...newInj, inj],
+   722→                          });
+   723→                        }
+   724→                      }}
+   725→                      className={cn(
+   726→                        "px-3 py-1.5 rounded-full text-xs font-bold uppercase border transition-colors",
+   727→                        isActive
+   728→                          ? "bg-danger/20 text-danger border-danger/50"
+   729→                          : "bg-bg text-text-secondary border-border"
+   730→                      )}
+   731→                    >
+   732→                      {inj}
+   733→                    </button>
+   734→                  );
+   735→                })}
+   736→              </div>
+   737→            </div>
+   738→
+   739→            {/* Mobility */}
+   740→            <button
+   741→              onClick={() => profile.updateProfile({ mobilityLimited: !profile.mobilityLimited })}
+   742→              className="flex items-center gap-3 w-full p-3 bg-bg-elevated border border-border rounded-xl"
+   743→            >
+   744→              <div
+   745→                className={cn(
+   746→                  "w-5 h-5 rounded flex items-center justify-center border",
+   747→                  profile.mobilityLimited
+   748→                    ? "bg-primary border-primary text-black"
+   749→                    : "border-border"
+   750→                )}
+   751→              >
+   752→                {profile.mobilityLimited && <CheckCircle2 className="w-4 h-4" aria-hidden="true" />}
+   753→              </div>
+   754→              <span className="text-sm font-bold text-text-secondary">
+   755→                I have limited mobility
+   756→              </span>
+   757→            </button>
+   758→
+   759→            {profile.injuries.length > 0 && profile.injuries[0] !== "none" && (
+   760→              <div className="p-3 bg-warning/10 border border-warning/20 rounded-xl flex items-start gap-3">
+   761→                <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" aria-hidden="true" />
+   762→                <p className="text-xs text-warning/90 font-medium">
+   763→                  We'll optimize your program to avoid aggravating:{" "}
+   764→                  <span className="font-bold">{profile.injuries.join(", ")}</span>.
+   765→                </p>
+   766→              </div>
+   767→            )}
+   768→          </div>
+   769→        );
+   770→
+   771→      // ═══════════════════════════════════════════════════
+   772→      // STEP 5: Review & Generate
+   773→      // ═══════════════════════════════════════════════════
+   774→      case 4:
+   775→        return (
+   776→          <div className="space-y-6">
+   777→            <div>
+   778→              <h2 className="text-xl font-black italic tracking-tight uppercase mb-1 flex items-center gap-2">
+   779→                <CheckCircle2 className="h-6 w-6 text-primary" aria-hidden="true" />
+   780→                Ready to Generate
+   781→              </h2>
+   782→              <p className="text-xs text-text-secondary">
+   783→                Review your selections below and generate your personalized program.
+   784→              </p>
+   785→            </div>
+   786→
+   787→            {/* Summary cards */}
+   788→            <div className="glass-card rounded-xl p-4 border border-border/50 space-y-3">
+   789→              <div className="flex justify-between items-center">
+   790→                <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">Goal</span>
+   791→                <span className="text-sm font-bold text-text-primary capitalize">{profile.goal || "Not set"}</span>
+   792→              </div>
+   793→              <div className="border-t border-border/30" />
+   794→              <div className="flex justify-between items-center">
+   795→                <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">Experience</span>
+   796→                <span className="text-sm font-bold text-text-primary">{profile.fitnessLevel}</span>
+   797→              </div>
+   798→              <div className="border-t border-border/30" />
+   799→              <div className="flex justify-between items-center">
+   800→                <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">Schedule</span>
+   801→                <span className="text-sm font-bold text-text-primary">
+   802→                  {profile.daysPerWeek} days × {profile.sessionLengthMin}m
+   803→                </span>
+   804→              </div>
+   805→              <div className="border-t border-border/30" />
+   806→              <div className="flex justify-between items-center">
+   807→                <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">Equipment</span>
+   808→                <span className="text-sm font-bold text-text-primary text-right">
+   809→                  {profile.equipment.length > 0 ? profile.equipment.join(", ") : "Any"}
+   810→                </span>
+   811→              </div>
+   812→              {profile.injuries.length > 0 && profile.injuries[0] !== "none" && (
+   813→                <>
+   814→                  <div className="border-t border-border/30" />
+   815→                  <div className="flex justify-between items-center">
+   816→                    <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">Injuries</span>
+   817→                    <span className="text-sm font-bold text-warning">{profile.injuries.join(", ")}</span>
+   818→                  </div>
+   819→                </>
+   820→              )}
+   821→            </div>
+   822→
+   823→            {/* Estimated stats */}
+   824→            <div className="glass-card rounded-xl p-4 bg-primary/5 border border-primary/20">
+   825→              <p className="text-xs font-bold text-primary uppercase tracking-widest mb-3">
+   826→                Estimated Program
+   827→              </p>
+   828→              <div className="grid grid-cols-3 gap-3 text-center">
+   829→                <div>
+   830→                  <p className="text-2xl font-black text-text-primary">{profile.daysPerWeek}</p>
+   831→                  <p className="text-xs text-text-secondary uppercase">days/week</p>
+   832→                </div>
+   833→                <div>
+   834→                  <p className="text-2xl font-black text-text-primary">~{estimatedExercises}</p>
+   835→                  <p className="text-xs text-text-secondary uppercase">exercises/day</p>
+   836→                </div>
+   837→                <div>
+   838→                  <p className="text-2xl font-black text-text-primary">{estimatedMinutes}m</p>
+   839→                  <p className="text-xs text-text-secondary uppercase">per session</p>
+   840→                </div>
+   841→              </div>
+   842→            </div>
+   843→
+   844→            {profile.injuries.length > 0 && profile.injuries[0] !== "none" && (
+   845→              <div className="p-3 bg-warning/10 border border-warning/20 rounded-xl flex items-start gap-3">
+   846→                <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" aria-hidden="true" />
+   847→                <p className="text-xs text-warning/90 font-medium">
+   848→                  We will optimize your program to avoid exasperating your listed injuries:{" "}
+   849→                  <span className="font-bold">{profile.injuries.join(", ")}</span>.
+   850→                </p>
+   851→              </div>
+   852→            )}
+   853→          </div>
+   854→        );
+   855→
+   856→      default:
+   857→        return null;
+   858→    }
+   859→  };
+   860→
+   861→  const isStepValid = () => {
+   862→    switch (currentStep) {
+   863→      case 0:
+   864→        return !!profile.gender && !!profile.goal && !!profile.fitnessLevel;
+   865→      default:
+   866→        return true;
+   867→    }
+   868→  };
+   869→
+   870→  // Steps 2 and 3 are optional — allow skipping
+   871→  const isOptionalStep = currentStep === 2 || currentStep === 3;
+   872→
+   873→  return (
+   874→    <div className="max-w-md mx-auto p-4 sm:p-6 bg-bg-card rounded-[2rem] shadow-2xl border border-border flex flex-col min-h-[600px]">
+   875→      {/* Header + Progress */}
+   876→      <div className="mb-4 shrink-0">
+   877→        <div className="flex items-center justify-between mb-3">
+   878→          <h1 className="text-2xl font-black italic tracking-tighter uppercase">AI Generator</h1>
+   879→          <p className="text-xs font-bold text-primary px-2.5 py-1 bg-primary/10 rounded-md">
+   880→            STEP {currentStep + 1} OF {STEPS.length}
+   881→          </p>
+   882→        </div>
+   883→        {/* Visual progress bar */}
+   884→        <div className="h-2 bg-bg-elevated rounded-full overflow-hidden">
+   885→          <div
+   886→            className="h-full bg-primary transition-all duration-300 rounded-full"
+   887→            style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
+   888→          />
+   889→        </div>
+   890→        {/* Step labels */}
+   891→        <div className="flex justify-between mt-1.5">
+   892→          {STEPS.map((s, i) => (
+   893→            <span
+   894→              key={s}
+   895→              className={cn(
+   896→                "text-xs uppercase tracking-wider transition-colors",
+   897→                i === currentStep
+   898→                  ? "text-primary font-bold"
+   899→                  : i < currentStep
+   900→                    ? "text-success"
+   901→                    : "text-text-secondary/50"
+   902→              )}
+   903→            >
+   904→              {i < currentStep ? "✓" : i + 1}
+   905→            </span>
+   906→          ))}
+   907→        </div>
+   908→      </div>
+   909→
+   910→      {/* Content */}
+   911→      <div className="flex-1 relative" style={{ minHeight: "420px" }}>
+   912→        <AnimatePresence mode="popLayout" initial={false}>
+   913→          <motion.div
+   914→            key={currentStep}
+   915→            initial={{ opacity: 0, x: 20 }}
+   916→            animate={{ opacity: 1, x: 0 }}
+   917→            exit={{ opacity: 0, x: -20 }}
+   918→            transition={{ duration: 0.25, ease: "easeOut" }}
+   919→            className="overflow-y-auto no-scrollbar pb-10"
+   920→          >
+   921→            {renderStep()}
+   922→          </motion.div>
+   923→        </AnimatePresence>
+   924→      </div>
+   925→
+   926→      {/* Footer: Back + Next/Generate/Skip */}
+   927→      <div className="mt-4 pt-4 border-t border-border/50 shrink-0 flex gap-3 bg-bg-card">
+   928→        <Button
+   929→          onClick={handleBack}
+   930→          disabled={currentStep === 0 || isGenerating}
+   931→          variant="outline"
+   932→          className="flex-1 border-border text-text-secondary"
+   933→          icon={<ArrowLeft className="w-4 h-4" aria-hidden="true" />}
+   934→        ></Button>
+   935→
+   936→        {isOptionalStep && currentStep !== STEPS.length - 1 ? (
+   937→          <Button
+   938→            onClick={handleNext}
+   939→            variant="ghost"
+   940→            className="flex-1 text-xs font-bold uppercase tracking-wider text-text-secondary"
+   941→            icon={<SkipForward className="w-3.5 h-3.5" aria-hidden="true" />}
+   942→          >
+   943→            Skip
+   944→          </Button>
+   945→        ) : null}
+   946→
+   947→        {currentStep === STEPS.length - 1 ? (
+   948→          <Button
+   949→            onClick={handleGenerate}
+   950→            disabled={exercises.length === 0 || isGenerating}
+   951→            variant="primary"
+   952→            className="flex-[3] font-black uppercase tracking-widest text-xs"
+   953→            icon={isGenerating ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
+   954→          >
+   955→            {isGenerating ? "Building..." : "Generate Program"}
+   956→          </Button>
+   957→        ) : (
+   958→          <Button
+   959→            onClick={handleNext}
+   960→            disabled={!isStepValid()}
+   961→            variant="primary"
+   962→            className="flex-[3] font-black uppercase tracking-widest text-xs"
+   963→            icon={<ArrowRight className="w-4 h-4" aria-hidden="true" />}
+   964→          >
+   965→            Next
+   966→          </Button>
+   967→        )}
+   968→      </div>
+   969→    </div>
+   970→  );
+   971→};
+   972→

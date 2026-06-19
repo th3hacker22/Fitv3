@@ -1,0 +1,728 @@
+     1→"use client";
+     2→import { useEffect, useState, useDeferredValue, useRef, useCallback, useMemo } from "react";
+     3→import { Link } from "@/router-shim";
+     4→import { motion, useReducedMotion } from "framer-motion";
+     5→import { Search, Dumbbell, ChevronRight, Loader2, X, Plus } from "lucide-react";
+     6→import { KineticEmptyState } from "@/components/ui-custom/KineticEmptyState";
+     7→import { Button } from "@/components/ui-custom/Button";
+     8→import { cn } from "@/utils/cn";
+     9→import { useExerciseStore } from "@/store/useExerciseStore";
+    10→import { SkeletonExerciseGrid } from "@/components/ui-custom/Skeleton";
+    11→import AnatomyMap from "@/components/AnatomyMap";
+    12→import { Drawer } from "vaul";
+    13→import { useTranslation } from "react-i18next";
+    14→
+    15→// ── Custom Image Component ──
+    16→function ExerciseImage({ src, alt, equipment }: { src: string; alt: string; equipment: string }) {
+    17→  const [isLoaded, setIsLoaded] = useState(false);
+    18→  const [hasError, setHasError] = useState(false);
+    19→
+    20→  return (
+    21→    <div className="relative aspect-[4/3] w-full overflow-hidden bg-bg-elevated/50">
+    22→      {!isLoaded && !hasError && (
+    23→        <div className="absolute inset-0 flex items-center justify-center">
+    24→          <Dumbbell className="h-8 w-8 animate-pulse text-text-secondary/30" />
+    25→        </div>
+    26→      )}
+    27→      <img
+    28→        src={src}
+    29→        alt={alt}
+    30→        loading="lazy"
+    31→        decoding="async"
+    32→        onLoad={() => setIsLoaded(true)}
+    33→        onError={() => setHasError(true)}
+    34→        className={cn(
+    35→          "h-full w-full object-cover transition-all duration-500 group-hover:scale-105 bg-white",
+    36→          isLoaded ? "opacity-100" : "opacity-0",
+    37→          hasError && "hidden"
+    38→        )}
+    39→      />
+    40→      {hasError && (
+    41→        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-bg-elevated/30">
+    42→          <Dumbbell className="h-10 w-10 text-text-secondary/20" />
+    43→        </div>
+    44→      )}
+    45→
+    46→      {/* Equipment Badge */}
+    47→      <span className="absolute bottom-2 left-2 rounded-[--radius-badge] bg-bg/80 px-2 py-1 text-xs font-medium text-text-primary backdrop-blur-md capitalize shadow-sm border border-border/50">
+    48→        {equipment}
+    49→      </span>
+    50→    </div>
+    51→  );
+    52→}
+    53→
+    54→// ── Animation Variants ──
+    55→const containerVariants = {
+    56→  hidden: { opacity: 0 },
+    57→  visible: {
+    58→    opacity: 1,
+    59→    transition: { staggerChildren: 0.03 },
+    60→  },
+    61→  visibleNoStagger: {
+    62→    opacity: 1,
+    63→    transition: { staggerChildren: 0 },
+    64→  },
+    65→};
+    66→
+    67→const itemVariants = {
+    68→  hidden: { opacity: 0, y: 15 },
+    69→  visible: { opacity: 1, y: 0 },
+    70→};
+    71→
+    72→const ANATOMY_MAPPING: Record<string, string> = {
+    73→  // Chest
+    74→  "upper-chest": "chest",
+    75→  "mid-lower-chest": "chest",
+    76→  // Shoulders
+    77→  "front-delt": "shoulders",
+    78→  "lateral-delt": "shoulders",
+    79→  "post-delt": "shoulders",
+    80→  "lat-delt-back": "shoulders",
+    81→  // Back
+    82→  "lower-back": "back",
+    83→  lats: "back",
+    84→  "traps-mid": "back",
+    85→  "lower-traps": "back",
+    86→  // Arms
+    87→  "biceps-long": "upper arms",
+    88→  "biceps-short": "upper arms",
+    89→  "triceps-long": "upper arms",
+    90→  "triceps-lat": "upper arms",
+    91→  "triceps-med": "upper arms",
+    92→  "forearm-ext": "lower arms",
+    93→  "forearm-flex": "lower arms",
+    94→  "forearm-ext-back": "lower arms",
+    95→  "forearm-flex-back": "lower arms",
+    96→  // Waist/Abs
+    97→  "upper-abs": "waist",
+    98→  "lower-abs": "waist",
+    99→  obliques: "waist",
+   100→  // Legs
+   101→  "outer-quad": "upper legs",
+   102→  "rectus-femoris": "upper legs",
+   103→  vmo: "upper legs",
+   104→  adductors: "upper legs",
+   105→  "lateral-ham": "upper legs",
+   106→  "medial-ham": "upper legs",
+   107→  "glute-max": "upper legs",
+   108→  "glute-med": "upper legs",
+   109→  gastrocnemius: "lower legs",
+   110→  tibialis: "lower legs",
+   111→  soleus: "lower legs",
+   112→  "gastrocnemius-back": "lower legs",
+   113→  "soleus-back": "lower legs",
+   114→  // Misc
+   115→  neck: "neck",
+   116→  "neck-back": "neck",
+   117→  "upper-traps": "neck",
+   118→  "traps-back": "neck",
+   119→};
+   120→
+   121→export default function ExercisesPage() {
+   122→  const { t, i18n } = useTranslation();
+   123→  // Individual selectors — bare useExerciseStore() subscribed to the entire
+   124→  // store (including 1324 exercises), causing re-renders on every state change.
+   125→  const exercises = useExerciseStore((s) => s.exercises);
+   126→  const filteredExercises = useExerciseStore((s) => s.filteredExercises);
+   127→  const isLoading = useExerciseStore((s) => s.isLoading);
+   128→  const error = useExerciseStore((s) => s.error);
+   129→  const filters = useExerciseStore((s) => s.filters);
+   130→  const loadExercises = useExerciseStore((s) => s.loadExercises);
+   131→  const setFilter = useExerciseStore((s) => s.setFilter);
+   132→  const addCustomExercise = useExerciseStore((s) => s.addCustomExercise);
+   133→
+   134→  const [searchQuery, setSearchQuery] = useState("");
+   135→  const deferredQuery = useDeferredValue(searchQuery);
+   136→  const [visibleCount, setVisibleCount] = useState(30);
+   137→  const prefersReducedMotion = useReducedMotion();
+   138→  const [isSearchFocused, setIsSearchFocused] = useState(false);
+   139→  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+   140→
+   141→  const [showCustomForm, setShowCustomForm] = useState(false);
+   142→  const [customExerciseData, setCustomExerciseData] = useState({
+   143→    name: "",
+   144→    bodyPart: "chest",
+   145→    equipment: "dumbbell",
+   146→    target: "chest",
+   147→    muscleGroup: "Chest",
+   148→    instructions: "",
+   149→  });
+   150→
+   151→  const handleCustomSubmit = async (e: React.FormEvent) => {
+   152→    e.preventDefault();
+   153→    if (!customExerciseData.name.trim()) return;
+   154→
+   155→    await addCustomExercise({
+   156→      name: customExerciseData.name.trim(),
+   157→      bodyPart: customExerciseData.bodyPart,
+   158→      equipment: customExerciseData.equipment,
+   159→      target: customExerciseData.target,
+   160→      muscleGroup: customExerciseData.muscleGroup,
+   161→      instructions: customExerciseData.instructions.trim(),
+   162→      instructionSteps: [customExerciseData.instructions.trim() || "Perform the exercise."],
+   163→      category: "strength",
+   164→      imageUrl: "",
+   165→      gifUrl: "",
+   166→      secondaryMuscles: [],
+   167→    });
+   168→
+   169→    setCustomExerciseData({
+   170→      name: "",
+   171→      bodyPart: "chest",
+   172→      equipment: "dumbbell",
+   173→      target: "chest",
+   174→      muscleGroup: "Chest",
+   175→      instructions: "",
+   176→    });
+   177→    setShowCustomForm(false);
+   178→  };
+   179→
+   180→  // Memoized highlighted muscle IDs for AnatomyMap
+   181→  const highlightedIds = useMemo(() => {
+   182→    const activeParts = Array.isArray(filters.bodyPart)
+   183→      ? filters.bodyPart
+   184→      : filters.bodyPart && filters.bodyPart !== "all"
+   185→        ? [filters.bodyPart]
+   186→        : [];
+   187→    return Object.keys(ANATOMY_MAPPING).filter((id) => activeParts.includes(ANATOMY_MAPPING[id]));
+   188→  }, [filters.bodyPart]);
+   189→
+   190→  // Memoized handler for muscle selection
+   191→  const handleMuscleSelect = useCallback(
+   192→    (id: string, selectedIds: string[]) => {
+   193→      if (id === "all" || selectedIds.length === 0) {
+   194→        setFilter("bodyPart", "all");
+   195→      } else {
+   196→        const validBodyParts = Array.from(
+   197→          new Set(selectedIds.map((sid) => ANATOMY_MAPPING[sid] || sid))
+   198→        );
+   199→        setFilter("bodyPart", validBodyParts);
+   200→        setTimeout(() => {
+   201→          document
+   202→            .getElementById("exercise-results")
+   203→            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+   204→        }, 100);
+   205→      }
+   206→    },
+   207→    [setFilter]
+   208→  );
+   209→
+   210→  // Load exercises on mount
+   211→  useEffect(() => {
+   212→    loadExercises();
+   213→    try {
+   214→      const saved = localStorage.getItem("recentSearches");
+   215→      if (saved) setRecentSearches(JSON.parse(saved));
+   216→    } catch (e) {
+   217→      // Ignore localStorage read errors
+   218→    }
+   219→  }, [loadExercises]);
+   220→
+   221→  const addRecentSearch = (query: string) => {
+   222→    if (!query.trim()) return;
+   223→    const nextSearches = [query, ...recentSearches.filter((s) => s !== query)].slice(0, 5);
+   224→    setRecentSearches(nextSearches);
+   225→    try {
+   226→      localStorage.setItem("recentSearches", JSON.stringify(nextSearches));
+   227→    } catch (e) {
+   228→      // Ignore localStorage write errors
+   229→    }
+   230→  };
+   231→
+   232→  const handleSearchSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+   233→    if (e.key === "Enter") {
+   234→      addRecentSearch(searchQuery);
+   235→    }
+   236→  };
+   237→
+   238→  // Update search filter when deferredQuery changes (debounced by useDeferredValue)
+   239→  useEffect(() => {
+   240→    setFilter("search", deferredQuery);
+   241→    setVisibleCount(30); // Reset visible count on search
+   242→  }, [deferredQuery, setFilter]);
+   243→
+   244→  // Infinite scroll loader using IntersectionObserver
+   245→  const observerRef = useRef<IntersectionObserver | null>(null);
+   246→  const lastElementRef = useCallback(
+   247→    (node: HTMLDivElement | null) => {
+   248→      if (isLoading) return;
+   249→      if (observerRef.current) observerRef.current.disconnect();
+   250→
+   251→      observerRef.current = new IntersectionObserver(
+   252→        (entries) => {
+   253→          if (entries[0].isIntersecting) {
+   254→            setVisibleCount((prev) => Math.min(prev + 30, filteredExercises.length));
+   255→          }
+   256→        },
+   257→        { rootMargin: "200px" } // Prefetch early
+   258→      );
+   259→
+   260→      if (node) observerRef.current.observe(node);
+   261→    },
+   262→    [isLoading, filteredExercises.length]
+   263→  );
+   264→
+   265→  // ── Loading State ──
+   266→  if (isLoading) {
+   267→    return (
+   268→      <div className="space-y-6">
+   269→        <div>
+   270→          <h1 className="text-xl font-bold text-text-primary uppercase tracking-wider">
+   271→            Exercise Library
+   272→          </h1>
+   273→          <p className="mt-1 text-sm text-text-secondary">Loading exercises...</p>
+   274→        </div>
+   275→        <div className="flex items-center justify-center gap-2 py-8">
+   276→          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+   277→          <span className="text-sm text-text-secondary">Loading 1300+ exercises...</span>
+   278→        </div>
+   279→        <SkeletonExerciseGrid />
+   280→      </div>
+   281→    );
+   282→  }
+   283→
+   284→  // ── Error State ──
+   285→  if (error) {
+   286→    return (
+   287→      <div className="flex flex-col items-center justify-center gap-4 py-20">
+   288→        <Dumbbell className="h-16 w-16 text-text-secondary" />
+   289→        <p className="text-lg font-bold text-text-primary">An Error Occurred</p>
+   290→        <p className="text-sm text-text-secondary">{error}</p>
+   291→        <Button onClick={() => loadExercises()} variant="primary" size="sm">
+   292→          Try Again
+   293→        </Button>
+   294→      </div>
+   295→    );
+   296→  }
+   297→
+   298→  return (
+   299→    <div className="space-y-6">
+   300→      {/* ── Page Title ── */}
+   301→      <div className="flex items-center justify-between gap-4">
+   302→        <div>
+   303→          <h1 className="text-xl font-bold text-text-primary uppercase tracking-wider">
+   304→            Exercise Library
+   305→          </h1>
+   306→          <p className="mt-1 text-sm text-text-secondary">
+   307→            {exercises.length}+ exercises with images/gifs
+   308→          </p>
+   309→        </div>
+   310→        <Button
+   311→          onClick={() => setShowCustomForm(true)}
+   312→          variant="outline"
+   313→          size="sm"
+   314→          icon={<Plus className="h-4 w-4" />}
+   315→          className="rounded-xl flex-shrink-0"
+   316→        >
+   317→          Create Custom
+   318→        </Button>
+   319→      </div>
+   320→
+   321→      {/* ── Search Bar ── */}
+   322→      <div className="relative z-20">
+   323→        <div className="relative">
+   324→          <Search className="absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-text-secondary" />
+   325→          <input
+   326→            type="text"
+   327→            placeholder="Search exercises... (e.g., bench press)"
+   328→            value={searchQuery}
+   329→            onChange={(e) => setSearchQuery(e.target.value)}
+   330→            onFocus={() => setIsSearchFocused(true)}
+   331→            onBlur={() => setTimeout(() => setIsSearchFocused(false), 150)}
+   332→            onKeyDown={handleSearchSubmit}
+   333→            className="w-full rounded-[--radius-card] border border-border bg-bg-card py-3 pl-4 pr-12 text-sm text-text-primary placeholder-text-muted outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary shadow-sm"
+   334→          />
+   335→        </div>
+   336→
+   337→        {isSearchFocused && !searchQuery && recentSearches.length > 0 && (
+   338→          <div className="absolute top-full left-0 right-0 mt-2 bg-bg-elevated border border-border rounded-xl shadow-lg overflow-hidden py-2">
+   339→            <div className="px-4 py-2 text-xs font-bold text-text-secondary uppercase tracking-wider">
+   340→              Recent Searches
+   341→            </div>
+   342→            {recentSearches.map((search) => (
+   343→              <button
+   344→                key={search}
+   345→                className="w-full text-left px-4 py-3 text-sm text-text-primary hover:bg-bg-surface-hover transition-colors flex items-center justify-between group"
+   346→                onClick={() => {
+   347→                  setSearchQuery(search);
+   348→                  addRecentSearch(search);
+   349→                }}
+   350→              >
+   351→                {search}
+   352→                <ChevronRight className="w-4 h-4 text-text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
+   353→              </button>
+   354→            ))}
+   355→          </div>
+   356→        )}
+   357→      </div>
+   358→
+   359→      {/* ── Quick Filter Chips ── */}
+   360→      <div className="flex overflow-x-auto pb-2 -mx-4 px-4 gap-2 no-scrollbar">
+   361→        <button
+   362→          onClick={() => setFilter("bodyPart", "all")}
+   363→          className={cn(
+   364→            "whitespace-nowrap px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border",
+   365→            !filters.bodyPart || filters.bodyPart === "all"
+   366→              ? "bg-primary text-primary-text border-primary shadow-[0_0_12px_var(--c-primary-glow)]"
+   367→              : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
+   368→          )}
+   369→        >
+   370→          All Muscles
+   371→        </button>
+   372→        {[
+   373→          "chest",
+   374→          "back",
+   375→          "shoulders",
+   376→          "upper arms",
+   377→          "lower arms",
+   378→          "waist",
+   379→          "upper legs",
+   380→          "lower legs",
+   381→          "cardio",
+   382→          "neck",
+   383→        ].map((part) => {
+   384→          const isActive = Array.isArray(filters.bodyPart)
+   385→            ? filters.bodyPart.includes(part)
+   386→            : filters.bodyPart === part;
+   387→          return (
+   388→            <button
+   389→              key={part}
+   390→              onClick={() => {
+   391→                setFilter("bodyPart", part);
+   392→              }}
+   393→              className={cn(
+   394→                "whitespace-nowrap px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border",
+   395→                isActive
+   396→                  ? "bg-primary/20 text-primary border-primary/50 shadow-[0_0_12px_var(--c-primary-dim)]"
+   397→                  : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
+   398→              )}
+   399→            >
+   400→              {part}
+   401→            </button>
+   402→          );
+   403→        })}
+   404→      </div>
+   405→
+   406→      <div className="flex overflow-x-auto pb-2 -mx-4 px-4 gap-2 no-scrollbar">
+   407→        <button
+   408→          onClick={() => setFilter("equipment", "all")}
+   409→          className={cn(
+   410→            "whitespace-nowrap px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border",
+   411→            !filters.equipment || filters.equipment === "all"
+   412→              ? "bg-primary text-primary-text border-primary"
+   413→              : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
+   414→          )}
+   415→        >
+   416→          All Eqp
+   417→        </button>
+   418→        {["barbell", "dumbbell", "cable", "machine", "body weight", "kettlebell", "band"].map(
+   419→          (eq) => {
+   420→            const isActive = filters.equipment === eq;
+   421→            return (
+   422→              <button
+   423→                key={eq}
+   424→                onClick={() => {
+   425→                  setFilter("equipment", isActive ? "all" : eq);
+   426→                }}
+   427→                className={cn(
+   428→                  "whitespace-nowrap px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border",
+   429→                  isActive
+   430→                    ? "bg-primary text-primary-text border-primary shadow-sm"
+   431→                    : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
+   432→                )}
+   433→              >
+   434→                {eq}
+   435→              </button>
+   436→            );
+   437→          }
+   438→        )}
+   439→      </div>
+   440→
+   441→      {/* ── Anatomy Filter ── */}
+   442→      <AnatomyMap highlightedMuscles={highlightedIds} onMuscleSelect={handleMuscleSelect} />
+   443→
+   444→      {/* ── Exercise Count ── */}
+   445→      <div id="exercise-results" className="flex flex-col gap-2 pt-4 border-t border-border mt-4">
+   446→        <div className="flex items-center justify-between">
+   447→          <p className="text-xs text-text-secondary font-medium">
+   448→            {filteredExercises.length} Exercises
+   449→          </p>
+   450→        </div>
+   451→
+   452→        {((filters.bodyPart && filters.bodyPart !== "all") ||
+   453→          (filters.equipment && filters.equipment !== "all")) && (
+   454→          <div className="flex flex-wrap items-center gap-2 sticky top-4 z-40 bg-bg-card/90 backdrop-blur-md py-2 border border-border shadow-md rounded-[--radius-button] px-3">
+   455→            <span className="text-xs text-text-secondary flex items-center font-bold tracking-widest uppercase">
+   456→              Showing:
+   457→            </span>
+   458→
+   459→            {filters.bodyPart &&
+   460→              filters.bodyPart !== "all" &&
+   461→              (Array.isArray(filters.bodyPart) ? filters.bodyPart : [filters.bodyPart]).map(
+   462→                (bp) => (
+   463→                  <span
+   464→                    key={bp}
+   465→                    className="text-xs bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded flex items-center gap-1 font-bold uppercase tracking-wider"
+   466→                  >
+   467→                    {bp}
+   468→                    <button
+   469→                      className="hover:text-text-primary ml-0.5"
+   470→                      onClick={(e) => {
+   471→                        e.stopPropagation();
+   472→                        const currentArray = Array.isArray(filters.bodyPart)
+   473→                          ? filters.bodyPart
+   474→                          : [filters.bodyPart];
+   475→                        const nextArray = currentArray.filter((p) => p !== bp);
+   476→                        setFilter("bodyPart", nextArray.length > 0 ? nextArray : "all");
+   477→                      }}
+   478→                    >
+   479→                      <X className="w-3 h-3" />
+   480→                    </button>
+   481→                  </span>
+   482→                )
+   483→              )}
+   484→
+   485→            {filters.equipment && filters.equipment !== "all" && (
+   486→              <span className="text-xs bg-bg-elevated text-text-primary border border-border px-2 py-0.5 rounded flex items-center gap-1 font-bold uppercase tracking-wider">
+   487→                {filters.equipment}
+   488→                <button
+   489→                  className="hover:text-text-primary ml-0.5"
+   490→                  onClick={(e) => {
+   491→                    e.stopPropagation();
+   492→                    setFilter("equipment", "all");
+   493→                  }}
+   494→                >
+   495→                  <X className="w-3 h-3" />
+   496→                </button>
+   497→              </span>
+   498→            )}
+   499→
+   500→            <button
+   501→              className="text-xs text-text-secondary hover:text-text-primary uppercase tracking-wider font-bold ml-auto"
+   502→              onClick={(e) => {
+   503→                e.stopPropagation();
+   504→                setFilter("bodyPart", "all");
+   505→                setFilter("equipment", "all");
+   506→              }}
+   507→            >
+   508→              Clear All
+   509→            </button>
+   510→          </div>
+   511→        )}
+   512→      </div>
+   513→
+   514→      {/* ── Exercise Grid ── */}
+   515→      <motion.div
+   516→        className="grid grid-cols-2 gap-3 pb-8"
+   517→        variants={containerVariants}
+   518→        initial="hidden"
+   519→        animate={
+   520→          prefersReducedMotion
+   521→            ? "visibleNoStagger"
+   522→            : filteredExercises.length <= 40
+   523→              ? "visible"
+   524→              : "visibleNoStagger"
+   525→        }
+   526→        key="exercise-grid"
+   527→      >
+   528→        {filteredExercises.slice(0, visibleCount).map((exercise, index) => {
+   529→          const isLast = index === visibleCount - 1;
+   530→          return (
+   531→            <motion.div
+   532→              key={exercise.id}
+   533→              variants={prefersReducedMotion ? {} : itemVariants}
+   534→              ref={isLast ? lastElementRef : null}
+   535→              className="block h-full"
+   536→              style={{ contentVisibility: "auto", containIntrinsicSize: "auto 250px" }}
+   537→            >
+   538→              <Link
+   539→                to="/exercises/$exerciseId"
+   540→                params={{ exerciseId: exercise.id }}
+   541→                className="block h-full"
+   542→              >
+   543→                <div className="glass-card group relative overflow-hidden rounded-[--radius-card] transition-all duration-300 hover:ring-1 hover:ring-primary/30 active:scale-[0.97] h-full flex flex-col">
+   544→                  <ExerciseImage
+   545→                    src={exercise.imageUrl}
+   546→                    alt={exercise.name}
+   547→                    equipment={exercise.equipment}
+   548→                  />
+   549→
+   550→                  {/* Exercise Info */}
+   551→                  <div className="p-4 flex-1 flex flex-col">
+   552→                    <h3 className="line-clamp-1 text-base font-bold text-text-primary transition-colors group-hover:text-primary capitalize">
+   553→                      {exercise.name}
+   554→                    </h3>
+   555→                    <p className="mt-1 text-xs text-text-secondary capitalize">
+   556→                      {exercise.target}
+   557→                    </p>
+   558→                    <div className="mt-auto pt-2 flex items-center gap-1">
+   559→                      <span className="rounded-full bg-primary-muted px-2 py-0.5 text-xs font-medium text-primary capitalize">
+   560→                        {exercise.bodyPart}
+   561→                      </span>
+   562→                    </div>
+   563→                  </div>
+   564→
+   565→                  {/* Arrow indicator */}
+   566→                  <div className="absolute right-3 top-3 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+   567→                    <ChevronRight className="h-4 w-4 text-primary" />
+   568→                  </div>
+   569→                </div>
+   570→              </Link>
+   571→            </motion.div>
+   572→          );
+   573→        })}
+   574→      </motion.div>
+   575→
+   576→      {/* ── Load More Hint ── */}
+   577→      {filteredExercises.length > visibleCount && (
+   578→        <p className="text-center text-xs text-text-secondary py-4">Loading more exercises...</p>
+   579→      )}
+   580→
+   581→      {/* ── Empty State ── */}
+   582→      {filteredExercises.length === 0 && (
+   583→        <KineticEmptyState
+   584→          variant="custom"
+   585→          icon={Dumbbell}
+   586→          title="No Exercises Found"
+   587→          description="Try adjusting your filters or search term."
+   588→          actionLabel="Clear Filters"
+   589→          onAction={() => {
+   590→            setSearchQuery("");
+   591→            setFilter("search", "");
+   592→            setFilter("bodyPart", "all");
+   593→            setFilter("equipment", "all");
+   594→          }}
+   595→        />
+   596→      )}
+   597→      {/* ── Custom Exercise Creator Drawer ── */}
+   598→      <Drawer.Root open={showCustomForm} onOpenChange={setShowCustomForm}>
+   599→        <Drawer.Portal>
+   600→          <Drawer.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90]" />
+   601→          <Drawer.Content className="fixed bottom-0 inset-x-0 mx-auto max-w-md max-h-[85vh] rounded-t-[2rem] bg-bg-card p-6 shadow-2xl flex flex-col z-[100] outline-none border border-border/50">
+   602→            <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-border" />
+   603→
+   604→            <div className="flex items-center justify-between mb-4">
+   605→              <Drawer.Title className="font-bold text-base uppercase tracking-wider">
+   606→                Create Custom Exercise
+   607→              </Drawer.Title>
+   608→              <Drawer.Close asChild>
+   609→                <button className="p-2 rounded-full bg-bg-elevated text-text-secondary hover:text-text-primary transition-colors cursor-pointer">
+   610→                  <X className="h-4 w-4" />
+   611→                </button>
+   612→              </Drawer.Close>
+   613→            </div>
+   614→
+   615→            <form
+   616→              onSubmit={handleCustomSubmit}
+   617→              className="space-y-4 pb-6 overflow-y-auto no-scrollbar"
+   618→            >
+   619→              <div>
+   620→                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-1">
+   621→                  Exercise Name
+   622→                </label>
+   623→                <input
+   624→                  type="text"
+   625→                  required
+   626→                  placeholder="e.g. Incline Kettlebell Press"
+   627→                  value={customExerciseData.name}
+   628→                  onChange={(e) =>
+   629→                    setCustomExerciseData({ ...customExerciseData, name: e.target.value })
+   630→                  }
+   631→                  className="w-full rounded-xl border border-border bg-bg-elevated px-4 py-3 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+   632→                />
+   633→              </div>
+   634→
+   635→              <div className="grid grid-cols-2 gap-3">
+   636→                <div>
+   637→                  <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-1">
+   638→                    Muscle Group
+   639→                  </label>
+   640→                  <select
+   641→                    value={customExerciseData.bodyPart}
+   642→                    onChange={(e) => {
+   643→                      const val = e.target.value;
+   644→                      setCustomExerciseData({
+   645→                        ...customExerciseData,
+   646→                        bodyPart: val,
+   647→                        muscleGroup: val.charAt(0).toUpperCase() + val.slice(1),
+   648→                        target: val,
+   649→                      });
+   650→                    }}
+   651→                    className="w-full rounded-xl border border-border bg-bg-elevated px-3 py-3 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors cursor-pointer"
+   652→                  >
+   653→                    {[
+   654→                      "chest",
+   655→                      "back",
+   656→                      "shoulders",
+   657→                      "upper arms",
+   658→                      "lower arms",
+   659→                      "waist",
+   660→                      "upper legs",
+   661→                      "lower legs",
+   662→                      "cardio",
+   663→                      "neck",
+   664→                    ].map((part) => (
+   665→                      <option key={part} value={part} className="capitalize">
+   666→                        {part}
+   667→                      </option>
+   668→                    ))}
+   669→                  </select>
+   670→                </div>
+   671→
+   672→                <div>
+   673→                  <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-1">
+   674→                    Equipment
+   675→                  </label>
+   676→                  <select
+   677→                    value={customExerciseData.equipment}
+   678→                    onChange={(e) =>
+   679→                      setCustomExerciseData({ ...customExerciseData, equipment: e.target.value })
+   680→                    }
+   681→                    className="w-full rounded-xl border border-border bg-bg-elevated px-3 py-3 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors cursor-pointer"
+   682→                  >
+   683→                    {[
+   684→                      "dumbbell",
+   685→                      "barbell",
+   686→                      "cable",
+   687→                      "machine",
+   688→                      "body weight",
+   689→                      "kettlebell",
+   690→                      "band",
+   691→                    ].map((eq) => (
+   692→                      <option key={eq} value={eq} className="capitalize">
+   693→                        {eq}
+   694→                      </option>
+   695→                    ))}
+   696→                  </select>
+   697→                </div>
+   698→              </div>
+   699→
+   700→              <div>
+   701→                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block mb-1">
+   702→                  Instructions (Optional)
+   703→                </label>
+   704→                <textarea
+   705→                  placeholder="Describe how to perform this exercise..."
+   706→                  value={customExerciseData.instructions}
+   707→                  onChange={(e) =>
+   708→                    setCustomExerciseData({ ...customExerciseData, instructions: e.target.value })
+   709→                  }
+   710→                  className="w-full min-h-[70px] resize-none rounded-xl border border-border bg-bg-elevated p-3 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+   711→                />
+   712→              </div>
+   713→
+   714→              <Button
+   715→                type="submit"
+   716→                variant="primary"
+   717→                className="w-full py-3.5 text-xs uppercase tracking-widest font-black"
+   718→              >
+   719→                Create Exercise
+   720→              </Button>
+   721→            </form>
+   722→          </Drawer.Content>
+   723→        </Drawer.Portal>
+   724→      </Drawer.Root>
+   725→    </div>
+   726→  );
+   727→}
+   728→
