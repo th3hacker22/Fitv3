@@ -1,5 +1,7 @@
 # Workspace Rules & Core Skills Instructions
 
+> **Note:** For repo-level developer instructions (commands, architecture, DB, auth), see [AGENTS.md](../AGENTS.md) in the project root.
+
 You are instructed by the user to treat specific skills from the workspace `skills` directory as your core/primary skills. You must refer to them, consult their guidelines, and state clearly at the very beginning of your response which of these skills you will use for the task.
 
 ## Response Formatting Rule
