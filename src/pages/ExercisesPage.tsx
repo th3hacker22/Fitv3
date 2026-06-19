@@ -473,7 +473,7 @@ export default function ExercisesPage() {
                           ? filters.bodyPart
                           : [filters.bodyPart];
                         const nextArray = currentArray.filter((p) => p !== bp);
-                        setFilter("bodyPart", nextArray.length > 0 ? nextArray : "all");
+                        setFilter("bodyPart", (nextArray.length > 0 ? nextArray : "all") as string | string[] | undefined);
                       }}
                     >
                       <X className="w-3 h-3" />

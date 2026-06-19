@@ -607,18 +607,24 @@ function AnatomyMapComponent({
     [hovered, activeTip, muscles]
   );
 
-  const isMuscleActive = (id: string) => {
-    if (highlightedMuscles && highlightedMuscles.includes(id)) return true;
-    return selected.has(id);
-  };
+  const isMuscleActive = useCallback(
+    (id: string) => {
+      if (highlightedMuscles && highlightedMuscles.includes(id)) return true;
+      return selected.has(id);
+    },
+    [highlightedMuscles, selected]
+  );
 
-  const isMuscleSecondary = (id: string): boolean => {
-    return !!(
-      secondaryHighlightedMuscles &&
-      secondaryHighlightedMuscles.includes(id) &&
-      !isMuscleActive(id)
-    );
-  };
+  const isMuscleSecondary = useCallback(
+    (id: string): boolean => {
+      return !!(
+        secondaryHighlightedMuscles &&
+        secondaryHighlightedMuscles.includes(id) &&
+        !isMuscleActive(id)
+      );
+    },
+    [secondaryHighlightedMuscles, isMuscleActive]
+  );
 
   const muscleGroups = useMemo(() => {
     return muscles.map((m) => {

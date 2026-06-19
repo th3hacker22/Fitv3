@@ -35,6 +35,7 @@ import AnatomyMap from "@/components/AnatomyMap";
 import { getMuscleIdsForExercise } from "@/utils/muscleMapper";
 import { getAlternativeExercises } from "@/services/exerciseService";
 import { generateProgram, type ProgramExercise } from "@/services/workoutGenerator";
+import type { WorkoutSession } from "@/db/schema";
 
 function cn(...classes: (string | undefined | null | false)[]) {
   return classes.filter(Boolean).join(" ");
@@ -172,7 +173,7 @@ export default function WorkoutResultView() {
         if (hasProgram) {
           profile.swapProgramExercise(activeDayIdx, idx, nextEx);
         } else {
-          profile.swapExercise(idx, { ...profile.routine!.exercises[idx], exercise: nextEx });
+          profile.swapExercise(idx, nextEx);
         }
       }
       setShufflingExIdx(null);
@@ -186,7 +187,7 @@ export default function WorkoutResultView() {
     profile.regenerateSeed();
 
     // Fetch raw sessions so the ACWR + RPE engines can personalize the program.
-    let rawSessions: any[] = [];
+    let rawSessions: WorkoutSession[] = [];
     try {
       const { db } = await import("@/db");
       rawSessions = await db.workoutSessions
@@ -361,7 +362,7 @@ export default function WorkoutResultView() {
                       <div className="min-w-0">
                         {hasProgram && (
                           <span className="text-xs font-black uppercase tracking-widest text-primary/80 mb-0.5 block">
-                            {"role" in item ? ((item as Record<string, unknown>).role as string) : "Exercise"}
+                            {hasProgram ? (item as ProgramExercise).role : "Exercise"}
                           </span>
                         )}
                         <div className="flex items-center gap-2 flex-wrap">
@@ -408,10 +409,10 @@ export default function WorkoutResultView() {
                           <span>{item.restSeconds}s Rest</span>
                         </>
                       ) : null}
-                      {"tempo" in item && (item as Record<string, unknown>).tempo ? (
+                      {hasProgram && (item as ProgramExercise).tempo ? (
                         <>
                           <span className="opacity-30">•</span>
-                          <span>{(item as Record<string, unknown>).tempo as string}</span>
+                          <span>{(item as ProgramExercise).tempo}</span>
                         </>
                       ) : null}
                     </div>
@@ -425,9 +426,9 @@ export default function WorkoutResultView() {
                       </div>
                     )}
 
-                    {"note" in item && (item as Record<string, unknown>).note && (
+                    {hasProgram && (item as ProgramExercise).note && (
                       <p className="mt-2 text-xs text-text-secondary italic leading-snug border-l border-primary/30 pl-2">
-                        {(item as Record<string, unknown>).note as string}
+                        {(item as ProgramExercise).note}
                       </p>
                     )}
                   </div>

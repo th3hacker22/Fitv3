@@ -120,26 +120,11 @@ export function calculateMuscleRecovery(
     }
   }
 
-  // Build recovery status for ALL known muscles
+  // Build recovery status for ALL known muscles (from RECOVERY_HOURS + any trained)
   const result = new Map<string, MuscleRecoveryStatus>();
   const allMuscleIds = new Set<string>([
     ...lastTrainedMap.keys(),
     ...Object.keys(RECOVERY_HOURS),
-    // Add common muscle IDs that might not be in RECOVERY_HOURS
-    "upper-chest", "mid-lower-chest",
-    "front-delt", "lateral-delt", "post-delt", "lat-delt-back",
-    "biceps-long", "biceps-short",
-    "triceps-long", "triceps-lat", "triceps-med",
-    "outer-quad", "rectus-femoris", "vmo",
-    "medial-ham", "lateral-ham",
-    "glute-max", "glute-med",
-    "upper-abs", "lower-abs", "obliques",
-    "upper-traps", "traps-mid", "lower-traps", "traps-back",
-    "lower-back",
-    "lats",
-    "gastrocnemius", "gastroc-back", "soleus", "soleus-back",
-    "forearm-ext", "forearm-flex", "forearm-ext-back", "forearm-flex-back",
-    "adductors", "tibialis", "neck", "neck-back",
   ]);
 
   for (const muscleId of allMuscleIds) {
@@ -159,7 +144,7 @@ export function calculateMuscleRecovery(
     }
 
     const hoursSince = (now - lastTrained) / (1000 * 60 * 60);
-    const recoveryPercent = Math.min(100, Math.round((hoursSince / recoveryHours) * 100));
+    const recoveryPercent = Math.max(0, Math.min(100, Math.round((hoursSince / recoveryHours) * 100)));
 
     let status: MuscleRecoveryStatus["status"];
     let label: string;

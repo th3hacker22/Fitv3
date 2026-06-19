@@ -5,7 +5,7 @@ import React from "react";
 import { render } from "@testing-library/react";
 import ReactDOMServer from "react-dom/server";
 
-import { AnatomyMap } from "../AnatomyMap";
+import AnatomyMap from "../AnatomyMap";
 
 describe("AnatomyMap Performance", () => {
   it("renders within performance budget (2s)", () => {

@@ -92,7 +92,7 @@ function sessionMuscleVolume(
  */
 export function assessFatigueACWR(
   sessions: WorkoutSession[],
-  profile: GeneratorProfile,
+  profile: Pick<GeneratorProfile, 'age' | 'medicalCautions' | 'daysPerWeek'>,
   exerciseMap?: Map<string, { muscleGroup: string }>
 ): FatigueAssessment {
   const completed = sessions

@@ -46,41 +46,36 @@ export default function BodyPage() {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chartColors = useThemeColors();
+  const cleanupRef = useRef<(() => void) | undefined>();
+
+  async function loadData() {
+    try {
+      const [measurementsData, photosData] = await Promise.all([
+        db.bodyMeasurements.orderBy("date").reverse().toArray(),
+        db.progressPhotos.orderBy("date").reverse().toArray(),
+      ]);
+
+      setMeasurements(measurementsData);
+
+      const photosWithUrls = photosData.map((photo) => ({
+        ...photo,
+        url: URL.createObjectURL(photo.imageBlob),
+      }));
+      setPhotos(photosWithUrls);
+
+      cleanupRef.current = () => {
+        photosWithUrls.forEach((p) => URL.revokeObjectURL(p.url));
+      };
+    } catch (error) {
+      console.error("Failed to load body data:", error);
+    }
+  }
 
   // Load data
   useEffect(() => {
-    let cleanup: (() => void) | undefined;
-
-    async function loadData() {
-      try {
-        const [measurementsData, photosData] = await Promise.all([
-          db.bodyMeasurements.orderBy("date").reverse().toArray(),
-          db.progressPhotos.orderBy("date").reverse().toArray(),
-        ]);
-
-        setMeasurements(measurementsData);
-
-        // Create object URLs for photos
-        const photosWithUrls = photosData.map((photo) => ({
-          ...photo,
-          url: URL.createObjectURL(photo.imageBlob),
-        }));
-        setPhotos(photosWithUrls);
-
-        // Cleanup function to revoke URLs — will be called on unmount
-        cleanup = () => {
-          photosWithUrls.forEach((p) => URL.revokeObjectURL(p.url));
-        };
-      } catch (error) {
-        console.error("Failed to load body data:", error);
-      }
-    }
-
     loadData();
-
-    // Return cleanup that revokes all object URLs on unmount
     return () => {
-      if (cleanup) cleanup();
+      cleanupRef.current?.();
     };
   }, []);
 

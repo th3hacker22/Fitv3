@@ -14,7 +14,6 @@
  */
 
 import type { Exercise } from "@/types/exercise";
-import { getMuscleIdsForExercise } from "@/utils/muscleMapper";
 import { estimateOneRepMax, rpeToRIR } from "@/utils/fitnessMath";
 import type { WorkoutSession } from "@/db/schema";
 

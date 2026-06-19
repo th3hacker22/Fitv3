@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
     const profiles = await prisma.publicProfile.findMany({
       where: {
-        displayName: { contains: q, mode: "insensitive" },
+        displayName: { contains: q },
       },
       take: 20,
       select: {

@@ -119,7 +119,7 @@ export const useGeneratorStore = create<GeneratorStore>()(
         set((state) => {
           if (!state.routine) return state;
           const newExercises = [...state.routine.exercises];
-          newExercises[index] = newExercise;
+          newExercises[index] = { ...newExercises[index], exercise: newExercise };
           return { routine: { ...state.routine, exercises: newExercises } };
         }),
 

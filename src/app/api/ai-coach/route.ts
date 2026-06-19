@@ -245,14 +245,7 @@ function buildCoachPrompt(data: CoachRequest): string {
     exerciseMap.set(String(e.id), { muscleGroup: e.bodyPart });
   }
 
-  // Synthesize a minimal profile for the engine (only the fields it reads)
-  const engineProfile = {
-    age: profile.age,
-    medicalCautions: profile.medicalCautions,
-    daysPerWeek: profile.daysPerWeek,
-  };
-
-  const fatigue = assessFatigueACWR(sessionsForEngine, engineProfile, exerciseMap);
+  const fatigue = assessFatigueACWR(sessionsForEngine, { age: profile.age, medicalCautions: profile.medicalCautions, daysPerWeek: profile.daysPerWeek as 2 | 3 | 4 | 5 | 6 }, exerciseMap);
 
   const fatigueSection = `
 ═══ FATIGUE STATUS (ACWR — Acute:Chronic Workload Ratio) ═══
@@ -294,7 +287,7 @@ ${aboveMAV.map((m) => `  - ${m.muscle}: ${m.weeklySets} sets (MAV: ${m.mav})`).j
   const exerciseHistory = buildExerciseHistory(sessionsForEngine as unknown as WorkoutSession[]);
   const deloadRec = assessDeloadNeed(
     sessionsForEngine as unknown as WorkoutSession[],
-    engineProfile as unknown as GeneratorProfile,
+    { age: profile.age, medicalCautions: profile.medicalCautions, daysPerWeek: profile.daysPerWeek as 2 | 3 | 4 | 5 | 6 },
     fatigue,
     exerciseHistory
   );

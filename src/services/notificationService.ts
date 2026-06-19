@@ -186,7 +186,7 @@ export function scheduleWorkoutReminders(daysPerWeek: number): void {
 
     // Set up hourly check
     const interval = setInterval(checkWorkoutReminder, 60 * 60 * 1000);
-    (window as unknown as { __pulseNotifInterval?: number }).__pulseNotifInterval = interval;
+    (window as unknown as { __pulseNotifInterval?: ReturnType<typeof setInterval> }).__pulseNotifInterval = interval;
   }
 }
 

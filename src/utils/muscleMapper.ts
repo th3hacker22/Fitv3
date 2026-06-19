@@ -1,12 +1,11 @@
-export function getMuscleIdsForExercise(target: string, secondaryMuscles: string[]): string[] {
+export function getMuscleIdsForExercise(target: string | null | undefined, secondaryMuscles: string[]): string[] {
+  if (!target && (!secondaryMuscles || secondaryMuscles.length === 0)) return [];
   const ids = new Set<string>();
 
   const matches = (value: string, ...keywords: string[]) => {
+    if (!value) return false;
     const v = value.toLowerCase();
     return keywords.some((k) => {
-      // If the keyword is short like 'lat' or 'quad', we should be careful.
-      // Let's split the value into words and check if any word starts with the keyword.
-      // E.g., 'lat' should match 'lats' but NOT 'lateral'
       if (k === "lat") {
         return /\b(lat|lats)\b/.test(v);
       }
@@ -122,9 +121,6 @@ export function getMuscleIdsForExercise(target: string, secondaryMuscles: string
       ids.add("rectus-femoris");
       ids.add("vmo");
     }
-    if (matches(m, "hip flexor")) {
-      ids.add("lower-abs");
-    }
     if (matches(m, "hamstring", "rear thigh")) {
       ids.add("medial-ham");
       ids.add("lateral-ham");
@@ -136,7 +132,7 @@ export function getMuscleIdsForExercise(target: string, secondaryMuscles: string
     if (matches(m, "adductor", "abductor", "inner thigh", "groin")) {
       ids.add("adductors");
     }
-    if (matches(m, "calv", "calf", "soleus", "ankle", "feet")) {
+    if (matches(m, "calf", "soleus", "ankle", "feet")) {
       if (matches(m, "soleus")) {
         ids.add("soleus");
         ids.add("soleus-back");

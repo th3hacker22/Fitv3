@@ -185,8 +185,8 @@ export async function generateWorkoutAI(
   state: {
     gender: "male" | "female" | null;
     age: number;
-    goal: "Strength" | "Hypertrophy" | "Weight Loss" | null;
-    fitnessLevel: "Novice" | "Beginner" | "Advanced" | null;
+    goal: string | null;
+    fitnessLevel: string | null;
     equipment: string[];
     selectedMuscles: string[];
   },
@@ -260,8 +260,8 @@ export async function refineWorkoutAI(
   _state: {
     gender: "male" | "female" | null;
     age: number;
-    goal: "Strength" | "Hypertrophy" | "Weight Loss" | null;
-    fitnessLevel: "Novice" | "Beginner" | "Advanced" | null;
+    goal: string | null;
+    fitnessLevel: string | null;
     equipment: string[];
     selectedMuscles: string[];
   }

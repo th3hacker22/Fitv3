@@ -183,7 +183,7 @@ export default function BuilderPage() {
   const [routineExercises, setRoutineExercises] = useState<RoutineExercise[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeDragId, setActiveDragId] = useState<number | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | number | null>(null);
 
   useEffect(() => {
     loadExercises();
