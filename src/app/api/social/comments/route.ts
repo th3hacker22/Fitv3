@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       const c = await tx.comment.create({
         data: {
           postId,
-          authorUid: author.uid,
+          authorUid: author.uid!,
           authorName: author.name,
           authorPhotoURL: author.photoURL,
           text: trimmedText,
@@ -170,7 +170,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    if (existing.authorUid !== callerUid) {
+    if (existing.authorUid !== callerUid!) {
       return NextResponse.json(
         { error: "You can only delete your own comments" },
         { status: 403 }

@@ -78,6 +78,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   feed: [],
   searchResults: [],
   commentsByPost: {},
+  kudsedPostIds: new Set<string>(),
   isLoading: false,
   isSearching: false,
 
@@ -168,19 +169,71 @@ export const useSocialStore = create<SocialState>((set, get) => ({
 
   giveKudos: async (postId) => {
     const feed = get().feed;
+    const kudsedPostIds = new Set(get().kudsedPostIds);
+    const hasKudsed = kudsedPostIds.has(postId);
+
+    // Optimistic update: toggle count + toggle set
+    const newCount = hasKudsed
+      ? Math.max(0, (feed.find((p) => p.id === postId)?.kudosCount ?? 1) - 1)
+      : (feed.find((p) => p.id === postId)?.kudosCount ?? 0) + 1;
+
+    if (hasKudsed) {
+      kudsedPostIds.delete(postId);
+    } else {
+      kudsedPostIds.add(postId);
+    }
+
     set({
       feed: feed.map((p) =>
-        p.id === postId ? { ...p, kudosCount: p.kudosCount + 1 } : p
+        p.id === postId ? { ...p, kudosCount: newCount } : p
       ),
+      kudsedPostIds,
     });
+
     try {
-      await fetch(`/api/social/kudos`, {
+      const res = await fetch(`/api/social/kudos`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ postId }),
       });
+      if (!res.ok) {
+        // Revert on failure
+        const revertedIds = new Set(get().kudsedPostIds);
+        if (hasKudsed) revertedIds.add(postId);
+        else revertedIds.delete(postId);
+        set({
+          feed: get().feed.map((p) =>
+            p.id === postId
+              ? { ...p, kudosCount: hasKudsed ? newCount + 1 : Math.max(0, newCount - 1) }
+              : p
+          ),
+          kudsedPostIds: revertedIds,
+        });
+        return;
+      }
+      // Sync with server response
+      const data = await res.json();
+      if (data.kudosCount !== undefined) {
+        set({
+          feed: get().feed.map((p) =>
+            p.id === postId ? { ...p, kudosCount: data.kudosCount } : p
+          ),
+        });
+      }
     } catch (e) {
-      console.error("Failed to give kudos:", e);
+      console.error("Failed to toggle kudos:", e);
+      // Revert on network error
+      const revertedIds = new Set(get().kudsedPostIds);
+      if (hasKudsed) revertedIds.add(postId);
+      else revertedIds.delete(postId);
+      set({
+        feed: get().feed.map((p) =>
+          p.id === postId
+            ? { ...p, kudosCount: hasKudsed ? newCount + 1 : Math.max(0, newCount - 1) }
+            : p
+        ),
+        kudsedPostIds: revertedIds,
+      });
     }
   },
 
@@ -281,6 +334,6 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   },
 
   clearState: () => {
-    set({ following: [], followingProfiles: [], feed: [], searchResults: [], commentsByPost: {} });
+    set({ following: [], followingProfiles: [], feed: [], searchResults: [], commentsByPost: {}, kudsedPostIds: new Set<string>() });
   },
 }));

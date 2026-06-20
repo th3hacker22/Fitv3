@@ -67,21 +67,31 @@ export default function ProfilePage() {
     }
     if (user) {
       try {
-        await fetch("/api/social/profile", {
+        const res = await fetch("/api/social/profile", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ displayName: newName.trim() }),
+          body: JSON.stringify({ uid: user.uid, displayName: newName.trim() }),
         });
-        useAuthStore.getState().setUser({
-          ...user,
-          displayName: newName.trim(),
-        });
+        if (res.ok) {
+          useAuthStore.getState().setUser({
+            ...user,
+            displayName: newName.trim(),
+          });
+          setShowEditNameModal(false);
+          useToastStore.getState().addToast("success", "Profile name updated!");
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          console.error("Failed to update profile name:", errData);
+          useToastStore.getState().addToast("error", errData.error || "Failed to update name");
+        }
       } catch (err) {
         console.error("Failed to update profile name on server:", err);
+        useToastStore.getState().addToast("error", "Network error — name saved locally only");
       }
+    } else {
+      setShowEditNameModal(false);
+      useToastStore.getState().addToast("success", "Profile name updated!");
     }
-    setShowEditNameModal(false);
-    useToastStore.getState().addToast("success", "Profile name updated!");
   };
 
   const [streak, setStreak] = useState(0);
