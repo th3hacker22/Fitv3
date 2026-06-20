@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { requireUser } from "@/lib/authServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,10 @@ interface StructuredRequestBody {
 
 export async function POST(req: NextRequest) {
   try {
+    // ── Authentication: require valid session ──
+    const { uid, response: authResponse } = await requireUser(req);
+    if (!uid) return authResponse!;
+
     const body = await req.json();
 
     // Explicitly reject if prompt or systemInstruction is passed by the client

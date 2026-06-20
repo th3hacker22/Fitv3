@@ -24,8 +24,13 @@ interface FeedPostBody {
 }
 
 // GET — return the 50 most recent feed posts (createdAt desc).
-export async function GET() {
+// Requires authentication to prevent public scraping.
+export async function GET(req: NextRequest) {
   try {
+    // ── Authentication: require valid session ──
+    const { uid, response: authResponse } = await requireUser(req);
+    if (!uid) return authResponse!;
+
     const posts = await prisma.feedPost.findMany({
       orderBy: { createdAt: "desc" },
       take: 50,

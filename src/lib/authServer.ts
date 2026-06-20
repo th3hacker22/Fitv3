@@ -19,7 +19,10 @@ export async function requireUser(
 
   try {
     const adminAuth = getAdminAuth();
-    const decoded = await adminAuth.verifyIdToken(token);
+    // Use verifySessionCookie (not verifyIdToken) because the cookie now
+    // contains a Firebase session cookie (7-day TTL), not a raw ID token (1-hour TTL).
+    // The second argument `true` enables revocation checking.
+    const decoded = await adminAuth.verifySessionCookie(token, true);
     return { uid: decoded.uid, response: null };
   } catch {
     return {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { aiRouter } from "@/server/aiProviders";
 import { validateString, serverErrorResponse } from "@/lib/validation";
+import { requireUser } from "@/lib/authServer";
 import { assessFatigueACWR } from "@/services/fatigueEngine";
 import { computeMuscleVolumeStatus, buildExerciseHistory } from "@/services/overloadEngine";
 import { assessDeloadNeed } from "@/services/deloadEngine";
@@ -78,6 +79,10 @@ interface CoachRequest {
 
 export async function POST(req: NextRequest) {
   try {
+    // ── Authentication: require valid session ──
+    const { uid, response: authResponse } = await requireUser(req);
+    if (!uid) return authResponse!;
+
     const body = (await req.json()) as CoachRequest;
 
     // Basic validation

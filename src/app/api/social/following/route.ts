@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/authServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Return an array of UIDs the given user is following.
 // Query: ?uid=<followerUid>
+// Requires authentication to prevent enumeration attacks.
 export async function GET(req: NextRequest) {
   try {
+    // ── Authentication: require valid session ──
+    const { uid: callerUid, response: authResponse } = await requireUser(req);
+    if (!callerUid) return authResponse!;
+
     const { searchParams } = new URL(req.url);
     const uid = searchParams.get("uid");
 
