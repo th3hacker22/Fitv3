@@ -10,6 +10,7 @@ const WINDOW_MS = 60_000;
 
 const ROUTE_LIMITS: { pattern: RegExp; limit: number }[] = [
   { pattern: /^\/api\/ai-workout$/, limit: 5 },
+  { pattern: /^\/api\/ai-coach$/, limit: 5 },
   { pattern: /^\/api\/challenges\/sync-volume$/, limit: 10 },
   { pattern: /^\/api\/social\/comments$/, limit: 20 },
   { pattern: /^\/api\/social\/feed$/, limit: 30 },
@@ -63,14 +64,58 @@ function cleanupBuckets() {
   }
 }
 
+// ── P0-8: Secure IP extraction ──
+// Only trust x-forwarded-for if the request came from a trusted proxy.
+// TRUSTED_PROXY_IPS is a comma-separated env var (e.g., "127.0.0.1,10.0.0.1").
+function getTrustedProxyIps(): Set<string> {
+  const env = process.env.TRUSTED_PROXY_IPS;
+  if (!env) return new Set();
+  return new Set(env.split(",").map((ip) => ip.trim()));
+}
+
 function getClientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
+  const trustedProxies = getTrustedProxyIps();
+
+  // If we have trusted proxies configured, only trust X-Forwarded-For
+  // when the direct connection came from a trusted proxy.
+  if (trustedProxies.size > 0) {
+    // In Next.js middleware, req.ip gives the direct connection IP (when available)
+    const directIp = req.headers.get("x-real-ip") || req.ip || "unknown";
+
+    if (trustedProxies.has(directIp)) {
+      // Request came from a trusted proxy — safe to read X-Forwarded-For
+      const forwarded = req.headers.get("x-forwarded-for");
+      if (forwarded) {
+        return forwarded.split(",")[0].trim();
+      }
+    }
+    // Not from a trusted proxy — use the direct IP
+    return directIp;
   }
+
+  // No trusted proxies configured — use the direct IP (don't trust headers)
+  // Fallback: try x-real-ip (set by Caddy), then req.ip, then "unknown"
   const realIp = req.headers.get("x-real-ip");
   if (realIp) return realIp;
-  return "unknown";
+  return req.ip || "unknown";
+}
+
+// ── P0-9: Request body size limits ──
+const BODY_SIZE_LIMITS: { pattern: RegExp; maxBytes: number }[] = [
+  // AI endpoints: 50KB max (profile + exercises list)
+  { pattern: /^\/api\/ai-coach$/, maxBytes: 50 * 1024 },
+  { pattern: /^\/api\/ai-workout$/, maxBytes: 50 * 1024 },
+  // Sync endpoint: 10MB max (bulk data upload)
+  { pattern: /^\/api\/sync\/push$/, maxBytes: 10 * 1024 * 1024 },
+];
+
+const DEFAULT_BODY_LIMIT = 1 * 1024 * 1024; // 1MB for all other /api/ routes
+
+function getBodySizeLimit(pathname: string): number {
+  for (const { pattern, maxBytes } of BODY_SIZE_LIMITS) {
+    if (pattern.test(pathname)) return maxBytes;
+  }
+  return DEFAULT_BODY_LIMIT;
 }
 
 const WRITE_METHODS = new Set(["POST", "DELETE", "PUT", "PATCH"]);
@@ -83,6 +128,20 @@ export async function middleware(req: NextRequest) {
   }
 
   cleanupBuckets();
+
+  // ── P0-9: Body size check ──
+  const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
+  if (contentLength > 0) {
+    const maxBytes = getBodySizeLimit(pathname);
+    if (contentLength > maxBytes) {
+      return NextResponse.json(
+        {
+          error: `Request body too large. Maximum allowed: ${maxBytes / 1024}KB.`,
+        },
+        { status: 413 }
+      );
+    }
+  }
 
   const ip = getClientIp(req);
   const { allowed, remaining } = checkRateLimit(ip, pathname);
