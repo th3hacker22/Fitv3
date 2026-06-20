@@ -90,4 +90,7 @@ db/custom.db-journal
 # Source project clone (not part of this repo)
 fitv3-source/
 nul
-"service-account.json" 
+
+# Firebase service account (contains private key — NEVER commit)
+service-account.json
+*.firebase-adminsdk-*.json
