@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/authServer";
 import { parseRequestBody } from "@/lib/apiSchemas";
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
     let updated = 0;
     // Use a transaction so all updates are atomic — concurrent sync-volume
     // calls can no longer interleave and lose increments.
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       for (const p of participations) {
         if (sessionId) {
           // Check if this workout session has already been synced for this participation

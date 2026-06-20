@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/authServer";
 import { parseRequestBody, parseQueryParams } from "@/lib/apiSchemas";
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
       return author.authResponse;
     }
 
-    const comment = await prisma.$transaction(async (tx) => {
+    const comment = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const c = await tx.comment.create({
         data: {
           postId,
@@ -151,7 +152,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.comment.delete({ where: { id: commentId } });
       // Decrement but never below 0.
       const updated = await tx.feedPost.update({

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { serverErrorResponse } from "@/lib/validation";
 import { requireUser } from "@/lib/authServer";
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Transaction: upsert profile + create post atomically
-    const post = await prisma.$transaction(async (tx) => {
+    const post = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.publicProfile.upsert({
         where: { uid: authorUid },
         update: { displayName: authorName, photoURL: authorPhotoURL },

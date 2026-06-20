@@ -6,11 +6,11 @@ import type { GeneratorProfile } from "@/store/useGeneratorStore";
 // ── Fixtures ──
 const FIXED_NOW = new Date("2026-06-20T12:00:00Z").getTime();
 
-const baseProfile: GeneratorProfile = {
+const baseProfile = {
   age: 30,
   medicalCautions: [],
   daysPerWeek: 4,
-} as GeneratorProfile;
+} as unknown as GeneratorProfile;
 
 function makeSession(daysAgo: number, volumeKg: number, completed = true): WorkoutSession {
   const date = new Date(FIXED_NOW - daysAgo * 86400000).toISOString();
