@@ -850,8 +850,6 @@ function AnatomyMapComponent({
                 </defs>
                 {bodyOutlineElement}
                 {muscleGroups}
-                {/* Depth overlay for 3D feel */}
-                <rect width="676.49" height="1203.49" fill="url(#depth3d)" pointerEvents="none" />
               </svg>
             </motion.div>
           </AnimatePresence>
