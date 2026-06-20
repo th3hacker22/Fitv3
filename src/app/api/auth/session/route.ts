@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth } from "@/lib/firebaseAdmin";
 import { prisma } from "@/lib/db";
+import { parseRequestBody } from "@/lib/apiSchemas";
+import { sessionPostSchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,10 +12,9 @@ const SESSION_COOKIE_MAX_AGE_MS = 60 * 60 * 24 * 7 * 1000;
 
 export async function POST(req: NextRequest) {
   try {
-    const { idToken } = await req.json();
-    if (!idToken) {
-      return NextResponse.json({ error: "Missing idToken" }, { status: 400 });
-    }
+    const parsed = await parseRequestBody(req, sessionPostSchema);
+    if (!parsed.success) return parsed.response;
+    const { idToken } = parsed.data;
 
     const adminAuth = getAdminAuth();
 

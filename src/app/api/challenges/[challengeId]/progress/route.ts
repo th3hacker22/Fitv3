@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { validateId, serverErrorResponse } from "@/lib/validation";
+import { serverErrorResponse } from "@/lib/validation";
+import { parseQueryParams, parsePathParam } from "@/lib/apiSchemas";
 import { requireUser } from "@/lib/authServer";
+import { progressQuerySchema } from "./schema";
+import { challengeIdParamSchema } from "../../schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,17 +22,14 @@ export async function GET(
     const { uid: callerUid, response: authResponse } = await requireUser(req);
     if (!callerUid) return authResponse!;
 
-    const { challengeId } = await params;
-    const { searchParams } = new URL(req.url);
-    const rawUserId = searchParams.get("userId");
+    const { challengeId: rawChallengeId } = await params;
+    const pathParsed = parsePathParam(rawChallengeId, challengeIdParamSchema);
+    if (!pathParsed.success) return pathParsed.response;
+    const challengeId = pathParsed.data;
 
-    const userId = validateId(rawUserId);
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Missing or invalid userId query parameter" },
-        { status: 400 }
-      );
-    }
+    const queryParsed = parseQueryParams(req, progressQuerySchema);
+    if (!queryParsed.success) return queryParsed.response;
+    const { userId } = queryParsed.data;
 
     // Verify the challenge exists.
     const challenge = await prisma.challenge.findUnique({

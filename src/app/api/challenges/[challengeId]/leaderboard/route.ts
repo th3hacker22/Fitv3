@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { serverErrorResponse } from "@/lib/validation";
+import { parsePathParam } from "@/lib/apiSchemas";
+import { challengeIdParamSchema } from "../../schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +15,10 @@ export async function GET(
   { params }: { params: Promise<{ challengeId: string }> }
 ) {
   try {
-    const { challengeId } = await params;
+    const { challengeId: rawChallengeId } = await params;
+    const pathParsed = parsePathParam(rawChallengeId, challengeIdParamSchema);
+    if (!pathParsed.success) return pathParsed.response;
+    const challengeId = pathParsed.data;
 
     // Verify the challenge exists.
     const challenge = await prisma.challenge.findUnique({

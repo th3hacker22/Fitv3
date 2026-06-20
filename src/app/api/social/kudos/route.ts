@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { validateId, handlePrismaError } from "@/lib/validation";
+import { handlePrismaError } from "@/lib/validation";
 import { requireUser } from "@/lib/authServer";
+import { parseRequestBody } from "@/lib/apiSchemas";
+import { kudosBodySchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-interface KudosBody {
-  postId: string;
-}
 
 // Toggle kudos on a feed post.
 // Uses an upsert on @@unique([postId, userId]) to ensure one kudos per user per post.
@@ -21,12 +19,9 @@ export async function POST(req: NextRequest) {
     const { uid, response: authResponse } = await requireUser(req);
     if (!uid) return authResponse!;
 
-    const { postId } = (await req.json()) as KudosBody;
-
-    const id = validateId(postId);
-    if (!id) {
-      return NextResponse.json({ error: "Missing or invalid postId" }, { status: 400 });
-    }
+    const parsed = await parseRequestBody(req, kudosBodySchema);
+    if (!parsed.success) return parsed.response;
+    const { postId: id } = parsed.data;
 
     // Check if the user already kudosed'd this post
     const existing = await prisma.kudos.findUnique({

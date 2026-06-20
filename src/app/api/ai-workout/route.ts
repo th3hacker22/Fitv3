@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { requireUser } from "@/lib/authServer";
+import { parseRequestBody } from "@/lib/apiSchemas";
+import { structuredRequestBodySchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-interface StructuredRequestBody {
-  goal?: string | null;
-  age?: number;
-  gender?: string | null;
-  fitnessLevel?: string | null;
-  equipment?: string[];
-  selectedMuscles?: string[];
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,17 +13,10 @@ export async function POST(req: NextRequest) {
     const { uid, response: authResponse } = await requireUser(req);
     if (!uid) return authResponse!;
 
-    const body = await req.json();
-
-    // Explicitly reject if prompt or systemInstruction is passed by the client
-    if (body.prompt !== undefined || body.systemInstruction !== undefined) {
-      return NextResponse.json(
-        { error: "Explicitly forbidden fields in request: prompt, systemInstruction" },
-        { status: 400 }
-      );
-    }
-
-    const { goal, age, gender, fitnessLevel, equipment, selectedMuscles } = body as StructuredRequestBody;
+    // Strict schema rejects unknown keys (prompt, systemInstruction) declaratively.
+    const parsed = await parseRequestBody(req, structuredRequestBodySchema);
+    if (!parsed.success) return parsed.response;
+    const { goal, age, gender, fitnessLevel, equipment, selectedMuscles } = parsed.data;
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {

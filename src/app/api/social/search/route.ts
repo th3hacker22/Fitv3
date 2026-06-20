@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { validateString, serverErrorResponse } from "@/lib/validation";
+import { serverErrorResponse } from "@/lib/validation";
+import { parseQueryParams } from "@/lib/apiSchemas";
+import { searchQuerySchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,11 +14,9 @@ export const dynamic = "force-dynamic";
 // Query: ?q=<searchQuery>
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const rawQ = searchParams.get("q");
-
-    // Validate and cap query length to prevent abuse.
-    const q = validateString(rawQ, 100);
+    const parsed = parseQueryParams(req, searchQuerySchema);
+    if (!parsed.success) return parsed.response;
+    const q = parsed.data.q;
     if (!q) {
       return NextResponse.json([]);
     }

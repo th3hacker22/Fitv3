@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/authServer";
+import { parseRequestBody } from "@/lib/apiSchemas";
+import { syncVolumeBodySchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-interface SyncVolumeBody {
-  userId: string;
-  totalVolume: number;
-  sessionId?: string;
-}
 
 // POST /api/challenges/sync-volume
 // For every active Participation belonging to userId that has not yet
@@ -18,11 +14,9 @@ interface SyncVolumeBody {
 // Uses sessionId for server-side idempotency to prevent double-counting.
 export async function POST(req: NextRequest) {
   try {
-    const { userId, totalVolume, sessionId } = (await req.json()) as SyncVolumeBody;
-
-    if (!userId) {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 });
-    }
+    const parsed = await parseRequestBody(req, syncVolumeBodySchema);
+    if (!parsed.success) return parsed.response;
+    const { userId, totalVolume, sessionId } = parsed.data;
 
     // Prevent impersonation: the body's userId must match the caller's session UID.
     const auth = await requireUser(req);
@@ -35,10 +29,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const volume = Number(totalVolume) || 0;
-    // Clamp to a sane maximum to prevent overflow / Infinity abuse.
-    const clampedVolume = Math.min(Math.max(0, volume), 1e9);
-    if (clampedVolume <= 0) {
+    // Schema already enforces 0 <= totalVolume <= 1e9; no runtime clamp needed.
+    if (totalVolume <= 0) {
       return NextResponse.json({ ok: true, updated: 0 });
     }
 
@@ -75,7 +67,7 @@ export async function POST(req: NextRequest) {
         const updatedRow = await tx.participation.update({
           where: { id: p.id },
           data: {
-            progressKg: { increment: clampedVolume },
+            progressKg: { increment: totalVolume },
           },
           select: { progressKg: true },
         });
