@@ -1,3 +1,4 @@
+packages: []
 allowBuilds:
   '@firebase/util': set this to true or false
   '@parcel/watcher': set this to true or false
