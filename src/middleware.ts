@@ -1,68 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  categorizeRequest,
+  checkRateLimit,
+  cleanupBuckets,
+  extractUidForRateLimit,
+  buildBucketKey,
+} from "@/lib/rateLimit";
 
-interface Bucket {
-  tokens: number;
-  lastRefill: number;
-}
-
-const buckets = new Map<string, Bucket>();
-const WINDOW_MS = 60_000;
-
-const ROUTE_LIMITS: { pattern: RegExp; limit: number }[] = [
-  { pattern: /^\/api\/ai-workout$/, limit: 5 },
-  { pattern: /^\/api\/ai-coach$/, limit: 5 },
-  { pattern: /^\/api\/challenges\/sync-volume$/, limit: 10 },
-  { pattern: /^\/api\/social\/comments$/, limit: 20 },
-  { pattern: /^\/api\/social\/feed$/, limit: 30 },
-  { pattern: /^\/api\/social/, limit: 60 },
-  { pattern: /^\/api\/challenges/, limit: 60 },
-];
-
-const DEFAULT_LIMIT = 120;
-
-function getRateLimit(pathname: string): number {
-  for (const { pattern, limit } of ROUTE_LIMITS) {
-    if (pattern.test(pathname)) return limit;
-  }
-  return DEFAULT_LIMIT;
-}
-
-function checkRateLimit(ip: string, pathname: string): { allowed: boolean; remaining: number } {
-  const key = `${ip}:${pathname}`;
-  const limit = getRateLimit(pathname);
-  const now = Date.now();
-
-  let bucket = buckets.get(key);
-  if (!bucket) {
-    bucket = { tokens: limit, lastRefill: now };
-    buckets.set(key, bucket);
-  }
-
-  const elapsed = now - bucket.lastRefill;
-  const refill = (elapsed / WINDOW_MS) * limit;
-  bucket.tokens = Math.min(limit, bucket.tokens + refill);
-  bucket.lastRefill = now;
-
-  if (bucket.tokens >= 1) {
-    bucket.tokens -= 1;
-    return { allowed: true, remaining: Math.floor(bucket.tokens) };
-  }
-
-  return { allowed: false, remaining: 0 };
-}
-
-let lastCleanup = Date.now();
-function cleanupBuckets() {
-  const now = Date.now();
-  if (now - lastCleanup < 5 * 60_000) return;
-  lastCleanup = now;
-  const cutoff = now - 10 * 60_000;
-  for (const [key, bucket] of buckets) {
-    if (bucket.lastRefill < cutoff) {
-      buckets.delete(key);
-    }
-  }
-}
+// firebase-admin (used by extractUidForRateLimit) relies on Node.js fs/path,
+// so the middleware MUST run in the Node.js runtime instead of the default Edge.
+export const runtime = "nodejs";
 
 // ── P0-8: Secure IP extraction ──
 // Only trust x-forwarded-for if the request came from a trusted proxy.
@@ -140,10 +87,13 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // ── P1-5: Per-user rate limiting ──
   cleanupBuckets();
-
-  const ip = getClientIp(req);
-  const { allowed, remaining } = checkRateLimit(ip, pathname);
+  const category = categorizeRequest(req.method, pathname);
+  const ip = getClientIp(req); // P0-8 secure IP extraction
+  const uid = await extractUidForRateLimit(req); // null if no/invalid cookie
+  const bucketKey = buildBucketKey(uid, ip, category);
+  const { allowed, remaining } = checkRateLimit(bucketKey, category);
 
   if (!allowed) {
     return NextResponse.json(
@@ -151,13 +101,14 @@ export async function middleware(req: NextRequest) {
       {
         status: 429,
         headers: {
-          "Retry-After": "60",
+          "Retry-After": "3600", // conservative static (1 hour window)
           "X-RateLimit-Remaining": "0",
         },
       }
     );
   }
 
+  // ── P0-2: Write-method session-cookie existence check ──
   if (WRITE_METHODS.has(req.method)) {
     const hasSession = req.cookies.has("pulse_session");
     if (!hasSession) {
