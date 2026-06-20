@@ -45,6 +45,7 @@ interface SocialState {
   feed: FeedPost[];
   searchResults: PublicProfile[];
   commentsByPost: Record<string, Comment[]>;
+  kudsedPostIds: Set<string>;
   isLoading: boolean;
   isSearching: boolean;
   loadFollowing: (uid: string) => Promise<void>;
