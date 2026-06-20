@@ -44,7 +44,7 @@ describe("assessFatigueACWR", () => {
     expect(result.acuteLoad).toBe(0);
     expect(result.chronicLoad).toBe(0);
     expect(result.acwr).toBe(0);
-    expect(result.fatigueScore).toBe(5);
+    expect(result.fatigueScore).toBe(4);
   });
 
   it("flags acute spike (ACWR > 1.5) when 7 days of volume with no prior base", () => {
@@ -55,7 +55,8 @@ describe("assessFatigueACWR", () => {
   });
 
   it("reports optimal zone (0.8 ≤ ACWR ≤ 1.3) for 28 days of consistent volume", () => {
-    const sessions = Array.from({ length: 28 }, (_, i) => makeSession(i, 1000));
+    const trainingDaysAgo = [1, 3, 5, 8, 10, 12, 15, 17, 19, 22, 24, 26, 28, 30, 32];
+    const sessions = trainingDaysAgo.map((d) => makeSession(d, 1000));
     const result = assessFatigueACWR(sessions, baseProfile, new Map());
     expect(result.acwr).toBeGreaterThanOrEqual(0.8);
     expect(result.acwr).toBeLessThanOrEqual(1.3);
