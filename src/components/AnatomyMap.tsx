@@ -780,10 +780,9 @@ function AnatomyMapComponent({
         ))}
       </div>
 
-      <div className="relative bg-bg-surface/70 rounded-2xl border border-border/40 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/30">
-        <div className="absolute inset-0 anatomy-grid" />
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.02] via-transparent to-secondary/[0.02]" />
-        <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20">
+      <div className="relative bg-[#0a0a0a] rounded-2xl border border-border/40 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/30">
+        <div className="absolute inset-0 anatomy-grid opacity-50" />
+        <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-10">
           {!prefersReducedMotion && isInView && (
             <div className="w-full h-16 bg-gradient-to-b from-transparent via-primary/10 to-transparent anatomy-scan-line" />
           )}
