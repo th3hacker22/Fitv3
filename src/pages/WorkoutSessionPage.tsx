@@ -9,7 +9,7 @@ import { getWorkoutStreak, getPersonalRecords } from "@/db";
 import { estimateOneRepMax } from "@/utils/fitnessMath";
 import ExerciseWorkoutCard from "@/components/workout/ExerciseWorkoutCard";
 import RestTimer from "@/components/workout/RestTimer";
-import ShareCard from "@/components/workout/ShareCard";
+import ShareCard, { type ShareCardPR } from "@/components/workout/ShareCard";
 import PRCelebration, { type PRCelebrationData } from "@/components/workout/PRCelebration";
 import { ConfirmModal } from "@/components/ui-custom/ConfirmationModal";
 import { Button } from "@/components/ui-custom/Button";
@@ -61,6 +61,7 @@ export default function WorkoutSessionPage() {
     exerciseCount: number;
     setCount: number;
     streak?: number;
+    prs?: ShareCardPR[];
   } | null>(null);
 
   // ── PR Celebration State ──
@@ -267,6 +268,57 @@ export default function WorkoutSessionPage() {
     // Save to DB
     await finishWorkout(shareToFeed);
     playWorkoutStopSound();
+
+    // ── Detect PRs achieved during this session ──
+    // After finishWorkout, getPersonalRecords() returns updated records.
+    // Compare each completed exercise's best set against the PRIOR PRs
+    // (which we snapshotted in knownPRs at the start of the session).
+    // If the session's best e1RM exceeds the prior PR, it's a new PR.
+    const sessionPRs: ShareCardPR[] = [];
+    try {
+      const updatedPRs = await getPersonalRecords();
+      const prMap = new Map(updatedPRs.map((r) => [String(r.exerciseId), r]));
+      for (const ex of activeWorkout.exercises) {
+        const completedSets = ex.sets.filter((s) => s.completed);
+        if (completedSets.length === 0) continue;
+        let bestWeight = 0;
+        let bestReps = 0;
+        let bestE1RM = 0;
+        for (const s of completedSets) {
+          const w = Number(s.weight) || 0;
+          const r = Number(s.reps) || 0;
+          const e1rm = estimateOneRepMax(w, r);
+          if (e1rm > bestE1RM) {
+            bestE1RM = e1rm;
+            bestWeight = w;
+            bestReps = r;
+          }
+        }
+        if (bestE1RM <= 0) continue;
+        const priorPR = knownPRs.get(String(ex.exerciseId));
+        const priorE1RM = priorPR?.e1rm ?? 0;
+        // It's a new PR if the session's best e1RM exceeds the prior known PR.
+        // Also verify it matches the current PR record (in case of race conditions).
+        if (bestE1RM > priorE1RM) {
+          const currentPR = prMap.get(String(ex.exerciseId));
+          if (currentPR && Math.abs(currentPR.max1RM - bestE1RM) < 0.1) {
+            sessionPRs.push({
+              exerciseName: ex.exerciseName,
+              weight: bestWeight,
+              reps: bestReps,
+              estimated1RM: Math.round(bestE1RM * 10) / 10,
+            });
+          }
+        }
+      }
+    } catch (prErr) {
+      console.warn("[ShareCard] Failed to detect PRs for share card:", prErr);
+    }
+
+    // Update the summary with PR data
+    if (sessionPRs.length > 0) {
+      setWorkoutSummary((prev) => prev ? { ...prev, prs: sessionPRs } : prev);
+    }
 
     // ── Request notification permission AFTER first workout ──
     // This is the optimal time: the user just experienced the app's core value,
