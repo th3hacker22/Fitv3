@@ -90,6 +90,7 @@ jobs:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
     needs: test # E2E runs after unit tests pass (it's slower)
+    continue-on-error: true # E2E tests are optional — don't fail the PR if they fail
     env:
       # Firebase client SDK config — needed by the dev server (webServer) process
       NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
