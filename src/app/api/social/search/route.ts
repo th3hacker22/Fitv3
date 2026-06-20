@@ -7,10 +7,11 @@ import { searchQuerySchema } from "./schema";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Search PublicProfile by displayName containing q.
-// SQLite's default collation is BINARY (case-sensitive), so we use
-// Prisma's `mode: "insensitive"` which generates a LOWER() comparison
-// to make the search case-insensitive.
+// Search PublicProfile by displayName containing q (case-insensitive).
+// SQLite's default collation is BINARY (case-sensitive) and does NOT support
+// Prisma's `mode: "insensitive"` option (that's PostgreSQL/MongoDB only).
+// We use a parameterized raw query with LOWER() on both sides to achieve
+// case-insensitive contains matching safely (no SQL injection).
 // Query: ?q=<searchQuery>
 export async function GET(req: NextRequest) {
   try {
@@ -21,17 +22,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json([]);
     }
 
-    const profiles = await prisma.publicProfile.findMany({
-      where: {
-        displayName: { contains: q, mode: "insensitive" },
-      },
-      take: 20,
-      select: {
-        uid: true,
-        displayName: true,
-        photoURL: true,
-      },
-    });
+    const profiles = await prisma.$queryRaw<
+      Array<{ uid: string; displayName: string; photoURL: string | null }>
+    >`SELECT uid, displayName, photoURL FROM PublicProfile WHERE LOWER(displayName) LIKE LOWER(${"%" + q + "%"}) LIMIT 20`;
 
     return NextResponse.json(
       profiles.map((p) => ({

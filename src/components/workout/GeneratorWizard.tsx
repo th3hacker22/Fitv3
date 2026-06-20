@@ -16,8 +16,10 @@ import {
   Trophy,
   X,
 } from "lucide-react";
-import { useGeneratorStore } from "@/store/useGeneratorStore";
+import { useGeneratorStore, type GeneratorProfile } from "@/store/useGeneratorStore";
 import { useExerciseStore } from "@/store/useExerciseStore";
+import type { WorkoutSession } from "@/db/schema";
+import type { LearningLoopSummary } from "@/services/learningLoop";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import AnatomyMap from "@/components/AnatomyMap";
 import { generateProgram } from "@/services/workoutGenerator";
@@ -334,7 +336,7 @@ export const GeneratorWizard = () => {
       // userData.recentSessions shape would have lost.
       const { generateProgram } = await import("@/services/workoutGenerator");
 
-      let rawSessions: any[] = [];
+      let rawSessions: WorkoutSession[] = [];
       try {
         const { db } = await import("@/db");
         // Fetch up to 30 completed sessions — enough for ACWR (28-day chronic window)
@@ -352,7 +354,7 @@ export const GeneratorWizard = () => {
       const exerciseMap = new Map(exercises.map((e) => [String(e.id), e]));
 
       // ── Load Learning Loop preferences (best-effort, non-blocking) ──
-      let learningLoop: any = undefined;
+      let learningLoop: LearningLoopSummary | undefined = undefined;
       try {
         const { buildLearningLoopSummary } = await import("@/services/learningLoop");
         learningLoop = await buildLearningLoopSummary(90);
@@ -715,7 +717,7 @@ export const GeneratorWizard = () => {
                 return (
                   <button
                     key={k}
-                    onClick={() => profile.updateProfile({ [k]: !active } as any)}
+                    onClick={() => profile.updateProfile({ [k]: !active } as Partial<GeneratorProfile>)}
                     className="flex items-center gap-3 w-full p-4 bg-bg-elevated border border-border rounded-xl"
                   >
                     <div

@@ -32,6 +32,8 @@ import { useRoutineStore } from "@/store/useRoutineStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { uid } from "@/utils/id";
 import AnatomyMap from "@/components/AnatomyMap";
+import type { WorkoutSession } from "@/db/schema";
+import type { LearningLoopSummary } from "@/services/learningLoop";
 import { getMuscleIdsForExercise } from "@/utils/muscleMapper";
 import { getAlternativeExercises } from "@/services/exerciseService";
 import { generateProgram, type ProgramExercise } from "@/services/workoutGenerator";
@@ -186,7 +188,7 @@ export default function WorkoutResultView() {
     profile.regenerateSeed();
 
     // Fetch raw sessions so the ACWR + RPE engines can personalize the program.
-    let rawSessions: any[] = [];
+    let rawSessions: WorkoutSession[] = [];
     try {
       const { db } = await import("@/db");
       rawSessions = await db.workoutSessions
@@ -200,7 +202,7 @@ export default function WorkoutResultView() {
     const exerciseMap = new Map(exercises.map((e) => [String(e.id), e]));
 
     // ── Load Learning Loop preferences ──
-    let learningLoop: any = undefined;
+    let learningLoop: LearningLoopSummary | undefined = undefined;
     try {
       const { buildLearningLoopSummary } = await import("@/services/learningLoop");
       learningLoop = await buildLearningLoopSummary(90);

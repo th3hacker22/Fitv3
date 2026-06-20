@@ -43,9 +43,11 @@ export default function AuthPage() {
     setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err: any) {
-      if (err.code !== "auth/popup-closed-by-user") {
-        setError(err.message || "Google sign-in failed");
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      const message = err instanceof Error ? err.message : "Google sign-in failed";
+      if (code !== "auth/popup-closed-by-user") {
+        setError(message);
       }
     } finally {
       setLoading(false);
@@ -73,15 +75,17 @@ export default function AuthPage() {
         setVerifiedMessage("Verification email sent. Check your inbox and verify before signing in.");
         setIsLogin(true);
       }
-    } catch (err: any) {
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      const message = err instanceof Error ? err.message : "Authentication failed";
       const msg =
-        err.code === "auth/user-not-found" || err.code === "auth/invalid-credential"
+        code === "auth/user-not-found" || code === "auth/invalid-credential"
           ? "Invalid email or password"
-          : err.code === "auth/email-already-in-use"
+          : code === "auth/email-already-in-use"
           ? "An account with this email already exists"
-          : err.code === "auth/weak-password"
+          : code === "auth/weak-password"
           ? "Password must be at least 6 characters"
-          : err.message || "Authentication failed";
+          : message;
       setError(msg);
     } finally {
       setLoading(false);
