@@ -1,0 +1,165 @@
+{
+  "project": "Pulse Fitness",
+  "stack": ["Next.js 16", "React", "TypeScript", "Tailwind CSS v4", "Prisma", "SQLite", "Firebase Auth", "Firebase Storage", "Zustand", "Recharts", "Framer Motion", "Dexie/IndexedDB"],
+  "skills_loaded": 14,
+  "skills": {
+    "007": {
+      "category": "security",
+      "description": "Security audit, hardening, threat modeling (STRIDE/PASTA), OWASP checks, code review, incident response",
+      "use_cases": [
+        "Audit API routes for OWASP Top 10 vulnerabilities",
+        "Threat model for social features (feed, comments, user data)",
+        "Review Firebase auth implementation for security gaps",
+        "Hardening middleware (rate limiting, input validation)",
+        "Review Prisma queries for injection risks"
+      ]
+    },
+    "api-security-best-practices": {
+      "category": "backend",
+      "description": "Secure API design patterns: authentication, authorization, input validation, rate limiting",
+      "use_cases": [
+        "Review all /api/social/* routes for auth gaps",
+        "Implement rate limiting on AI Coach endpoint",
+        "Validate all user inputs (food entries, comments, posts)",
+        "Ensure ownership checks on delete operations",
+        "Secure Firebase Storage upload endpoints"
+      ]
+    },
+    "api-design-principles": {
+      "category": "backend",
+      "description": "Master REST and GraphQL API design principles for scalable, maintainable APIs",
+      "use_cases": [
+        "Design consistent response formats across all API routes",
+        "Plan pagination strategy for feed/comments",
+        "Design error response schema",
+        "Plan API versioning strategy",
+        "Document all endpoints with OpenAPI"
+      ]
+    },
+    "api-endpoint-builder": {
+      "category": "development",
+      "description": "Builds production-ready REST API endpoints with validation, error handling, authentication",
+      "use_cases": [
+        "Build missing API routes (delete post, report content, block user)",
+        "Add proper error handling to existing routes",
+        "Add request validation to all POST/DELETE routes",
+        "Build auth middleware for protected routes"
+      ]
+    },
+    "accesslint-audit": {
+      "category": "web-development",
+      "description": "Find and fix WCAG 2.2 accessibility issues in codebase or live pages",
+      "use_cases": [
+        "Audit all pages for WCAG 2.2 AA compliance",
+        "Fix missing ARIA labels on interactive elements",
+        "Ensure keyboard navigation works on all pages",
+        "Verify screen reader compatibility",
+        "Audit color contrast ratios"
+      ]
+    },
+    "accessibility-compliance-accessibility-audit": {
+      "category": "design",
+      "description": "WCAG compliance, inclusive design, assistive technology compatibility",
+      "use_cases": [
+        "Comprehensive accessibility audit of entire app",
+        "Design accessible workout session UI (screen reader friendly)",
+        "Ensure AnatomyMap is keyboard accessible",
+        "Verify focus management in modals/sheets"
+      ]
+    },
+    "progressive-web-app": {
+      "category": "pwa",
+      "description": "Build PWAs with offline support, installability, and caching strategies",
+      "use_cases": [
+        "Configure service worker (sw.js) for offline workout logging",
+        "Implement cache-first strategy for exercise images",
+        "Add web app manifest for installability",
+        "Background sync for delayed data upload",
+        "Offline-first IndexedDB strategy review"
+      ]
+    },
+    "cc-skill-frontend-patterns": {
+      "category": "frontend",
+      "description": "Frontend development patterns for React, Next.js, state management, performance",
+      "use_cases": [
+        "Review React component patterns (memoization, hooks usage)",
+        "Optimize re-renders in Zustand store subscriptions",
+        "Implement proper loading/error states",
+        "Review Next.js App Router patterns",
+        "Optimize bundle size (lazy loading, code splitting)"
+      ]
+    },
+    "cc-skill-backend-patterns": {
+      "category": "backend",
+      "description": "Backend architecture patterns, API design, database optimization, server-side logic",
+      "use_cases": [
+        "Review Prisma schema design and relations",
+        "Optimize database queries (N+1 problems)",
+        "Review middleware/proxy patterns",
+        "Design data migration strategy (guest → registered user)",
+        "Plan auto-save & resume workout architecture"
+      ]
+    },
+    "i18n-localization": {
+      "category": "i18n",
+      "description": "Internationalization and localization patterns, detecting hardcoded strings",
+      "use_cases": [
+        "Audit hardcoded strings across all pages",
+        "Plan multi-language support strategy",
+        "Extract user-facing strings to translation files",
+        "Handle RTL layout for Arabic support"
+      ]
+    },
+    "andrej-karpathy": {
+      "category": "code-quality",
+      "description": "Behavioral guidelines to reduce common LLM coding mistakes",
+      "use_cases": [
+        "Reduce common coding mistakes in new features",
+        "Improve code review quality",
+        "Enforce clean code practices",
+        "Review for common React/Next.js anti-patterns"
+      ]
+    },
+    "context7-auto-research": {
+      "category": "development",
+      "description": "Automatically fetch latest library/framework documentation",
+      "use_cases": [
+        "Fetch latest Next.js 16 docs when implementing features",
+        "Get Firebase Auth v6 migration guide",
+        "Check Prisma v6 breaking changes",
+        "Verify Tailwind CSS v4 syntax"
+      ]
+    },
+    "baseline-ui": {
+      "category": "design",
+      "description": "Validates animation durations, enforces typography scale, checks component accessibility",
+      "use_cases": [
+        "Validate Framer Motion animation durations (accessibility)",
+        "Enforce consistent typography scale across pages",
+        "Check component spacing consistency",
+        "Verify touch target sizes (44px minimum)"
+      ]
+    },
+    "antigravity-design-expert": {
+      "category": "design",
+      "description": "Core UI/UX engineering skill for building highly interactive, spatial interfaces",
+      "use_cases": [
+        "Design review of all Stitch-integrated pages",
+        "Optimize AnatomyMap 3D rotation UX",
+        "Review dark mode contrast and consistency",
+        "Improve mobile-first responsive layouts"
+      ]
+    }
+  },
+  "task_to_skill_mapping": {
+    "security_audit": ["007", "api-security-best-practices"],
+    "accessibility_audit": ["accesslint-audit", "accessibility-compliance-accessibility-audit"],
+    "api_development": ["api-endpoint-builder", "api-design-principles", "api-security-best-practices"],
+    "frontend_development": ["cc-skill-frontend-patterns", "baseline-ui", "antigravity-design-expert"],
+    "backend_development": ["cc-skill-backend-patterns", "api-endpoint-builder"],
+    "pwa_offline": ["progressive-web-app"],
+    "code_quality": ["andrej-karpathy"],
+    "i18n": ["i18n-localization"],
+    "research": ["context7-auto-research"]
+  }
+}
