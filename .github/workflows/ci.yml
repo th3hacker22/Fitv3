@@ -27,6 +27,8 @@ jobs:
       - name: Allow pnpm builds for native deps
         run: pnpm config set onlyBuiltDependencies "sharp,@firebase/util"
       - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma Client
+        run: pnpm exec prisma generate
       - run: pnpm run lint
 
   typecheck:
@@ -44,6 +46,8 @@ jobs:
       - name: Allow pnpm builds for native deps
         run: pnpm config set onlyBuiltDependencies "sharp,@firebase/util"
       - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma Client
+        run: pnpm exec prisma generate
       # Tolerate pre-existing tsc errors (26) via baseline comparison.
       # TODO(Sprint4): remove the baseline check once 26 errors are fixed.
       - name: Type check (baseline-aware)
@@ -72,6 +76,8 @@ jobs:
       - name: Allow pnpm builds for native deps
         run: pnpm config set onlyBuiltDependencies "sharp,@firebase/util"
       - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma Client
+        run: pnpm exec prisma generate
       - name: Cache .next
         uses: actions/cache@v4
         with:
@@ -105,6 +111,8 @@ jobs:
       - name: Allow pnpm builds for native deps
         run: pnpm config set onlyBuiltDependencies "sharp,@firebase/util"
       - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma Client
+        run: pnpm exec prisma generate
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:

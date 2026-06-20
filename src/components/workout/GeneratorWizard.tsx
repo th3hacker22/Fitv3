@@ -252,7 +252,7 @@ export const GeneratorWizard = () => {
             duration: s.duration,
             completed: s.completed,
           })),
-          personalRecords: prs,
+          personalRecords: prs.map((p) => ({ ...p, exerciseId: String(p.exerciseId) })),
           analytics: {
             streak,
             totalWorkouts: stats.totalWorkouts,
