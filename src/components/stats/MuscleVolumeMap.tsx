@@ -245,7 +245,7 @@ export default function MuscleVolumeMap({ sessions, exercises }: MuscleVolumeMap
       </div>
 
       {/* AnatomyMap with volume heatmap */}
-      <div className="rounded-2xl bg-bg-elevated/30 border border-border/50 p-2 min-h-[300px]">
+      <div className="rounded-2xl bg-[#050505] p-2 min-h-[300px]">
         <AnatomyMap
           readOnly
           highlightedMuscles={highlightedMuscles}
