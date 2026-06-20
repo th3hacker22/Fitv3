@@ -18,7 +18,6 @@ import {
 import { useSocialStore, type FeedPost } from "@/store/useSocialStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useNavigate } from "@/router-shim";
-import { SkeletonCard } from "@/components/ui-custom/Skeleton";
 import ChallengesPage from "@/pages/ChallengesPage";
 import { useTranslation } from "react-i18next";
 
@@ -453,11 +452,29 @@ export default function FeedPage() {
       {/* Feed Posts */}
       {searchQuery.trim().length === 0 && (
         <div className="flex flex-col gap-5">
-          {isLoading ? (
-            <div className="flex flex-col gap-4">
-              <SkeletonCard />
-              <SkeletonCard />
-              <SkeletonCard />
+          {isLoading && feed.length === 0 ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="glass-card rounded-xl border border-border p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full skeleton-shimmer bg-bg-elevated/40" />
+                    <div className="space-y-1.5 flex-1">
+                      <div className="h-3 w-24 rounded skeleton-shimmer bg-bg-elevated/40" />
+                      <div className="h-2 w-16 rounded skeleton-shimmer bg-bg-elevated/30" />
+                    </div>
+                  </div>
+                  <div className="h-4 w-3/4 rounded skeleton-shimmer bg-bg-elevated/35" />
+                  <div className="flex gap-4">
+                    <div className="h-3 w-20 rounded skeleton-shimmer bg-bg-elevated/30" />
+                    <div className="h-3 w-20 rounded skeleton-shimmer bg-bg-elevated/30" />
+                    <div className="h-3 w-20 rounded skeleton-shimmer bg-bg-elevated/30" />
+                  </div>
+                  <div className="flex gap-4 pt-2">
+                    <div className="h-6 w-16 rounded-full skeleton-shimmer bg-bg-elevated/25" />
+                    <div className="h-6 w-20 rounded-full skeleton-shimmer bg-bg-elevated/25" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : feed.length === 0 ? (
             <div className="glass-card p-10 text-center flex flex-col items-center gap-4 bg-white/[0.02] border-dashed rounded-none">

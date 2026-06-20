@@ -453,7 +453,7 @@ export default function WorkoutResultView() {
       {/* RIGHT COLUMN */}
       <div className="w-full lg:w-[400px] shrink-0">
         <motion.div
-          className="glass-card sticky top-6 rounded-[2rem] border border-border p-6 shadow-2xl"
+          className="glass-card sticky top-6 rounded-[2rem] border border-border p-6 shadow-2xl pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]"
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2 }}

@@ -23,6 +23,7 @@ import AnatomyMap from "@/components/AnatomyMap";
 import { generateProgram } from "@/services/workoutGenerator";
 import { useRouter } from "@/router";
 import { Button } from "@/components/ui-custom/Button";
+import { Skeleton } from "@/components/ui-custom/Skeleton";
 
 // ═══════════════════════════════════════════════════════════════
 // 5-STEP WIZARD (reduced from 14 steps)
@@ -1155,6 +1156,23 @@ export const GeneratorWizard = () => {
             exit={{ opacity: 0 }}
             className="absolute inset-0 z-50 flex flex-col items-center justify-center rounded-[2rem] bg-bg-card/95 p-6 text-center backdrop-blur-md"
           >
+            {isGenerating && (
+              <div className="space-y-4 p-4 w-full max-w-md">
+                <Skeleton className="h-8 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="space-y-2 p-3 border border-border rounded-lg">
+                    <Skeleton className="h-5 w-2/3" />
+                    <div className="flex gap-4">
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-20" />
+                    </div>
+                  </div>
+                ))}
+                <Skeleton className="h-12 w-full" />
+              </div>
+            )}
             <AILoadingAnimation />
           </motion.div>
         )}

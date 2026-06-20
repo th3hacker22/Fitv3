@@ -1,0 +1,738 @@
+     1→"use client";
+     2→import { useState, useEffect, useMemo } from "react";
+     3→import { Link, useNavigate } from "@/router-shim";
+     4→import { motion } from "framer-motion";
+     5→import {
+     6→  Flame,
+     7→  Target,
+     8→  TrendingUp,
+     9→  ChevronRight,
+    10→  Zap,
+    11→  Dumbbell,
+    12→  Clock,
+    13→  Plus,
+    14→  Play,
+    15→  Trash2,
+    16→  Copy,
+    17→  Trophy,
+    18→} from "lucide-react";
+    19→import { cn } from "@/utils/cn";
+    20→import { getWorkoutStreak, getTotalStats, db } from "@/db";
+    21→import { useRoutineStore } from "@/store/useRoutineStore";
+    22→import { useWorkoutStore } from "@/store/useWorkoutStore";
+    23→import { useAuthStore } from "@/store/useAuthStore";
+    24→import { useExerciseStore } from "@/store/useExerciseStore";
+    25→import { useAchievementsStore } from "@/store/useAchievementsStore";
+    26→import { useGeneratorStore } from "@/store/useGeneratorStore";
+    27→import { useChallengesStore } from "@/store/useChallengesStore";
+    28→import AchievementBadge from "@/components/AchievementBadge";
+    29→import { useTranslation } from "react-i18next";
+    30→import { Button } from "@/components/ui-custom/Button";
+    31→import { ACHIEVEMENTS } from "@/data/achievements";
+    32→import { routineTemplates, buildTemplateRoutine } from "@/data/routineTemplates";
+    33→import { uid } from "@/utils/id";
+    34→import RecoveryHeatmap from "@/components/RecoveryHeatmap";
+    35→
+    36→const fadeUp = {
+    37→  hidden: { opacity: 0, y: 20 },
+    38→  visible: (i: number) => ({
+    39→    opacity: 1,
+    40→    y: 0,
+    41→    transition: { delay: i * 0.08, duration: 0.4, ease: "easeOut" as const },
+    42→  }),
+    43→};
+    44→
+    45→// ── Dynamic greeting by time of day ──
+    46→function getGreeting(): string {
+    47→  const hour = new Date().getHours();
+    48→  if (hour < 12) return "Good morning";
+    49→  if (hour < 18) return "Good afternoon";
+    50→  return "Good evening";
+    51→}
+    52→
+    53→export default function HomePage() {
+    54→  const navigate = useNavigate();
+    55→  const { t } = useTranslation();
+    56→  const [streak, setStreak] = useState(0);
+    57→  const [totalStats, setTotalStats] = useState({
+    58→    totalWorkouts: 0,
+    59→    totalVolume: 0,
+    60→    totalDuration: 0,
+    61→  });
+    62→  const [recentWorkouts, setRecentWorkouts] = useState<
+    63→    { id: string; name: string; date: string; exerciseCount: number; volume: number; prCount: number }[]
+    64→  >([]);
+    65→
+    66→  const routines = useRoutineStore((s) => s.routines);
+    67→  const loadRoutines = useRoutineStore((s) => s.loadRoutines);
+    68→  const deleteRoutine = useRoutineStore((s) => s.deleteRoutine);
+    69→  const saveRoutine = useRoutineStore((s) => s.saveRoutine);
+    70→  const startWorkout = useWorkoutStore((s) => s.startWorkout);
+    71→
+    72→  const user = useAuthStore((s) => s.user);
+    73→
+    74→  const exercises = useExerciseStore((s) => s.exercises);
+    75→  const loadExercises = useExerciseStore((s) => s.loadExercises);
+    76→
+    77→  const newlyUnlocked = useAchievementsStore((s) => s.newlyUnlocked);
+    78→  const clearNewlyUnlocked = useAchievementsStore((s) => s.clearNewlyUnlocked);
+    79→
+    80→  // Program + Challenges for "Next Workout" + active challenge cards
+    81→  const program = useGeneratorStore((s) => s.program);
+    82→  const activeChallenges = useChallengesStore((s) => s.activeChallenges);
+    83→  const fetchActiveChallenges = useChallengesStore((s) => s.fetchActiveChallenges);
+    84→
+    85→  const [localName, setLocalName] = useState<string>("");
+    86→
+    87→  useEffect(() => {
+    88→    const updateName = () => {
+    89→      if (typeof window !== "undefined") {
+    90→        setLocalName(localStorage.getItem("pulse_user_name") || "");
+    91→      }
+    92→    };
+    93→    updateName();
+    94→    window.addEventListener("pulse-user-name-updated", updateName);
+    95→    return () => window.removeEventListener("pulse-user-name-updated", updateName);
+    96→  }, []);
+    97→
+    98→  useEffect(() => {
+    99→    loadRoutines();
+   100→    loadExercises();
+   101→    fetchActiveChallenges();
+   102→  }, [loadRoutines, loadExercises, fetchActiveChallenges]);
+   103→
+   104→  useEffect(() => {
+   105→    async function loadData() {
+   106→      try {
+   107→        const [streakData, statsData, sessions] = await Promise.all([
+   108→          getWorkoutStreak(),
+   109→          getTotalStats(),
+   110→          db.workoutSessions.filter((s) => s.completed === true).reverse().limit(3).toArray(),
+   111→        ]);
+   112→
+   113→        setStreak(streakData);
+   114→        setTotalStats(statsData);
+   115→        setRecentWorkouts(
+   116→          sessions.map((s) => ({
+   117→            id: s.id,
+   118→            name: s.name,
+   119→            date: s.date,
+   120→            exerciseCount: s.exercises.length,
+   121→            volume: s.exercises.reduce(
+   122→              (acc, ex) =>
+   123→                acc + ex.sets.filter((set) => set.completed).reduce((a, set) => a + set.weight * set.reps, 0),
+   124→              0
+   125→            ),
+   126→            prCount: 0, // TODO: compute PR count per session if needed
+   127→          }))
+   128→        );
+   129→      } catch (err) {
+   130→        console.error("Failed to load home data:", err);
+   131→      }
+   132→    }
+   133→    loadData();
+   134→  }, []);
+   135→
+   136→  const formatVolume = (kg: number) => {
+   137→    if (kg >= 1000000) return `${(kg / 1000000).toFixed(1)}M`;
+   138→    if (kg >= 1000) return `${(kg / 1000).toFixed(1)}K`;
+   139→    return `${Math.round(kg)}`;
+   140→  };
+   141→
+   142→  const templateImages: Record<string, string> = {
+   143→    "Push Day (PPL)": "/images/push-day.jpg",
+   144→    "Pull Day (PPL)": "/images/pull-day.jpg",
+   145→    "Legs Day (PPL)": "/images/legs-day.jpg",
+   146→    "Full Body Foundational": "/images/full-body.jpg",
+   147→  };
+   148→
+   149→  // ── Next Workout (from active program) ──
+   150→  const nextWorkout = useMemo(() => {
+   151→    if (!program || !program.weeklyDays || program.weeklyDays.length === 0) return null;
+   152→    // Pick day 1 (or could track which day is "next" in storage)
+   153→    const day = program.weeklyDays[0];
+   154→    return {
+   155→      title: day.name.replace(/^Day \d+ — /, ""),
+   156→      dayNumber: 1,
+   157→      exerciseCount: day.exercises.length,
+   158→      estimatedMinutes: day.estimatedMinutes,
+   159→    };
+   160→  }, [program]);
+   161→
+   162→  const greeting = getGreeting();
+   163→  const userName = useMemo(() => {
+   164→    if (localName) return localName;
+   165→    return user?.displayName?.split(" ")[0] || "ATHLETE";
+   166→  }, [localName, user]);
+   167→
+   168→  const handleStartQuickWorkout = async () => {
+   169→    try {
+   170→      const sessionId = await startWorkout([]);
+   171→      navigate({ to: "/workout/$sessionId", params: { sessionId } });
+   172→    } catch (e) {
+   173→      console.error(e);
+   174→    }
+   175→  };
+   176→
+   177→  return (
+   178→    <div className="space-y-5 pb-4">
+   179→      {/* ── SECTION 1: Hero Card ── */}
+   180→      <motion.section
+   181→        custom={0}
+   182→        variants={fadeUp}
+   183→        initial="hidden"
+   184→        animate="visible"
+   185→        className="glass-card relative min-h-[200px] overflow-hidden rounded-2xl border border-border"
+   186→      >
+   187→        {/* Background image with overlay */}
+   188→        <img
+   189→          src="/images/hero-athlete.jpg"
+   190→          alt="Athlete training"
+   191→          className="absolute inset-0 h-full w-full object-cover opacity-30 mix-blend-overlay"
+   192→        />
+   193→        <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/80 to-transparent" />
+   194→
+   195→        {/* Ambient glow */}
+   196→        <motion.div
+   197→          className="pointer-events-none absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-primary/10 blur-[60px]"
+   198→          animate={{ opacity: [0.3, 0.5, 0.3], scale: [1, 1.1, 1] }}
+   199→          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+   200→        />
+   201→
+   202→        <div className="relative z-10 flex h-full flex-col justify-between p-5">
+   203→          <div>
+   204→            <div className="mb-1 flex items-center gap-1.5">
+   205→              <Zap className="h-3.5 w-3.5 text-primary" />
+   206→              <span className="text-[10px] font-bold uppercase tracking-widest text-primary">PULSE</span>
+   207→            </div>
+   208→            <h1 className="text-2xl font-black italic uppercase tracking-tighter text-white">
+   209→              {greeting},
+   210→              <br />
+   211→              <span className="text-primary">{userName.toUpperCase()}</span>
+   212→            </h1>
+   213→            <p className="mt-2 max-w-[80%] text-sm text-text-secondary">
+   214→              {totalStats.totalWorkouts > 0
+   215→                ? "Ready to crush today's workout?"
+   216→                : "Start your fitness journey today."}
+   217→            </p>
+   218→          </div>
+   219→
+   220→          <div className="mt-6 flex justify-end">
+   221→            <motion.button
+   222→              whileTap={{ scale: 0.95 }}
+   223→              onClick={() => navigate({ to: "/exercises" })}
+   224→              className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-xs font-black uppercase italic tracking-widest text-black transition-transform"
+   225→              style={{ boxShadow: "0 0 20px rgba(204,255,0,0.3)" }}
+   226→            >
+   227→              <Play className="h-4 w-4 fill-black" />
+   228→              Start Workout
+   229→            </motion.button>
+   230→          </div>
+   231→        </div>
+   232→      </motion.section>
+   233→
+   234→      {/* ── Newly Unlocked Achievements Toast ── */}
+   235→      {newlyUnlocked.length > 0 && (
+   236→        <motion.div
+   237→          initial={{ opacity: 0, y: -10 }}
+   238→          animate={{ opacity: 1, y: 0 }}
+   239→          className="glass-card relative flex flex-col gap-3 rounded-2xl border border-primary/40 bg-primary/5 p-4"
+   240→        >
+   241→          <button
+   242→            onClick={clearNewlyUnlocked}
+   243→            className="absolute right-3 top-3 text-text-secondary hover:text-text-primary"
+   244→            aria-label="Dismiss"
+   245→          >
+   246→            ✕
+   247→          </button>
+   248→          <h3 className="text-xs font-bold uppercase tracking-wider text-primary">
+   249→            🎉 New Achievement Unlocked!
+   250→          </h3>
+   251→          <div className="grid grid-cols-2 gap-2">
+   252→            {newlyUnlocked.slice(0, 2).map((id) => {
+   253→              const ach = ACHIEVEMENTS.find((a) => a.id === id);
+   254→              if (!ach) return null;
+   255→              return (
+   256→                <AchievementBadge
+   257→                  key={id}
+   258→                  title={ach.title}
+   259→                  description={ach.description}
+   260→                  iconName={ach.iconName}
+   261→                  isUnlocked={true}
+   262→                  unlockedAt={new Date().toISOString()}
+   263→                />
+   264→              );
+   265→            })}
+   266→          </div>
+   267→        </motion.div>
+   268→      )}
+   269→
+   270→      {/* ── SECTION 2: Quick Stats (3 compact cards) ── */}
+   271→      <motion.section
+   272→        custom={1}
+   273→        variants={fadeUp}
+   274→        initial="hidden"
+   275→        animate="visible"
+   276→        className="grid grid-cols-3 gap-3"
+   277→      >
+   278→        {/* Streak */}
+   279→        <div className="glass-card relative flex flex-col items-center justify-center overflow-hidden rounded-xl border border-border p-3">
+   280→          <div className="absolute left-0 top-0 h-[2px] w-full bg-warning/50" />
+   281→          <span className="mb-1 text-[9px] font-bold uppercase tracking-widest text-text-secondary">
+   282→            Streak
+   283→          </span>
+   284→          <div className="flex items-baseline gap-1">
+   285→            <Flame className="h-4 w-4 text-warning" />
+   286→            <span className="text-xl font-black italic tabular-nums text-warning">{streak}</span>
+   287→          </div>
+   288→        </div>
+   289→
+   290→        {/* Workouts */}
+   291→        <div className="glass-card relative flex flex-col items-center justify-center overflow-hidden rounded-xl border border-border p-3">
+   292→          <div className="absolute left-0 top-0 h-[2px] w-full bg-primary/50" />
+   293→          <span className="mb-1 text-[9px] font-bold uppercase tracking-widest text-text-secondary">
+   294→            Workouts
+   295→          </span>
+   296→          <span className="text-xl font-black italic tabular-nums text-primary">
+   297→            {totalStats.totalWorkouts}
+   298→          </span>
+   299→        </div>
+   300→
+   301→        {/* Volume */}
+   302→        <div className="glass-card relative flex flex-col items-center justify-center overflow-hidden rounded-xl border border-border p-3">
+   303→          <div className="absolute left-0 top-0 h-[2px] w-full bg-success/50" />
+   304→          <span className="mb-1 text-[9px] font-bold uppercase tracking-widest text-text-secondary">
+   305→            Volume
+   306→          </span>
+   307→          <span className="text-xl font-black italic tabular-nums text-success">
+   308→            {formatVolume(totalStats.totalVolume)}
+   309→          </span>
+   310→        </div>
+   311→      </motion.section>
+   312→
+   313→      {/* ── SECTION 3: Next Workout (if program exists) ── */}
+   314→      {nextWorkout && (
+   315→        <motion.section
+   316→          custom={2}
+   317→          variants={fadeUp}
+   318→          initial="hidden"
+   319→          animate="visible"
+   320→          className="glass-card flex items-center justify-between rounded-xl border border-border border-l-4 border-l-primary p-4"
+   321→        >
+   322→          <div className="min-w-0 flex-1">
+   323→            <h3 className="mb-1 text-[10px] font-bold uppercase tracking-widest text-primary">
+   324→              Next Workout · Day {nextWorkout.dayNumber}
+   325→            </h3>
+   326→            <p className="truncate text-sm font-bold text-text-primary capitalize">
+   327→              {nextWorkout.title}
+   328→            </p>
+   329→            <p className="mt-0.5 text-[10px] text-text-secondary">
+   330→              {nextWorkout.exerciseCount} exercises · ~{nextWorkout.estimatedMinutes} min
+   331→            </p>
+   332→          </div>
+   333→          <button
+   334→            onClick={() => navigate({ to: "/generator-result" })}
+   335→            className="flex items-center gap-1 text-primary transition-colors hover:text-primary-light"
+   336→          >
+   337→            <span className="text-[10px] font-bold uppercase italic">Start</span>
+   338→            <ChevronRight className="h-5 w-5" />
+   339→          </button>
+   340→        </motion.section>
+   341→      )}
+   342→
+   343→      {/* ── SECTION 4: AI Generator Promo ── */}
+   344→      <motion.section
+   345→        custom={3}
+   346→        variants={fadeUp}
+   347→        initial="hidden"
+   348→        animate="visible"
+   349→        className="glass-card relative overflow-hidden rounded-2xl border border-primary/30 p-5"
+   350→      >
+   351→        {/* Gradient background */}
+   352→        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
+   353→
+   354→        {/* Pulse glow */}
+   355→        <motion.div
+   356→          className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/10 blur-[40px]"
+   357→          animate={{ opacity: [0.3, 0.6, 0.3], scale: [1, 1.2, 1] }}
+   358→          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+   359→        />
+   360→
+   361→        <div className="relative z-10">
+   362→          <div className="mb-3 flex items-center gap-3">
+   363→            <div
+   364→              className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20"
+   365→              style={{ boxShadow: "0 0 15px rgba(204,255,0,0.3)" }}
+   366→            >
+   367→              <Zap className="h-5 w-5 text-primary" />
+   368→            </div>
+   369→            <h3 className="text-base font-black italic uppercase tracking-tight text-primary">
+   370→              AI WORKOUT
+   371→              <br />
+   372→              GENERATOR
+   373→            </h3>
+   374→          </div>
+   375→
+   376→          <p className="mb-4 text-xs text-text-secondary">
+   377→            Get a personalized workout in seconds based on your fatigue, RPE, and muscle balance.
+   378→          </p>
+   379→
+   380→          <motion.button
+   381→            whileTap={{ scale: 0.98 }}
+   382→            onClick={() => navigate({ to: "/wizard" })}
+   383→            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-black uppercase italic tracking-widest text-black transition-transform"
+   384→            style={{ boxShadow: "0 0 20px rgba(204,255,0,0.2)" }}
+   385→          >
+   386→            <Zap className="h-4 w-4 fill-black" />
+   387→            Generate Plan
+   388→          </motion.button>
+   389→        </div>
+   390→      </motion.section>
+   391→
+   392→      {/* ── SECTION 5: Active Challenge (if any) ── */}
+   393→      {activeChallenges.length > 0 && (
+   394→        <motion.section
+   395→          custom={4}
+   396→          variants={fadeUp}
+   397→          initial="hidden"
+   398→          animate="visible"
+   399→          className="glass-card flex items-center justify-between rounded-xl border border-border border-l-4 border-l-warning p-4"
+   400→        >
+   401→          <div className="flex items-center gap-3">
+   402→            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-warning/10">
+   403→              <Trophy className="h-5 w-5 text-warning" />
+   404→            </div>
+   405→            <div>
+   406→              <h3 className="text-[10px] font-bold uppercase tracking-widest text-warning">
+   407→                Active Challenge
+   408→              </h3>
+   409→              <p className="text-sm font-bold text-text-primary">{activeChallenges[0].title}</p>
+   410→              <p className="text-[10px] text-text-secondary">
+   411→                Goal: {activeChallenges[0].goalKg.toLocaleString()}kg
+   412→              </p>
+   413→            </div>
+   414→          </div>
+   415→          <Link
+   416→            to="/challenges"
+   417→            className="flex items-center gap-1 text-warning transition-colors hover:text-warning/80"
+   418→          >
+   419→            <ChevronRight className="h-5 w-5" />
+   420→          </Link>
+   421→        </motion.section>
+   422→      )}
+   423→
+   424→      {/* ── SECTION 6: Recovery Status Mini ── */}
+   425→      <motion.section
+   426→        custom={5}
+   427→        variants={fadeUp}
+   428→        initial="hidden"
+   429→        animate="visible"
+   430→      >
+   431→        <RecoveryHeatmap />
+   432→      </motion.section>
+   433→
+   434→      {/* ── SECTION 7: My Routines ── */}
+   435→      <motion.section
+   436→        custom={6}
+   437→        variants={fadeUp}
+   438→        initial="hidden"
+   439→        animate="visible"
+   440→        className="space-y-3"
+   441→      >
+   442→        <div className="flex items-center justify-between">
+   443→          <h2 className="text-sm font-bold uppercase tracking-wider text-text-primary">
+   444→            {t("my_routines")}
+   445→          </h2>
+   446→          <Link
+   447→            to="/builder"
+   448→            className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-primary hover:text-primary-light"
+   449→          >
+   450→            <Plus className="h-3.5 w-3.5" />
+   451→            {t("create_routine")}
+   452→          </Link>
+   453→        </div>
+   454→
+   455→        {routines.length > 0 ? (
+   456→          <div className="grid grid-cols-1 gap-3">
+   457→            {routines.map((routine, idx) => (
+   458→              <motion.div
+   459→                key={routine.id}
+   460→                className="glass-card group relative flex flex-col gap-3 rounded-2xl border border-border p-4"
+   461→                initial={{ opacity: 0, scale: 0.95 }}
+   462→                animate={{ opacity: 1, scale: 1 }}
+   463→                transition={{ delay: 0.4 + idx * 0.1 }}
+   464→              >
+   465→                <div className="flex items-start justify-between">
+   466→                  <div className="min-w-0 flex-1">
+   467→                    <h3 className="truncate text-sm font-bold uppercase tracking-wider text-text-primary">
+   468→                      {routine.name}
+   469→                    </h3>
+   470→                    <p className="text-xs text-text-secondary">
+   471→                      {routine.exercises.length} {t("exercises")}
+   472→                    </p>
+   473→                  </div>
+   474→                  <button
+   475→                    onClick={() => deleteRoutine(routine.id)}
+   476→                    className="text-text-secondary transition-colors hover:text-danger"
+   477→                    aria-label="Delete routine"
+   478→                  >
+   479→                    <Trash2 className="h-4 w-4" />
+   480→                  </button>
+   481→                </div>
+   482→                <Button
+   483→                  variant="outline"
+   484→                  size="sm"
+   485→                  className="w-full"
+   486→                  onClick={async () => {
+   487→                    const ids = routine.exercises.map((e) => e.exerciseId);
+   488→                    const sessionId = await startWorkout(ids.map(String));
+   489→                    navigate({ to: "/workout/$sessionId", params: { sessionId } });
+   490→                  }}
+   491→                >
+   492→                  <Play className="h-3.5 w-3.5" />
+   493→                  {t("start")}
+   494→                </Button>
+   495→              </motion.div>
+   496→            ))}
+   497→          </div>
+   498→        ) : (
+   499→          <div
+   500→            className="glass-card flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-primary/20 bg-primary/[0.02] p-8 text-center"
+   501→            style={{ boxShadow: "0 0 25px rgba(204,255,0,0.05)" }}
+   502→          >
+   503→            <div
+   504→              className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20"
+   505→              style={{ boxShadow: "0 0 15px rgba(204,255,0,0.2)" }}
+   506→            >
+   507→              <Dumbbell className="h-7 w-7 text-primary" />
+   508→            </div>
+   509→            <div className="space-y-1">
+   510→              <h3 className="text-base font-black italic uppercase tracking-wider text-text-primary">
+   511→                Design Your Training Flow
+   512→              </h3>
+   513→              <p className="max-w-[280px] text-xs leading-relaxed text-text-secondary">
+   514→                Build your own routine from scratch, or let our AI generate a personalized program for you.
+   515→              </p>
+   516→            </div>
+   517→            <div className="flex w-full max-w-[260px] justify-center gap-3 mt-1">
+   518→              <Button
+   519→                onClick={() => navigate({ to: "/builder" })}
+   520→                variant="outline"
+   521→                className="flex-1 border-border bg-bg-elevated/40 text-xs py-2.5"
+   522→              >
+   523→                {t("build_manually")}
+   524→              </Button>
+   525→              <Button
+   526→                onClick={() => navigate({ to: "/wizard" })}
+   527→                variant="primary"
+   528→                className="flex-1 text-xs py-2.5"
+   529→              >
+   530→                {t("generate_with_ai")}
+   531→              </Button>
+   532→            </div>
+   533→          </div>
+   534→        )}
+   535→      </motion.section>
+   536→
+   537→      {/* ── SECTION 8: Popular Templates ── */}
+   538→      <motion.section
+   539→        custom={7}
+   540→        variants={fadeUp}
+   541→        initial="hidden"
+   542→        animate="visible"
+   543→        className="space-y-3"
+   544→      >
+   545→        <div className="flex items-center gap-2">
+   546→          <div className="h-4 w-1 rounded-full bg-secondary" />
+   547→          <h2 className="text-sm font-bold uppercase tracking-wider text-text-primary">
+   548→            {t("popular_templates")}
+   549→          </h2>
+   550→        </div>
+   551→        <div className="grid grid-cols-1 gap-3">
+   552→          {routineTemplates.map((template, idx) => (
+   553→            <motion.div
+   554→              key={template.name}
+   555→              className="glass-card flex flex-col overflow-hidden rounded-2xl border border-border border-l-4 border-l-secondary/40"
+   556→              initial={{ opacity: 0, scale: 0.95 }}
+   557→              animate={{ opacity: 1, scale: 1 }}
+   558→              transition={{ delay: 0.5 + idx * 0.1 }}
+   559→            >
+   560→              <div className="relative aspect-[3/1] overflow-hidden bg-bg-elevated">
+   561→                <img
+   562→                  src={templateImages[template.name] || "/images/full-body.jpg"}
+   563→                  alt={template.name}
+   564→                  className="h-full w-full object-cover"
+   565→                />
+   566→                <div className="absolute inset-0 bg-gradient-to-t from-bg-card via-bg-card/40 to-transparent" />
+   567→                <h3 className="absolute bottom-2 left-4 right-4 text-sm font-bold uppercase tracking-wider text-text-primary">
+   568→                  {template.name}
+   569→                </h3>
+   570→              </div>
+   571→              <div className="p-3">
+   572→                <Button
+   573→                  variant="outline"
+   574→                  size="sm"
+   575→                  className="w-full border-secondary/30 text-secondary hover:bg-secondary/5"
+   576→                  icon={<Copy className="h-3.5 w-3.5" />}
+   577→                  onClick={async () => {
+   578→                    if (exercises.length === 0) return;
+   579→                    const built = buildTemplateRoutine(template, exercises);
+   580→                    await saveRoutine(
+   581→                      {
+   582→                        id: uid(),
+   583→                        name: template.name,
+   584→                        exercises: built.exercises,
+   585→                        createdAt: new Date().toISOString(),
+   586→                        updatedAt: new Date().toISOString(),
+   587→                      },
+   588→                      user?.uid
+   589→                    );
+   590→                  }}
+   591→                >
+   592→                  {t("add_to_my_routines")}
+   593→                </Button>
+   594→              </div>
+   595→            </motion.div>
+   596→          ))}
+   597→        </div>
+   598→      </motion.section>
+   599→
+   600→      {/* ── SECTION 9: Recent Activity ── */}
+   601→      <motion.section
+   602→        custom={8}
+   603→        variants={fadeUp}
+   604→        initial="hidden"
+   605→        animate="visible"
+   606→        className="space-y-3"
+   607→      >
+   608→        <div className="flex items-center justify-between">
+   609→          <div className="flex items-center gap-2">
+   610→            <div className="h-4 w-1 rounded-full bg-success" />
+   611→            <h2 className="text-sm font-bold uppercase tracking-wider text-text-primary">
+   612→              {t("recent_activity")}
+   613→            </h2>
+   614→          </div>
+   615→          {recentWorkouts.length > 0 && (
+   616→            <Link
+   617→              to="/stats"
+   618→              className="text-xs font-bold uppercase tracking-wider text-success hover:text-success/80"
+   619→            >
+   620→              {t("view_all")}
+   621→            </Link>
+   622→          )}
+   623→        </div>
+   624→
+   625→        {recentWorkouts.length > 0 ? (
+   626→          <div className="space-y-2">
+   627→            {recentWorkouts.map((workout, idx) => (
+   628→              <motion.div
+   629→                key={workout.id}
+   630→                className="glass-card flex items-center gap-3 rounded-xl border border-border border-l-4 border-l-success/30 p-3"
+   631→                initial={{ opacity: 0, x: -20 }}
+   632→                animate={{ opacity: 1, x: 0 }}
+   633→                transition={{ delay: 0.6 + idx * 0.1 }}
+   634→              >
+   635→                <div
+   636→                  className={cn(
+   637→                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+   638→                    idx === 0
+   639→                      ? "bg-success/10"
+   640→                      : idx === 1
+   641→                        ? "bg-success/5"
+   642→                        : "bg-success/5"
+   643→                  )}
+   644→                >
+   645→                  <Dumbbell
+   646→                    className={cn(
+   647→                      "h-4 w-4",
+   648→                      idx === 0
+   649→                        ? "text-success"
+   650→                        : "text-success/70"
+   651→                    )}
+   652→                  />
+   653→                </div>
+   654→                <div className="min-w-0 flex-1">
+   655→                  <p className="truncate text-sm font-bold capitalize text-text-primary">
+   656→                    {workout.name}
+   657→                  </p>
+   658→                  <p className="text-[10px] text-text-secondary">
+   659→                    {workout.exerciseCount} exercises · {formatVolume(workout.volume)}kg ·{" "}
+   660→                    {new Date(workout.date).toLocaleDateString("en-US", {
+   661→                      day: "numeric",
+   662→                      month: "short",
+   663→                    })}
+   664→                  </p>
+   665→                </div>
+   666→                {workout.prCount > 0 && (
+   667→                  <div className="flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5">
+   668→                    <Trophy className="h-3 w-3 text-warning" />
+   669→                    <span className="text-[9px] font-bold text-warning">{workout.prCount} PRs</span>
+   670→                  </div>
+   671→                )}
+   672→                <Clock className="h-4 w-4 shrink-0 text-text-secondary" />
+   673→              </motion.div>
+   674→            ))}
+   675→          </div>
+   676→        ) : (
+   677→          <div
+   678→            className="glass-card flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-success/20 bg-success/[0.01] p-8 text-center"
+   679→            style={{ boxShadow: "0 0 25px rgba(0,230,118,0.03)" }}
+   680→          >
+   681→            <div
+   682→              className="flex h-14 w-14 items-center justify-center rounded-2xl bg-success/10 border border-success/20"
+   683→              style={{ boxShadow: "0 0 15px rgba(0,230,118,0.15)" }}
+   684→            >
+   685→              <Target className="h-7 w-7 text-success" />
+   686→            </div>
+   687→            <div className="space-y-1">
+   688→              <h3 className="text-base font-black italic uppercase tracking-wider text-text-primary">
+   689→                Your Journey Starts Here!
+   690→              </h3>
+   691→              <p className="max-w-[280px] text-xs leading-relaxed text-text-secondary">
+   692→                Every legendary athlete started with a single set. Log your first workout today to unlock streaks, stats, and achievements.
+   693→              </p>
+   694→            </div>
+   695→            <Button
+   696→              onClick={handleStartQuickWorkout}
+   697→              variant="primary"
+   698→              className="w-full max-w-[220px] text-xs font-black uppercase tracking-widest italic py-3 mt-2 bg-success text-[#050505] hover:bg-success/90"
+   699→              style={{ boxShadow: "0 0 15px rgba(0,230,118,0.2)" }}
+   700→            >
+   701→              <Play className="h-3.5 w-3.5 fill-[#050505]" />
+   702→              Start First Workout
+   703→            </Button>
+   704→          </div>
+   705→        )}
+   706→      </motion.section>
+   707→
+   708→      {/* ── SECTION 10: Quick Links ── */}
+   709→      <motion.section
+   710→        custom={9}
+   711→        variants={fadeUp}
+   712→        initial="hidden"
+   713→        animate="visible"
+   714→        className="grid grid-cols-2 gap-3 pb-4"
+   715→      >
+   716→        <Link
+   717→          to="/stats"
+   718→          className="glass-card flex flex-col items-center gap-2 rounded-2xl border border-border p-4 transition-colors hover:bg-bg-elevated"
+   719→        >
+   720→          <TrendingUp className="h-5 w-5 text-success" />
+   721→          <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
+   722→            {t("stats")}
+   723→          </span>
+   724→        </Link>
+   725→        <Link
+   726→          to="/body"
+   727→          className="glass-card flex flex-col items-center gap-2 rounded-2xl border border-border p-4 transition-colors hover:bg-bg-elevated"
+   728→        >
+   729→          <Target className="h-5 w-5 text-warning" />
+   730→          <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
+   731→            {t("body_metrics")}
+   732→          </span>
+   733→        </Link>
+   734→      </motion.section>
+   735→    </div>
+   736→  );
+   737→}
+   738→

@@ -32,6 +32,7 @@ import { ACHIEVEMENTS } from "@/data/achievements";
 import { routineTemplates, buildTemplateRoutine } from "@/data/routineTemplates";
 import { uid } from "@/utils/id";
 import RecoveryHeatmap from "@/components/RecoveryHeatmap";
+import { KineticEmptyState } from "@/components/ui-custom/KineticEmptyState";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -496,41 +497,11 @@ export default function HomePage() {
             ))}
           </div>
         ) : (
-          <div
-            className="glass-card flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-primary/20 bg-primary/[0.02] p-8 text-center"
-            style={{ boxShadow: "0 0 25px rgba(204,255,0,0.05)" }}
-          >
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20"
-              style={{ boxShadow: "0 0 15px rgba(204,255,0,0.2)" }}
-            >
-              <Dumbbell className="h-7 w-7 text-primary" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-base font-black italic uppercase tracking-wider text-text-primary">
-                Design Your Training Flow
-              </h3>
-              <p className="max-w-[280px] text-xs leading-relaxed text-text-secondary">
-                Build your own routine from scratch, or let our AI generate a personalized program for you.
-              </p>
-            </div>
-            <div className="flex w-full max-w-[260px] justify-center gap-3 mt-1">
-              <Button
-                onClick={() => navigate({ to: "/builder" })}
-                variant="outline"
-                className="flex-1 border-border bg-bg-elevated/40 text-xs py-2.5"
-              >
-                {t("build_manually")}
-              </Button>
-              <Button
-                onClick={() => navigate({ to: "/wizard" })}
-                variant="primary"
-                className="flex-1 text-xs py-2.5"
-              >
-                {t("generate_with_ai")}
-              </Button>
-            </div>
-          </div>
+          <KineticEmptyState
+            variant="routines"
+            actionLabel="Create Routine"
+            onAction={() => navigate({ to: "/builder" })}
+          />
         )}
       </motion.section>
 
@@ -674,34 +645,11 @@ export default function HomePage() {
             ))}
           </div>
         ) : (
-          <div
-            className="glass-card flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-success/20 bg-success/[0.01] p-8 text-center"
-            style={{ boxShadow: "0 0 25px rgba(0,230,118,0.03)" }}
-          >
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-2xl bg-success/10 border border-success/20"
-              style={{ boxShadow: "0 0 15px rgba(0,230,118,0.15)" }}
-            >
-              <Target className="h-7 w-7 text-success" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-base font-black italic uppercase tracking-wider text-text-primary">
-                Your Journey Starts Here!
-              </h3>
-              <p className="max-w-[280px] text-xs leading-relaxed text-text-secondary">
-                Every legendary athlete started with a single set. Log your first workout today to unlock streaks, stats, and achievements.
-              </p>
-            </div>
-            <Button
-              onClick={handleStartQuickWorkout}
-              variant="primary"
-              className="w-full max-w-[220px] text-xs font-black uppercase tracking-widest italic py-3 mt-2 bg-success text-[#050505] hover:bg-success/90"
-              style={{ boxShadow: "0 0 15px rgba(0,230,118,0.2)" }}
-            >
-              <Play className="h-3.5 w-3.5 fill-[#050505]" />
-              Start First Workout
-            </Button>
-          </div>
+          <KineticEmptyState
+            variant="workouts"
+            actionLabel="Start Workout"
+            onAction={handleStartQuickWorkout}
+          />
         )}
       </motion.section>
 

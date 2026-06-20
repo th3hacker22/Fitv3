@@ -13,6 +13,9 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
   const navigate = useNavigate();
 
   const signInLocal = async (emailInput: string) => {
@@ -69,6 +72,35 @@ export default function AuthPage() {
       setError("Sign-in failed");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSendResetEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!email.trim()) {
+      setError("Please enter your email address");
+      return;
+    }
+    if (!email.includes("@")) {
+      setError("Please enter a valid email");
+      return;
+    }
+    setResetLoading(true);
+    try {
+      // Offline-first: simulate password reset email send.
+      // When Firebase Auth is integrated, replace with:
+      //   await sendPasswordResetEmail(auth, email);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      setResetSuccess(true);
+      setTimeout(() => {
+        setShowResetPassword(false);
+        setResetSuccess(false);
+      }, 2000);
+    } catch {
+      setError("Failed to send reset email. Please try again.");
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -151,6 +183,62 @@ export default function AuthPage() {
           )}
         </AnimatePresence>
 
+        {showResetPassword ? (
+          <div className="space-y-5">
+            <div className="text-center mb-4">
+              <h3 className="text-lg font-black italic uppercase text-white tracking-tight">RESET PASSWORD</h3>
+              <p className="text-[10px] text-text-secondary uppercase font-bold tracking-widest mt-1">
+                Enter your email and we'll send you a reset link
+              </p>
+            </div>
+
+            {resetSuccess ? (
+              <div className="border border-[#ccff00]/30 bg-[#ccff00]/10 p-4 text-center text-xs font-bold uppercase tracking-wider text-[#ccff00]">
+                Password reset email sent! Check your inbox.
+              </div>
+            ) : (
+              <form onSubmit={handleSendResetEmail} className="space-y-5">
+                <div className="relative group">
+                  <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary group-focus-within:text-[#ccff00] transition-colors" />
+                  <input
+                    type="email"
+                    placeholder="EMAIL ADDRESS"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    onFocus={(e) => e.target.scrollIntoView({ block: "center", behavior: "smooth" })}
+                    className="w-full rounded-none border border-white/10 bg-white/[0.03] py-4 pl-12 pr-4 text-xs text-white placeholder:text-text-muted focus:border-[#ccff00]/60 focus:bg-white/[0.05] focus:outline-none transition-all uppercase tracking-widest"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="w-full bg-[#ccff00] hover:bg-[#b3e600] active:scale-[0.98] text-black font-black italic uppercase text-xs py-4 px-6 rounded-none tracking-widest transition-all shadow-[0_4px_20px_rgba(204,255,0,0.25)] hover:shadow-[0_4px_30px_rgba(204,255,0,0.45)] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {resetLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-black" />
+                  ) : (
+                    <>SEND RESET LINK <ArrowRight className="h-4 w-4 stroke-[3px]" /></>
+                  )}
+                </button>
+              </form>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowResetPassword(false);
+                setError("");
+                setResetSuccess(false);
+              }}
+              className="w-full text-center text-xs font-bold uppercase tracking-widest text-text-secondary hover:text-white min-h-[44px] py-2 cursor-pointer"
+            >
+              ← Back to Login
+            </button>
+          </div>
+        ) : (
+          <>
         {/* ── Form Inputs ── */}
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-4">
@@ -163,6 +251,7 @@ export default function AuthPage() {
                 placeholder="EMAIL ADDRESS"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onFocus={(e) => e.target.scrollIntoView({ block: "center", behavior: "smooth" })}
                 className="w-full rounded-none border border-white/10 bg-white/[0.03] py-4 pl-12 pr-4 text-xs text-white placeholder:text-text-muted focus:border-[#ccff00]/60 focus:bg-white/[0.05] focus:outline-none transition-all uppercase tracking-widest"
                 required
               />
@@ -177,6 +266,7 @@ export default function AuthPage() {
                 placeholder="PASSWORD (ANY VALUE WORKS)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onFocus={(e) => e.target.scrollIntoView({ block: "center", behavior: "smooth" })}
                 className="w-full rounded-none border border-white/10 bg-white/[0.03] py-4 pl-12 pr-4 text-xs text-white placeholder:text-text-muted focus:border-[#ccff00]/60 focus:bg-white/[0.05] focus:outline-none transition-all uppercase tracking-widest"
               />
             </div>
@@ -198,6 +288,24 @@ export default function AuthPage() {
             )}
           </button>
         </form>
+
+        {/* ── Forgot Password Link ── */}
+        {isLogin && !showResetPassword && (
+          <div className="flex justify-end -mt-2 mb-2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowResetPassword(true);
+                setError("");
+              }}
+              className="text-[10px] font-bold uppercase tracking-widest text-text-secondary hover:text-[#ccff00] transition-colors min-h-[44px] py-2 cursor-pointer"
+            >
+              Forgot Password?
+            </button>
+          </div>
+        )}
+          </>
+        )}
 
         {/* ── Divider ── */}
         <div className="relative my-8">
@@ -227,7 +335,7 @@ export default function AuthPage() {
             setIsLogin(!isLogin);
             setError("");
           }}
-          className="w-full text-center text-xs font-bold uppercase tracking-widest text-text-secondary transition-colors hover:text-white mt-6"
+          className="w-full text-center text-xs font-bold uppercase tracking-widest text-text-secondary transition-colors hover:text-white mt-6 min-h-[44px] py-2"
         >
           {isLogin ? (
             <>
