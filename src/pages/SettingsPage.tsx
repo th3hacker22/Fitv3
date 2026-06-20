@@ -31,7 +31,7 @@ import {
   requestNotificationPermission,
   getNotificationPermission,
   sendNotification,
-} from "@/utils/notifications";
+} from "@/services/notificationService";
 import { useTranslation } from "react-i18next";
 import { useToastStore } from "@/store/useToastStore";
 import { useVoiceCoach } from "@/hooks/useVoiceCoach";

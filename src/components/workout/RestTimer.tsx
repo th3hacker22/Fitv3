@@ -6,7 +6,7 @@ import { useWorkoutStore } from "@/store/useWorkoutStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { useGeneratorStore } from "@/store/useGeneratorStore";
 import { playTimerCompleteSound } from "@/utils/audio";
-import { sendNotification } from "@/utils/notifications";
+import { sendNotification } from "@/services/notificationService";
 import { suggestRestDuration, type SmartRestRecommendation } from "@/services/smartRest";
 import { voiceCoach } from "@/services/voiceCoach";
 import { cn } from "@/utils/cn";

@@ -79,8 +79,7 @@ function getClientIp(req: NextRequest): string {
   // If we have trusted proxies configured, only trust X-Forwarded-For
   // when the direct connection came from a trusted proxy.
   if (trustedProxies.size > 0) {
-    // In Next.js middleware, req.ip gives the direct connection IP (when available)
-    const directIp = req.headers.get("x-real-ip") || req.ip || "unknown";
+    const directIp = req.headers.get("x-real-ip") || "unknown";
 
     if (trustedProxies.has(directIp)) {
       // Request came from a trusted proxy — safe to read X-Forwarded-For
@@ -94,10 +93,10 @@ function getClientIp(req: NextRequest): string {
   }
 
   // No trusted proxies configured — use the direct IP (don't trust headers)
-  // Fallback: try x-real-ip (set by Caddy), then req.ip, then "unknown"
+  // Fallback: try x-real-ip (set by Caddy), then "unknown"
   const realIp = req.headers.get("x-real-ip");
   if (realIp) return realIp;
-  return req.ip || "unknown";
+  return "unknown";
 }
 
 // ── P0-9: Request body size limits ──
@@ -127,9 +126,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  cleanupBuckets();
-
-  // ── P0-9: Body size check ──
+  // ── P0-9: Body size check (before rate-limiting to reject early) ──
   const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
   if (contentLength > 0) {
     const maxBytes = getBodySizeLimit(pathname);
@@ -142,6 +139,8 @@ export async function middleware(req: NextRequest) {
       );
     }
   }
+
+  cleanupBuckets();
 
   const ip = getClientIp(req);
   const { allowed, remaining } = checkRateLimit(ip, pathname);
