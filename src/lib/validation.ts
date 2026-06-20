@@ -108,3 +108,9 @@ export function handlePrismaError(error: unknown): Response {
   console.error("Prisma error:", error);
   return serverErrorResponse();
 }
+
+// Re-export the Zod-based parsers for convenience. The manual validators above
+// remain for backward compatibility (handlePrismaError, errorResponse, etc.)
+// and will be migrated to Zod-only in Sprint 4.
+export { parseRequestBody, parseQueryParams, parsePathParam } from "./apiSchemas";
+export type { ParseResult } from "./apiSchemas";
