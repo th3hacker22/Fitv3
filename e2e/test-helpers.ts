@@ -82,12 +82,15 @@ export const test = base.extend<{
   authedPage: import("@playwright/test").Page;
 }>({
   authedPage: async ({ page }, use) => {
-    const { uid, idToken } = await createTestUser(
+    const { idToken } = await createTestUser(
       `test-${Date.now()}@example.com`,
       "testpass123"
     );
     const cookie = await mintSessionCookie(page, idToken);
     await setSessionCookie(page, cookie);
+    // Playwright fixture teardown callback — not a React Hook. The react-hooks
+    // plugin misfires because the param is named `use`. Safe to disable here.
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     await use(page);
   },
 });
