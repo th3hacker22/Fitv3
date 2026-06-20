@@ -15,15 +15,23 @@ interface CommentDeleteBody {
   commentId: string;
 }
 
-// Read author identity from headers (name/photo) and JWT cookie (uid).
+// Verify the caller's session and fetch their profile from the database.
+// NEVER trust client-supplied x-user-name or x-user-photo headers.
 async function readAuthor(req: NextRequest) {
   const { uid: verifiedUid, response: authResponse } = await requireUser(req);
   if (!verifiedUid) {
-    return { uid: "local-athlete", name: "Local Athlete", photoURL: null as string | null, authResponse };
+    return { uid: null as string | null, name: "", photoURL: null as string | null, authResponse };
   }
-  const name = req.headers.get("x-user-name")?.trim() || "Local Athlete";
-  const photoHeader = req.headers.get("x-user-photo")?.trim();
-  const photoURL = photoHeader ? photoHeader : null;
+
+  // Fetch the user's profile from the database — do NOT trust client headers
+  const profile = await prisma.publicProfile.findUnique({
+    where: { uid: verifiedUid },
+    select: { displayName: true, photoURL: true },
+  });
+
+  const name = profile?.displayName || "Athlete";
+  const photoURL = profile?.photoURL || null;
+
   return { uid: verifiedUid, name, photoURL, authResponse: null as Response | null };
 }
 
@@ -66,7 +74,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST — create a comment and bump commentCount on the post.
-// Author identity is taken from x-user-* headers (local-auth).
+// Author identity is fetched from PublicProfile by callerUid (never from headers).
 // Wrapped in a transaction so the comment + count are atomic.
 export async function POST(req: NextRequest) {
   try {

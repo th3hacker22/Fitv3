@@ -2,14 +2,11 @@
 import { create } from "zustand";
 import { useAuthStore } from "@/store/useAuthStore";
 
-/** Build headers with x-user-* for auth-gated write operations (uid removed, handled by cookie). */
+/** Build headers for auth-gated write operations.
+ *  User identity is verified server-side via the session cookie —
+ *  do NOT send x-user-name or x-user-photo (they were spoofable). */
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  const user = useAuthStore.getState().user;
   const headers: Record<string, string> = { "Content-Type": "application/json", ...extra };
-  if (user) {
-    headers["x-user-name"] = user.displayName || "Athlete";
-    headers["x-user-photo"] = user.photoURL || "";
-  }
   return headers;
 }
 
