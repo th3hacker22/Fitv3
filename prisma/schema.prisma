@@ -1,0 +1,111 @@
+// Prisma schema for Pulse fitness social + challenges backend.
+// The workout/body/nutrition data stays in the client's IndexedDB (offline-first);
+// this schema only backs the shared social feed, follows, and volume challenges.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model PublicProfile {
+  uid        String   @id
+  displayName String
+  photoURL   String?
+  updatedAt  DateTime @updatedAt
+  following  Follow[] @relation("FollowerRelations")
+  followers  Follow[] @relation("FollowingRelations")
+  feedPosts  FeedPost[]
+}
+
+model Follow {
+  id           String  @id @default(cuid())
+  followerUid  String
+  followingUid String
+  follower     PublicProfile @relation("FollowerRelations", fields: [followerUid], references: [uid])
+  following    PublicProfile @relation("FollowingRelations", fields: [followingUid], references: [uid])
+  followedAt   DateTime @default(now())
+
+  @@unique([followerUid, followingUid])
+}
+
+model FeedPost {
+  id            String   @id @default(cuid())
+  authorUid     String
+  author        PublicProfile @relation(fields: [authorUid], references: [uid])
+  authorName    String
+  authorPhotoURL String?
+  workoutTitle  String
+  duration      Int
+  totalVolume   Int
+  exercisesCount Int
+  kudosCount    Int      @default(0)
+  commentCount  Int      @default(0)
+  createdAt     DateTime @default(now())
+  comments      Comment[]
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      FeedPost  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorUid String
+  authorName String
+  authorPhotoURL String?
+  text      String
+  createdAt DateTime @default(now())
+}
+
+model Challenge {
+  id          String   @id
+  title       String
+  description String
+  goalKg      Int
+  startDate   String
+  endDate     String
+  createdAt   DateTime @default(now())
+  participants Participation[]
+}
+
+model Participation {
+  id                    String                 @id @default(cuid())
+  challengeId           String
+  challenge             Challenge              @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  userId                String
+  userName              String
+  userPhotoURL          String?
+  progressKg            Float                  @default(0)
+  completed             Boolean                @default(false)
+  completedAt           DateTime?
+  joinedAt              DateTime               @default(now())
+  syncedWorkoutSessions SyncedWorkoutSession[]
+
+  @@unique([challengeId, userId])
+}
+
+model SyncedWorkoutSession {
+  id              String        @id @default(cuid())
+  participationId String
+  participation   Participation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+  sessionId       String
+
+  @@unique([participationId, sessionId])
+}
+
+// Learning Loop — server-side mirror of the client's exerciseFeedback table.
+// The authoritative store lives in IndexedDB (Dexie) on the client so the
+// learning loop works offline-first; this Prisma model exists so a future
+// cloud-sync task can persist the user's learned preferences alongside their
+// social data. Mirrors the ExerciseFeedbackEntry interface in src/db/schema.ts.
+model ExerciseFeedback {
+  id            Int      @id @default(autoincrement())
+  exerciseId    String
+  exerciseName  String
+  action        String   // "completed" | "skipped" | "swapped" | "incomplete"
+  timestamp     BigInt
+  sessionId     String?
+  note          String?
+}

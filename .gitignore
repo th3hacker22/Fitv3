@@ -1,0 +1,93 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+local-*
+.claude
+.z-ai-config
+*.log
+dev.log
+dev.out.log
+test
+prompt
+
+server.log
+# Skills directory
+/skills/
+
+# Agent / tooling artifacts
+.agents/
+agent-ctx/
+.zscripts/
+tool-results/
+download/
+examples/
+mini-services/
+write-files.js
+
+# Planning / review docs (no longer relevant after initial implementation)
+AI_GENERATOR_PLAN.md
+ALGORITHM_REVIEW.md
+CODE_AUDIT_V4.md
+CODE_REVIEW.md
+CODE_REVIEW_V3.md
+CONTINUATION_PROMPT.md
+DESIGN_IMPROVEMENT_PLAN.md
+IMPLEMENTATION_PLAN_REMAINING.md
+PULSE_UI_INVENTORY.md
+PULSE_VS_LYFTA_ANALYSIS.md
+PULSE_VS_LYFTA_V2.md
+STITCH_PROMPTS_ROUND2.md
+UI_UX_IMPROVEMENT_PLAN.md
+USER_STORIES_AND_FLOWS.md
+worklog.md
+
+# Database files
+db/custom.db
+db/custom.db-journal
+
+# Upload directory (user screenshots)
+/upload/
+
+# Source project clone (not part of this repo)
+fitv3-source/
+nul
+"service-account.json" 
