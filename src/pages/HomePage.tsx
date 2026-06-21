@@ -15,6 +15,8 @@ import {
   Trash2,
   Copy,
   Trophy,
+  Snowflake,
+  X,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { getWorkoutStreak, getTotalStats, db } from "@/db";
@@ -83,6 +85,7 @@ export default function HomePage() {
   const activeChallenges = useChallengesStore((s) => s.activeChallenges);
   const fetchActiveChallenges = useChallengesStore((s) => s.fetchActiveChallenges);
 
+  const [showStreakBanner, setShowStreakBanner] = useState(true);
   const [localName, setLocalName] = useState<string>("");
 
   useEffect(() => {
@@ -175,6 +178,56 @@ export default function HomePage() {
     }
   };
 
+  // ── Streak Protection Banner logic ──
+  // Show the banner when: streak >= 3, user hasn't trained today, and hasn't
+  // already frozen today. Detect "trained today" by comparing the most recent
+  // workout's date to today's local date.
+  const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+  const lastWorkoutDate = recentWorkouts[0]?.date
+    ? new Date(recentWorkouts[0].date).toLocaleDateString("en-CA")
+    : null;
+  const trainedToday = lastWorkoutDate === todayStr;
+
+  // Also check if a freeze session was already added today
+  const [frozenToday, setFrozenToday] = useState(false);
+  useEffect(() => {
+    db.workoutSessions
+      .filter((s) => s.isFreeze === true)
+      .reverse()
+      .limit(1)
+      .toArray()
+      .then((freezes) => {
+        if (freezes.length > 0) {
+          const freezeDate = new Date(freezes[0].date).toLocaleDateString("en-CA");
+          setFrozenToday(freezeDate === todayStr);
+        }
+      })
+      .catch(() => {});
+  }, [todayStr]);
+
+  const showStreakProtection =
+    showStreakBanner && streak >= 3 && !trainedToday && !frozenToday;
+
+  const handleFreezeStreak = async () => {
+    const dbDate = new Date().toISOString();
+    await db.workoutSessions.add({
+      id: uid(),
+      name: "Streak Freeze ❄️",
+      date: dbDate,
+      duration: 0,
+      exercises: [],
+      completed: true,
+      isFreeze: true,
+      createdAt: dbDate,
+      updatedAt: dbDate,
+    });
+    // Update toast via the store
+    const { useToastStore } = await import("@/store/useToastStore");
+    useToastStore.getState().addToast("success", "Streak frozen for today! ❄️");
+    setFrozenToday(true);
+    setShowStreakBanner(false);
+  };
+
   return (
     <div className="space-y-5 pb-4">
       {/* ── SECTION 1: Hero Card ── */}
@@ -265,6 +318,39 @@ export default function HomePage() {
               );
             })}
           </div>
+        </motion.div>
+      )}
+
+      {/* ── Streak Protection Banner ── */}
+      {showStreakProtection && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="glass-card flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/5 p-3"
+        >
+          <Snowflake className="h-5 w-5 shrink-0 text-warning" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-text-primary">
+              Your {streak}-day streak is active.
+            </p>
+            <p className="text-[10px] text-text-secondary">
+              Rest day? Freeze it to protect your streak. ❄️
+            </p>
+          </div>
+          <button
+            onClick={handleFreezeStreak}
+            className="shrink-0 rounded-lg bg-warning/20 px-3 min-h-[44px] flex items-center justify-center text-xs font-black uppercase tracking-wider text-warning transition-colors hover:bg-warning/30"
+          >
+            Freeze
+          </button>
+          <button
+            onClick={() => setShowStreakBanner(false)}
+            aria-label="Dismiss streak banner"
+            className="shrink-0 flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary transition-colors hover:text-text-primary"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </motion.div>
       )}
 
