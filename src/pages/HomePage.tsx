@@ -6,6 +6,7 @@ import {
   Flame,
   Target,
   TrendingUp,
+  TrendingDown,
   ChevronRight,
   Zap,
   Dumbbell,
@@ -19,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { getWorkoutStreak, getTotalStats, db } from "@/db";
+import { getWorkoutStreak, getTotalStats, getWeeklyVolume, db } from "@/db";
 import { useRoutineStore } from "@/store/useRoutineStore";
 import { useWorkoutStore } from "@/store/useWorkoutStore";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -62,6 +63,7 @@ export default function HomePage() {
     totalVolume: 0,
     totalDuration: 0,
   });
+  const [weeklyVolume, setWeeklyVolume] = useState<{ week: string; volume: number }[]>([]);
   const [recentWorkouts, setRecentWorkouts] = useState<
     { id: string; name: string; date: string; exerciseCount: number; volume: number; prCount: number }[]
   >([]);
@@ -108,14 +110,16 @@ export default function HomePage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [streakData, statsData, sessions] = await Promise.all([
+        const [streakData, statsData, weeklyData, sessions] = await Promise.all([
           getWorkoutStreak(),
           getTotalStats(),
+          getWeeklyVolume(2),
           db.workoutSessions.filter((s) => s.completed === true).reverse().limit(3).toArray(),
         ]);
 
         setStreak(streakData);
         setTotalStats(statsData);
+        setWeeklyVolume(weeklyData);
         setRecentWorkouts(
           sessions.map((s) => ({
             id: s.id,
@@ -353,6 +357,82 @@ export default function HomePage() {
           </button>
         </motion.div>
       )}
+
+      {/* ── Weekly Recap Card ── */}
+      {(() => {
+        const thisWeek = weeklyVolume[0]?.volume ?? 0;
+        const lastWeek = weeklyVolume[1]?.volume ?? 0;
+        const change = lastWeek > 0 ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : null;
+        const hasData = thisWeek > 0 || lastWeek > 0;
+
+        return (
+          <motion.section
+            custom={0.5}
+            variants={fadeUp}
+            initial="hidden"
+            animate="visible"
+            className="glass-card rounded-2xl border border-border p-4"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-1 rounded-full bg-primary" />
+                <h2 className="text-xs font-black uppercase tracking-widest text-text-primary">
+                  This Week
+                </h2>
+              </div>
+              {change !== null && hasData && (
+                <div className={cn(
+                  "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black",
+                  change > 0
+                    ? "bg-success/10 text-success"
+                    : change < 0
+                      ? "bg-danger/10 text-danger"
+                      : "bg-bg-elevated text-text-secondary"
+                )}>
+                  {change > 0 ? <TrendingUp className="h-3 w-3" /> : change < 0 ? <TrendingDown className="h-3 w-3" /> : null}
+                  {change > 0 ? "+" : ""}{change}% vs last week
+                </div>
+              )}
+            </div>
+
+            {hasData ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-bg-elevated/50 p-3 text-center">
+                  <p className="text-2xl font-black tabular-nums text-primary">
+                    {thisWeek >= 1000 ? `${(thisWeek / 1000).toFixed(1)}t` : `${thisWeek.toLocaleString()}`}
+                  </p>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-text-secondary mt-0.5">
+                    Volume (kg)
+                  </p>
+                </div>
+                <div className="rounded-xl bg-bg-elevated/50 p-3 text-center">
+                  <p className="text-2xl font-black tabular-nums text-secondary">
+                    {lastWeek >= 1000 ? `${(lastWeek / 1000).toFixed(1)}t` : `${lastWeek.toLocaleString()}`}
+                  </p>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-text-secondary mt-0.5">
+                    Last Week (kg)
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2 py-3">
+                <p className="text-xs text-text-secondary text-center">
+                  No workouts this week yet. Start your first one!
+                </p>
+                <Button
+                  onClick={handleStartQuickWorkout}
+                  variant="primary"
+                  size="sm"
+                  className="text-xs"
+                  icon={<Play className="h-3.5 w-3.5 fill-current" />}
+                >
+                  Start Workout
+                </Button>
+              </div>
+            )}
+          </motion.section>
+        );
+      })()}
 
       {/* ── SECTION 2: Quick Stats (3 compact cards) ── */}
       <motion.section
