@@ -24,6 +24,7 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
   const updateSet = useWorkoutStore((s) => s.updateSet);
   const toggleSetComplete = useWorkoutStore((s) => s.toggleSetComplete);
   const addSet = useWorkoutStore((s) => s.addSet);
+  const insertWarmupSets = useWorkoutStore((s) => s.insertWarmupSets);
   const removeSet = useWorkoutStore((s) => s.removeSet);
   const setExerciseNotes = useWorkoutStore((s) => s.setExerciseNotes);
   const [tipsOpen, setTipsOpen] = useState(false);
@@ -390,6 +391,7 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
         workingWeight={firstSetWeight}
         exerciseName={localizedName}
         exerciseEquipment={exercise.equipment}
+        onInsert={(warmupSets) => insertWarmupSets(exerciseIndex, warmupSets)}
       />
       <PlateCalculatorSheet
         isOpen={showPlates}

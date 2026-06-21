@@ -10,6 +10,7 @@ interface WarmupSheetProps {
   workingWeight: number; // kg, from the first working set
   exerciseName: string;
   exerciseEquipment: string;
+  onInsert?: (sets: Array<{ weight: number; reps: number }>) => void;
 }
 
 export default function WarmupSheet({
@@ -18,6 +19,7 @@ export default function WarmupSheet({
   workingWeight,
   exerciseName,
   exerciseEquipment,
+  onInsert,
 }: WarmupSheetProps) {
   const sets = useMemo(
     () => calculateWarmupSets(workingWeight, exerciseEquipment),
@@ -117,6 +119,19 @@ export default function WarmupSheet({
                 <p className="mt-4 text-center text-xs text-text-muted">
                   After warmup, rest 2-3 min before your first working set.
                 </p>
+
+                {onInsert && (
+                  <button
+                    onClick={() => {
+                      onInsert(sets.map((s) => ({ weight: s.weight, reps: s.reps })));
+                      onClose();
+                    }}
+                    className="mt-4 w-full rounded-xl bg-warning py-3 text-sm font-black uppercase tracking-wider text-black transition-colors hover:bg-warning/90 active:scale-[0.98] min-h-[44px] flex items-center justify-center gap-2"
+                  >
+                    <Flame className="h-4 w-4" />
+                    Insert These Sets
+                  </button>
+                )}
               </>
             )}
           </motion.div>

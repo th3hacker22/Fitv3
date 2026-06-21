@@ -212,6 +212,7 @@ interface WorkoutState {
   resumeWorkout: () => void;
   replaceExercise: (exerciseIndex: number, newExerciseId: string) => Promise<void>;
   addSet: (exerciseIndex: number) => Promise<void>;
+  insertWarmupSets: (exerciseIndex: number, warmupSets: Array<{ weight: number; reps: number }>) => void;
   removeSet: (exerciseIndex: number, setId: string) => void;
   setExerciseNotes: (exerciseIndex: number, notes: string) => void;
   updateSet: (
@@ -310,6 +311,32 @@ export const useWorkoutStore = create<WorkoutState>()(
           previousReps: ghostReps,
         },
       ],
+    };
+
+    set({ activeWorkout: { ...activeWorkout, exercises } });
+  },
+
+  // ── Insert warmup sets at the beginning of an exercise ──
+  // Prepends calculated warmup sets (from warmupCalculator) before the working sets.
+  insertWarmupSets: (exerciseIndex, warmupSets) => {
+    const { activeWorkout } = get();
+    if (!activeWorkout || warmupSets.length === 0) return;
+
+    const exercises = [...activeWorkout.exercises];
+    const exercise = exercises[exerciseIndex];
+    if (!exercise) return;
+
+    const newWarmupSets: WorkoutSet[] = warmupSets.map((ws) => ({
+      id: uid(),
+      weight: String(ws.weight),
+      reps: String(ws.reps),
+      rpe: "",
+      completed: false,
+    }));
+
+    exercises[exerciseIndex] = {
+      ...exercise,
+      sets: [...newWarmupSets, ...exercise.sets],
     };
 
     set({ activeWorkout: { ...activeWorkout, exercises } });
