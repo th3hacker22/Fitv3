@@ -59,6 +59,8 @@ function inferExerciseRole(exercise: WorkoutExerciseItem): ExerciseRole {
 }
 
 // ── Types ──
+export type SetType = "normal" | "warmup" | "drop_set";
+
 export interface WorkoutSet {
   id: string;
   weight: string;
@@ -67,6 +69,7 @@ export interface WorkoutSet {
   completed: boolean;
   previousWeight?: number;
   previousReps?: number;
+  setType?: SetType;
 }
 
 export interface WorkoutExerciseItem {
@@ -213,6 +216,7 @@ interface WorkoutState {
   replaceExercise: (exerciseIndex: number, newExerciseId: string) => Promise<void>;
   addSet: (exerciseIndex: number) => Promise<void>;
   insertWarmupSets: (exerciseIndex: number, warmupSets: Array<{ weight: number; reps: number }>) => void;
+  setSetType: (exerciseIndex: number, setId: string, setType: SetType) => void;
   removeSet: (exerciseIndex: number, setId: string) => void;
   setExerciseNotes: (exerciseIndex: number, notes: string) => void;
   updateSet: (
@@ -332,11 +336,31 @@ export const useWorkoutStore = create<WorkoutState>()(
       reps: String(ws.reps),
       rpe: "",
       completed: false,
+      setType: "warmup" as SetType,
     }));
 
     exercises[exerciseIndex] = {
       ...exercise,
       sets: [...newWarmupSets, ...exercise.sets],
+    };
+
+    set({ activeWorkout: { ...activeWorkout, exercises } });
+  },
+
+  // ── Cycle/set the type of a set (normal → warmup → drop_set) ──
+  setSetType: (exerciseIndex, setId, setType) => {
+    const { activeWorkout } = get();
+    if (!activeWorkout) return;
+
+    const exercises = [...activeWorkout.exercises];
+    const exercise = exercises[exerciseIndex];
+    if (!exercise) return;
+
+    exercises[exerciseIndex] = {
+      ...exercise,
+      sets: exercise.sets.map((s) =>
+        s.id === setId ? { ...s, setType } : s
+      ),
     };
 
     set({ activeWorkout: { ...activeWorkout, exercises } });
@@ -480,6 +504,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                   rpe: s.rpe ? Number(s.rpe) : undefined,
                   completed: true,
                   estimated1RM: estimateOneRepMax(w, r),
+                  setType: s.setType || "normal",
                 };
               }),
           })),

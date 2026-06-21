@@ -17,6 +17,7 @@ interface SetRowProps {
   onUpdateReps: (value: string) => void;
   onUpdateRpe?: (value: string) => void;
   onRemoveSet?: () => void;
+  onCycleSetType?: () => void;
 }
 
 const SetRow = memo(
@@ -30,8 +31,32 @@ const SetRow = memo(
     onUpdateReps,
     onUpdateRpe,
     onRemoveSet,
+    onCycleSetType,
   }: SetRowProps) => {
     const isCompleted = set.completed;
+    const setType = set.setType || "normal";
+
+    // Set type visual styles
+    const setTypeBg =
+      setType === "warmup"
+        ? "bg-warning/5"
+        : setType === "drop_set"
+          ? "bg-secondary/5"
+          : isCompleted
+            ? "bg-success/5"
+            : "bg-transparent";
+
+    const setNumberBg =
+      setType === "warmup"
+        ? "bg-warning/15 text-warning"
+        : setType === "drop_set"
+          ? "bg-secondary/15 text-secondary"
+          : isCompleted
+            ? "bg-success/15 text-success"
+            : "bg-bg-elevated text-text-secondary";
+
+    const setNumberLabel =
+      setType === "warmup" ? "W" : setType === "drop_set" ? "D" : setIndex + 1;
 
     // ---- RPE-based color coding ----------------------------------------------
     // RPE scale (1-10): ≤7 easy (green), 8 moderate (yellow), 9 hard (orange),
@@ -62,18 +87,22 @@ const SetRow = memo(
         exit={{ opacity: 0, height: 0 }}
         className={cn(
           "grid grid-cols-[2rem_1fr_1fr_3rem_3rem_2.75rem] gap-2 px-4 py-2.5 transition-colors duration-300 items-center",
-          isCompleted ? "bg-success/5" : "bg-transparent"
+          setTypeBg
         )}
       >
         <div className="flex items-center justify-center">
-          <span
+          <button
+            onClick={onCycleSetType}
+            disabled={isCompleted}
             className={cn(
-              "flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold",
-              isCompleted ? "bg-success/15 text-success" : "bg-bg-elevated text-text-secondary"
+              "flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold transition-colors",
+              setNumberBg,
+              !isCompleted && "cursor-pointer hover:opacity-80 active:scale-90"
             )}
+            aria-label={`Set type: ${setType}. Tap to cycle.`}
           >
-            {setIndex + 1}
-          </span>
+            {setNumberLabel}
+          </button>
         </div>
 
         <div className="flex flex-col items-center w-full min-w-0">

@@ -25,6 +25,7 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
   const toggleSetComplete = useWorkoutStore((s) => s.toggleSetComplete);
   const addSet = useWorkoutStore((s) => s.addSet);
   const insertWarmupSets = useWorkoutStore((s) => s.insertWarmupSets);
+  const setSetType = useWorkoutStore((s) => s.setSetType);
   const removeSet = useWorkoutStore((s) => s.removeSet);
   const setExerciseNotes = useWorkoutStore((s) => s.setExerciseNotes);
   const [tipsOpen, setTipsOpen] = useState(false);
@@ -370,6 +371,11 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
               onUpdateReps={(val) => handleUpdateReps(set.id, val)}
               onUpdateRpe={(val) => handleUpdateRpe(set.id, val)}
               onRemoveSet={() => handleRemoveSet(set.id)}
+              onCycleSetType={() => {
+                const current = set.setType || "normal";
+                const next = current === "normal" ? "warmup" : current === "warmup" ? "drop_set" : "normal";
+                setSetType(exerciseIndex, set.id, next);
+              }}
             />
           ))}
         </AnimatePresence>

@@ -31,6 +31,7 @@ export interface ExerciseSetData {
   rpe?: number;
   completed: boolean;
   estimated1RM?: number;
+  setType?: "normal" | "warmup" | "drop_set";
 }
 
 // ── Body Measurement Types ──
