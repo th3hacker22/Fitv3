@@ -193,17 +193,28 @@ export function scheduleWorkoutReminders(daysPerWeek: number): void {
 /**
  * Check if a workout reminder should be sent.
  * Sends if:
+ * - Workout reminders are enabled (separate from general notifications)
  * - It's between 8 AM and 8 PM
+ * - Today is a planned workout day (based on daysPerWeek spread across the week)
  * - No workout has been completed today
  * - User hasn't been notified in the last 4 hours
  */
 function checkWorkoutReminder(): void {
   if (!isNotificationsEnabled()) return;
 
+  // Check workout reminders toggle (stored in localStorage by useSettingsStore)
+  const settingsRaw = localStorage.getItem("pulse-settings");
+  if (settingsRaw) {
+    try {
+      const settings = JSON.parse(settingsRaw);
+      if (settings.state && settings.state.workoutReminders === false) return;
+    } catch { /* default to enabled */ }
+  }
+
   const hour = new Date().getHours();
   if (hour < 8 || hour > 20) return; // Only during waking hours
 
-  // Check last notification time
+  // Check last notification time (4-hour cooldown)
   const lastNotif = localStorage.getItem("pulse_last_workout_notif");
   const now = Date.now();
   if (lastNotif) {
@@ -211,11 +222,42 @@ function checkWorkoutReminder(): void {
     if (elapsed < 4 * 60 * 60 * 1000) return; // 4 hours
   }
 
-  // Check if user worked out today
-  // This is a lightweight check — we don't want to hit IndexedDB in an interval
-  // For now, just send the reminder
-  sendNotification("workout_reminder");
+  // Check if today is a planned workout day
+  if (!isPlannedWorkoutDay()) return;
+
+  // Check if user already trained today (stored by HomePage on load)
+  const trainedToday = localStorage.getItem("pulse_trained_today");
+  if (trainedToday === "true") return;
+
+  // Get streak for personalized text
+  const streak = parseInt(localStorage.getItem("pulse_streak_count") || "0");
+
+  // Send with streak text
+  const body = streak > 0
+    ? `Your ${streak}-day streak is waiting. Don't break the chain!`
+    : "Your workout is waiting. Let's crush today's session.";
+  sendNotification("workout_reminder", body);
   localStorage.setItem("pulse_last_workout_notif", String(now));
+}
+
+/**
+ * Check if today is a planned workout day based on daysPerWeek.
+ * Spreads workout days evenly across the week starting from Monday.
+ * e.g., 3 days/week → Mon/Wed/Fri. 4 days → Mon/Tue/Thu/Fri.
+ */
+function isPlannedWorkoutDay(): boolean {
+  const storedDays = localStorage.getItem(WORKOUT_DAYS_KEY);
+  const daysPerWeek = storedDays ? parseInt(storedDays) : 3;
+  if (daysPerWeek >= 7) return true; // every day
+
+  const today = new Date().getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  // Convert to Monday-first index: Mon=0, Tue=1, ..., Sun=6
+  const dayIdx = today === 0 ? 6 : today - 1;
+
+  // Spread days evenly: for N days, workout on days where (dayIdx * N) % 7 < N
+  // This gives an even spread: 3 days → 0,2,4 (Mon, Wed, Fri)
+  // 4 days → 0,1,3,4 (Mon, Tue, Thu, Fri)
+  return (dayIdx * daysPerWeek) % 7 < daysPerWeek;
 }
 
 /**

@@ -14,6 +14,9 @@ export interface SettingsStore {
   notificationsEnabled: boolean;
   toggleNotifications: () => void;
   setNotificationsEnabled: (enabled: boolean) => void;
+  workoutReminders: boolean;
+  toggleWorkoutReminders: () => void;
+  setWorkoutReminders: (enabled: boolean) => void;
   soundEnabled: boolean;
   toggleSound: () => void;
   theme: Theme;
@@ -33,6 +36,10 @@ export const useSettingsStore = create<SettingsStore>()(
       toggleNotifications: () =>
         set((state) => ({ notificationsEnabled: !state.notificationsEnabled })),
       setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
+      workoutReminders: true,
+      toggleWorkoutReminders: () =>
+        set((state) => ({ workoutReminders: !state.workoutReminders })),
+      setWorkoutReminders: (enabled) => set({ workoutReminders: enabled }),
       soundEnabled: true,
       toggleSound: () => set((state) => ({ soundEnabled: !state.soundEnabled })),
       theme: "system",

@@ -27,6 +27,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useExerciseStore } from "@/store/useExerciseStore";
 import { useAchievementsStore } from "@/store/useAchievementsStore";
 import { useGeneratorStore } from "@/store/useGeneratorStore";
+import { useSettingsStore } from "@/store/useSettingsStore";
 import { useChallengesStore } from "@/store/useChallengesStore";
 import AchievementBadge from "@/components/AchievementBadge";
 import { useTranslation } from "react-i18next";
@@ -84,6 +85,8 @@ export default function HomePage() {
 
   // Program + Challenges for "Next Workout" + active challenge cards
   const program = useGeneratorStore((s) => s.program);
+  const daysPerWeek = useGeneratorStore((s) => s.daysPerWeek);
+  const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);
   const activeChallenges = useChallengesStore((s) => s.activeChallenges);
   const fetchActiveChallenges = useChallengesStore((s) => s.fetchActiveChallenges);
 
@@ -120,6 +123,25 @@ export default function HomePage() {
         setStreak(streakData);
         setTotalStats(statsData);
         setWeeklyVolume(weeklyData);
+
+        // ── Sync notification infrastructure ──
+        // Store streak count for notification text
+        localStorage.setItem("pulse_streak_count", String(streakData));
+        // Store whether user trained today (for reminder suppression)
+        const todayStr = new Date().toLocaleDateString("en-CA");
+        const lastSessionDate = sessions[0]?.date
+          ? new Date(sessions[0].date).toLocaleDateString("en-CA")
+          : null;
+        localStorage.setItem("pulse_trained_today", String(lastSessionDate === todayStr));
+        // Sync daysPerWeek to localStorage for notification scheduling
+        localStorage.setItem("pulse_workout_days", String(daysPerWeek));
+        // Initialize workout reminders if notifications are enabled
+        if (notificationsEnabled) {
+          import("@/services/notificationService").then(({ initNotifications }) => {
+            initNotifications();
+          }).catch(() => {});
+        }
+
         setRecentWorkouts(
           sessions.map((s) => ({
             id: s.id,
