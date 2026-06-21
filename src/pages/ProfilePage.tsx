@@ -20,6 +20,8 @@ import {
 import { getWorkoutStreak, getTotalStats, db, getPersonalRecords, getWeeklyTonnage } from "@/db";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useGeneratorStore } from "@/store/useGeneratorStore";
+import { classifyStrength } from "@/services/strengthStandards";
 import { pushToCloud } from "@/lib/syncEngine";
 import { useAchievementsStore } from "@/store/useAchievementsStore";
 import { ACHIEVEMENTS } from "@/data/achievements";
@@ -44,6 +46,7 @@ export default function ProfilePage() {
   const ramadanMode = useSettingsStore((s) => s.ramadanMode);
   const unlockedList = useAchievementsStore((s) => s.unlockedList);
   const loadUnlocked = useAchievementsStore((s) => s.loadUnlocked);
+  const bodyweight = useGeneratorStore((s) => s.weightKg) || 70;
 
   const [showEditNameModal, setShowEditNameModal] = useState(false);
   const [newName, setNewName] = useState("");
@@ -449,6 +452,14 @@ export default function ProfilePage() {
                   <span className="inline-block rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
                     1RM: {Math.round(pr.max1RM)}
                   </span>
+                  {(() => {
+                    const s = classifyStrength(pr.max1RM, bodyweight, pr.exerciseName);
+                    return (
+                      <span className={`ml-1 inline-block rounded border ${s.borderClass} ${s.bgClass} px-1.5 py-0.5 text-[9px] font-bold ${s.colorClass}`}>
+                        {s.level}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
             ))}

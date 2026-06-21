@@ -40,6 +40,8 @@ import {
   getMuscleGroupStats,
 } from "@/db";
 import { useExerciseStore } from "@/store/useExerciseStore";
+import { useGeneratorStore } from "@/store/useGeneratorStore";
+import { classifyStrength } from "@/services/strengthStandards";
 import ExerciseProgressChart from "@/components/stats/ExerciseProgressChart";
 import MuscleVolumeMap from "@/components/stats/MuscleVolumeMap";
 import { useThemeColors } from "@/hooks/useThemeColors";
@@ -58,6 +60,7 @@ export default function StatsPage() {
   const exercisesCount = exercises.length;
   const loadExercises = useExerciseStore((s) => s.loadExercises);
   const chartColors = useThemeColors();
+  const bodyweight = useGeneratorStore((s) => s.weightKg) || 70;
 
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [streak, setStreak] = useState(0);
@@ -509,6 +512,14 @@ export default function StatsPage() {
                   <span className="inline-block rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
                     1RM: {Math.round(pr.max1RM)}kg
                   </span>
+                  {(() => {
+                    const s = classifyStrength(pr.max1RM, bodyweight, pr.exerciseName);
+                    return (
+                      <span className={`ml-1 inline-block rounded border ${s.borderClass} ${s.bgClass} px-1.5 py-0.5 text-[9px] font-bold ${s.colorClass}`}>
+                        {s.level}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
             ))}
