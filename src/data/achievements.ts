@@ -22,6 +22,17 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     },
   },
   {
+    id: "10_workouts",
+    title: "Double Digits",
+    description: "Complete 10 workouts total.",
+    iconName: "Medal",
+    threshold: 10,
+    checkCriteria: async () => {
+      const stats = await getTotalStats();
+      return stats.totalWorkouts >= 10;
+    },
+  },
+  {
     id: "3_day_streak",
     title: "Momentum",
     description: "Reach a 3-day workout streak.",
@@ -124,6 +135,17 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     },
   },
   {
+    id: "50_workouts",
+    title: "Half Century",
+    description: "Complete 50 workouts total.",
+    iconName: "Star",
+    threshold: 50,
+    checkCriteria: async () => {
+      const stats = await getTotalStats();
+      return stats.totalWorkouts >= 50;
+    },
+  },
+  {
     id: "50k_tonnage",
     title: "Powerlifter",
     description: "Reach 50,000 kg total volume in a single week.",
@@ -143,6 +165,28 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     checkCriteria: async () => {
       const stats = await getTotalStats();
       return stats.totalWorkouts >= 250;
+    },
+  },
+  {
+    id: "500_workouts",
+    title: "Iron Legend",
+    description: "Complete 500 workouts total.",
+    iconName: "Crown",
+    threshold: 500,
+    checkCriteria: async () => {
+      const stats = await getTotalStats();
+      return stats.totalWorkouts >= 500;
+    },
+  },
+  {
+    id: "1000_workouts",
+    title: "GOAT",
+    description: "Complete 1000 workouts total. You're a legend forever.",
+    iconName: "Crown",
+    threshold: 1000,
+    checkCriteria: async () => {
+      const stats = await getTotalStats();
+      return stats.totalWorkouts >= 1000;
     },
   },
   {

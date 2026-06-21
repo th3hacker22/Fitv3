@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { Trophy, Flame, Dumbbell, Award, Moon, Sun, Lock } from "lucide-react";
+import { Trophy, Flame, Dumbbell, Award, Moon, Sun, Medal, Star, Crown, Lock } from "lucide-react";
 
 const ICONS: Record<string, React.ElementType> = {
   Trophy,
@@ -9,6 +9,9 @@ const ICONS: Record<string, React.ElementType> = {
   Award,
   Moon,
   Sun,
+  Medal,
+  Star,
+  Crown,
 };
 
 // Color themes per icon type for visual variety
@@ -36,6 +39,24 @@ const ICON_THEMES: Record<string, { color: string; bg: string; glow: string; bor
     bg: "bg-secondary/15",
     glow: "rgba(0,240,255,0.3)",
     border: "border-secondary/30",
+  },
+  Medal: {
+    color: "text-warning",
+    bg: "bg-warning/15",
+    glow: "rgba(255,171,0,0.3)",
+    border: "border-warning/30",
+  },
+  Star: {
+    color: "text-primary",
+    bg: "bg-primary/15",
+    glow: "rgba(204,255,0,0.3)",
+    border: "border-primary/30",
+  },
+  Crown: {
+    color: "text-warning",
+    bg: "bg-warning/15",
+    glow: "rgba(255,171,0,0.4)",
+    border: "border-warning/40",
   },
   Moon: {
     color: "text-info",

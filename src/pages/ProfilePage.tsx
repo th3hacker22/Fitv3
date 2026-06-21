@@ -472,18 +472,34 @@ export default function ProfilePage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {ACHIEVEMENTS.slice(0, 4).map((ach) => {
+          {ACHIEVEMENTS.map((ach) => {
             const unlocked = unlockedList.find((u) => u.achievementId === ach.id);
             const isUnlocked = !!unlocked;
 
             // Calculate progress for locked achievements
             let currentValue = 0;
-            if (ach.id === "first_workout" || ach.id === "100_workouts") {
+            if (
+              ach.id === "first_workout" ||
+              ach.id === "10_workouts" ||
+              ach.id === "25_workouts" ||
+              ach.id === "50_workouts" ||
+              ach.id === "100_workouts" ||
+              ach.id === "250_workouts" ||
+              ach.id === "500_workouts" ||
+              ach.id === "1000_workouts"
+            ) {
               currentValue = totalWorkouts;
-            } else if (ach.id === "3_day_streak" || ach.id === "7_day_streak") {
+            } else if (
+              ach.id === "3_day_streak" ||
+              ach.id === "7_day_streak" ||
+              ach.id === "14_day_streak" ||
+              ach.id === "30_day_streak"
+            ) {
               currentValue = streak;
-            } else if (ach.id === "10k_tonnage") {
+            } else if (ach.id === "10k_tonnage" || ach.id === "50k_tonnage") {
               currentValue = maxWeeklyTonnage;
+            } else if (ach.id === "10_prs") {
+              currentValue = personalRecords.length;
             }
 
             const threshold = ach.threshold || 1;
