@@ -27,6 +27,7 @@ import {
   detectRotationNeeds,
   type VariationRecommendation,
 } from "./variationEngine";
+import { optimizeExerciseOrder } from "./exerciseOrderingEngine";
 import {
   getPreferenceAdjustment,
   type LearningLoopSummary,
@@ -758,10 +759,16 @@ export const generateProgram = (
       }
     }
 
+    // ── Exercise Ordering Intelligence Layer ──
+    // Reorder exercises using training-science rules:
+    // warm-ups first → compounds → accessories, push/pull alternation,
+    // no same-muscle back-to-back, antagonistic pairs adjacent.
+    const orderedExercises = optimizeExerciseOrder(dayExList);
+
     weeklyDays.push({
       name: `Day ${dayIndex + 1} — ${focusTargets[0]}`,
       focus: focusTargets,
-      exercises: dayExList,
+      exercises: orderedExercises,
       estimatedMinutes: Math.round(totalMins + 5),
     });
   });
