@@ -121,4 +121,21 @@ export function registerMigrations(db: Dexie) {
     unlockedAchievements: "id, achievementId, updatedAt, deleted",
     exerciseFeedback: "++id, exerciseId, action, timestamp, sessionId",
   });
+
+  // Version 12 – add goals table (B3: Measurable Goals System).
+  // Non-breaking: only adds a new table; existing tables are re-declared
+  // unchanged (Dexie requires all stores to be re-declared per version).
+  db.version(12).stores({
+    exercises_v2: "id, category, muscleGroup, supersetId",
+    workoutSessions: "++id, date, completed, updatedAt, deleted, supersetId",
+    bodyMeasurements: "++id, date, updatedAt, deleted",
+    progressPhotos: "++id, date, type, updatedAt, deleted",
+    userProfile: "++id, updatedAt, deleted",
+    routines: "++id, name, updatedAt, deleted",
+    foodEntries: "id, date, mealType, updatedAt, deleted",
+    nutritionGoals: "id, updatedAt, deleted",
+    unlockedAchievements: "id, achievementId, updatedAt, deleted",
+    exerciseFeedback: "++id, exerciseId, action, timestamp, sessionId",
+    goals: "id, type, exerciseId, timeFrame, achieved, deleted, updatedAt",
+  });
 }

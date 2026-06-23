@@ -34,6 +34,7 @@ import WorkoutResultView from "@/pages/WorkoutResultView";
 import ChallengesPage from "@/pages/ChallengesPage";
 import ChallengeDetailPage from "@/pages/ChallengeDetailPage";
 import CalendarPage from "@/pages/CalendarPage";
+import GoalsPage from "@/pages/GoalsPage";
 
 const ONBOARDING_KEY = "pulse_onboarding_done";
 const SPLASH_KEY = "pulse_splash_seen";
@@ -179,6 +180,9 @@ function AppShell() {
         break;
       case "calendar":
         content = <CalendarPage />;
+        break;
+      case "goals":
+        content = <GoalsPage />;
         break;
       default:
         content = <HomePage />;

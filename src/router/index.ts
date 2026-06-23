@@ -24,7 +24,8 @@ export type RouteName =
   | "generator-result"
   | "challenges"
   | "challenge-detail"
-  | "calendar";
+  | "calendar"
+  | "goals";
 
 interface RouterState {
   route: RouteName;

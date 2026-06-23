@@ -157,6 +157,31 @@ export interface ExerciseFeedbackEntry {
   note?: string;
 }
 
+// ── Goals (B3: Measurable Goals System) ──
+export type GoalType = "volume" | "1rm" | "reps" | "workouts";
+export type GoalTimeFrame = "week" | "month" | "year";
+
+export interface Goal {
+  id: string;
+  /** What metric to track. */
+  type: GoalType;
+  /** Target value (e.g. 10000 kg-reps for volume, 120 kg for 1RM, 50 reps, 12 workouts). */
+  targetValue: number;
+  /** Optional exercise ID — if set, the goal is scoped to a specific exercise (e.g. "Bench Press 1RM ≥ 120kg"). If undefined, the goal is global. */
+  exerciseId?: string;
+  /** Exercise name (denormalized for display without a join). */
+  exerciseName?: string;
+  /** Time frame for the goal. */
+  timeFrame: GoalTimeFrame;
+  /** Whether the goal has been achieved (set when progress first reaches target). */
+  achieved: boolean;
+  /** When the goal was achieved (ISO string), if applicable. */
+  achievedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
 // ── Database Class ──
 export class PulseDB extends Dexie {
   exercises_v2!: Table<Exercise>;
@@ -169,6 +194,7 @@ export class PulseDB extends Dexie {
   nutritionGoals!: Table<NutritionGoal>;
   unlockedAchievements!: Table<UnlockedAchievement>;
   exerciseFeedback!: Table<ExerciseFeedbackEntry>;
+  goals!: Table<Goal>;
 
   constructor() {
     super("PulseDB");
