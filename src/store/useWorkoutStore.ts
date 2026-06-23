@@ -13,6 +13,10 @@ import { pushToCloud } from "@/lib/syncEngine";
 import { uid } from "@/utils/id";
 import { estimateOneRepMax } from "@/utils/fitnessMath";
 import { voiceCoach } from "@/services/voiceCoach";
+import { nextSetType, countsForPR } from "@/config/setTypes";
+import { suggestRestDuration } from "@/services/smartRest";
+import { useSettingsStore } from "@/store/useSettingsStore";
+import { useGeneratorStore } from "@/store/useGeneratorStore";
 
 // ── Helpers ──
 
@@ -59,8 +63,6 @@ function inferExerciseRole(exercise: WorkoutExerciseItem): ExerciseRole {
 }
 
 // ── Types ──
-export type SetType = "normal" | "warmup" | "drop_set";
-
 export interface WorkoutSet {
   id: string;
   weight: string;
@@ -69,7 +71,12 @@ export interface WorkoutSet {
   completed: boolean;
   previousWeight?: number;
   previousReps?: number;
-  setType?: SetType;
+  /**
+   * Set variant — one of the 11 types from src/config/setTypes.ts.
+   * Optional for backward compatibility with in-flight workouts persisted
+   * to localStorage before this field existed. Defaults to "normal".
+   */
+  setType?: import("@/config/setTypes").SetType;
 }
 
 export interface WorkoutExerciseItem {
@@ -207,6 +214,19 @@ interface WorkoutState {
    * Higher RPE → longer suggested rest. Captured in `toggleSetComplete`.
    */
   restTimerLastRPE?: number;
+  /**
+   * Epoch-millis timestamp when the current rest period ends.
+   * Timestamp-based (not counter-based) so the timer survives tab close /
+   * page reload: on mount, remaining = max(0, restTimerEndTs - Date.now()).
+   * Undefined when no rest is active.
+   */
+  restTimerEndTs?: number;
+  /**
+   * Total duration of the current rest period in seconds (the original
+   * suggested value before any ±preset adjustments). Used as the
+   * denominator for the progress ring and the 15s-warning threshold.
+   */
+  restTimerTotalDuration?: number;
 
   // Actions
   startWorkout: (
@@ -215,8 +235,6 @@ interface WorkoutState {
   resumeWorkout: () => void;
   replaceExercise: (exerciseIndex: number, newExerciseId: string) => Promise<void>;
   addSet: (exerciseIndex: number) => Promise<void>;
-  insertWarmupSets: (exerciseIndex: number, warmupSets: Array<{ weight: number; reps: number }>) => void;
-  setSetType: (exerciseIndex: number, setId: string, setType: SetType) => void;
   removeSet: (exerciseIndex: number, setId: string) => void;
   setExerciseNotes: (exerciseIndex: number, notes: string) => void;
   updateSet: (
@@ -224,8 +242,19 @@ interface WorkoutState {
     setId: string,
     updates: Partial<Pick<WorkoutSet, "weight" | "reps" | "rpe">>
   ) => void;
+  /**
+   * Cycle the setType of a single set to the next value in SET_TYPES order.
+   * Used by SetRow.tsx tap-to-cycle. See src/config/setTypes.ts.
+   */
+  cycleSetType: (exerciseIndex: number, setId: string) => void;
   toggleSetComplete: (exerciseIndex: number, setId: string) => void;
   dismissRestTimer: () => void;
+  /**
+   * Adjust the active rest timer by ±delta seconds (preset buttons).
+   * Shifts restTimerEndTs and bumps restTimerTotalDuration so the progress
+   * ring stays proportional. No-op when no rest is active.
+   */
+  adjustRestTimer: (deltaSeconds: number) => void;
   finishWorkout: (shareToFeed?: boolean) => Promise<void>;
   cancelWorkout: () => void;
 }
@@ -239,6 +268,8 @@ export const useWorkoutStore = create<WorkoutState>()(
       restTimerActive: false,
       restTimerExerciseRole: undefined,
       restTimerLastRPE: undefined,
+      restTimerEndTs: undefined,
+      restTimerTotalDuration: undefined,
 
       // ── Start a new workout session ──
       startWorkout: async (exercisesOrIds) => {
@@ -263,6 +294,8 @@ export const useWorkoutStore = create<WorkoutState>()(
           restTimerActive: false,
           restTimerExerciseRole: undefined,
           restTimerLastRPE: undefined,
+          restTimerEndTs: undefined,
+          restTimerTotalDuration: undefined,
         });
 
         return id;
@@ -320,52 +353,6 @@ export const useWorkoutStore = create<WorkoutState>()(
     set({ activeWorkout: { ...activeWorkout, exercises } });
   },
 
-  // ── Insert warmup sets at the beginning of an exercise ──
-  // Prepends calculated warmup sets (from warmupCalculator) before the working sets.
-  insertWarmupSets: (exerciseIndex, warmupSets) => {
-    const { activeWorkout } = get();
-    if (!activeWorkout || warmupSets.length === 0) return;
-
-    const exercises = [...activeWorkout.exercises];
-    const exercise = exercises[exerciseIndex];
-    if (!exercise) return;
-
-    const newWarmupSets: WorkoutSet[] = warmupSets.map((ws) => ({
-      id: uid(),
-      weight: String(ws.weight),
-      reps: String(ws.reps),
-      rpe: "",
-      completed: false,
-      setType: "warmup" as SetType,
-    }));
-
-    exercises[exerciseIndex] = {
-      ...exercise,
-      sets: [...newWarmupSets, ...exercise.sets],
-    };
-
-    set({ activeWorkout: { ...activeWorkout, exercises } });
-  },
-
-  // ── Cycle/set the type of a set (normal → warmup → drop_set) ──
-  setSetType: (exerciseIndex, setId, setType) => {
-    const { activeWorkout } = get();
-    if (!activeWorkout) return;
-
-    const exercises = [...activeWorkout.exercises];
-    const exercise = exercises[exerciseIndex];
-    if (!exercise) return;
-
-    exercises[exerciseIndex] = {
-      ...exercise,
-      sets: exercise.sets.map((s) =>
-        s.id === setId ? { ...s, setType } : s
-      ),
-    };
-
-    set({ activeWorkout: { ...activeWorkout, exercises } });
-  },
-
   // ── Remove a set from an exercise ──
   removeSet: (exerciseIndex, setId) => {
     const { activeWorkout } = get();
@@ -412,6 +399,27 @@ export const useWorkoutStore = create<WorkoutState>()(
     set({ activeWorkout: { ...activeWorkout, exercises } });
   },
 
+  // ── Cycle the setType of a set (tap-to-cycle in SetRow) ──
+  cycleSetType: (exerciseIndex, setId) => {
+    const { activeWorkout } = get();
+    if (!activeWorkout) return;
+
+    const exercises = [...activeWorkout.exercises];
+    const exercise = exercises[exerciseIndex];
+    if (!exercise) return;
+
+    exercises[exerciseIndex] = {
+      ...exercise,
+      sets: exercise.sets.map((s) => {
+        if (s.id !== setId) return s;
+        const current = s.setType ?? "normal";
+        return { ...s, setType: nextSetType(current) };
+      }),
+    };
+
+    set({ activeWorkout: { ...activeWorkout, exercises } });
+  },
+
   // ── Toggle set completion ──
   toggleSetComplete: (exerciseIndex, setId) => {
     const { activeWorkout } = get();
@@ -447,11 +455,35 @@ export const useWorkoutStore = create<WorkoutState>()(
         : 0
       : get().restTimerLastRPE;
 
+    // Compute the smart-rest duration HERE (in the store) so we can persist
+    // the end timestamp. This makes the timer timestamp-based — it survives
+    // tab close / page reload because restTimerEndTs is persisted.
+    let endTs: number | undefined;
+    let totalDuration: number | undefined;
+    if (willActivate) {
+      const settings = useSettingsStore.getState();
+      const generator = useGeneratorStore.getState();
+      const rec = suggestRestDuration({
+        role: roleForTimer,
+        lastSetRPE: rpeForTimer,
+        goal: generator.goal || "Hypertrophy",
+        defaultRest: settings.restDuration,
+      });
+      totalDuration = rec.seconds;
+      endTs = Date.now() + rec.seconds * 1000;
+    } else {
+      // Preserve existing values on un-complete (timer is only dismissed manually).
+      endTs = get().restTimerEndTs;
+      totalDuration = get().restTimerTotalDuration;
+    }
+
     set({
       activeWorkout: { ...activeWorkout, exercises },
       restTimerActive: willActivate ? true : get().restTimerActive,
       restTimerExerciseRole: roleForTimer,
       restTimerLastRPE: rpeForTimer,
+      restTimerEndTs: endTs,
+      restTimerTotalDuration: totalDuration,
     });
 
     // Voice Coach: encourage the user when a set is marked complete.
@@ -463,7 +495,25 @@ export const useWorkoutStore = create<WorkoutState>()(
 
   // ── Rest Timer ──
   dismissRestTimer: () =>
-    set({ restTimerActive: false, restTimerExerciseRole: undefined, restTimerLastRPE: undefined }),
+    set({
+      restTimerActive: false,
+      restTimerExerciseRole: undefined,
+      restTimerLastRPE: undefined,
+      restTimerEndTs: undefined,
+      restTimerTotalDuration: undefined,
+    }),
+
+  // ── Adjust rest timer by ±delta seconds (preset buttons) ──
+  // Shifts the end timestamp so the countdown reflects the adjustment.
+  // Also bumps totalDuration so the progress ring stays proportional.
+  adjustRestTimer: (deltaSeconds) => {
+    const { restTimerEndTs, restTimerTotalDuration } = get();
+    if (restTimerEndTs == null) return;
+    set({
+      restTimerEndTs: restTimerEndTs + deltaSeconds * 1000,
+      restTimerTotalDuration: Math.max(15, (restTimerTotalDuration ?? 0) + deltaSeconds),
+    });
+  },
 
   // ── Finish workout & save to Dexie ──
   finishWorkout: async (shareToFeed?: boolean) => {
@@ -504,7 +554,8 @@ export const useWorkoutStore = create<WorkoutState>()(
                   rpe: s.rpe ? Number(s.rpe) : undefined,
                   completed: true,
                   estimated1RM: estimateOneRepMax(w, r),
-                  setType: s.setType || "normal",
+                  // Persist the setType so analytics can later filter volume/PR.
+                  setType: s.setType ?? "normal",
                 };
               }),
           })),
@@ -526,6 +577,8 @@ export const useWorkoutStore = create<WorkoutState>()(
       );
 
       // Detect new personal records (highest estimated 1RM completed set per exercise).
+      // Only PR-eligible set types count (excludes warmup/drop/failure/negative/
+      // partial/back_off/myo_reps — see src/config/setTypes.ts).
       let newPrCount = 0;
       for (const ex of session.exercises) {
         let sessionMax1RM = 0;
@@ -533,6 +586,7 @@ export const useWorkoutStore = create<WorkoutState>()(
         let bestSetReps = 0;
 
         for (const s of ex.sets) {
+          if (!countsForPR(s.setType)) continue;
           const e1rm = s.estimated1RM || 0;
           if (e1rm > sessionMax1RM) {
             sessionMax1RM = e1rm;
@@ -603,6 +657,8 @@ export const useWorkoutStore = create<WorkoutState>()(
         restTimerActive: false,
         restTimerExerciseRole: undefined,
         restTimerLastRPE: undefined,
+        restTimerEndTs: undefined,
+        restTimerTotalDuration: undefined,
       });
       useToastStore.getState().addToast("success", "Workout saved successfully!");
     } catch (error) {
@@ -619,6 +675,8 @@ export const useWorkoutStore = create<WorkoutState>()(
       restTimerActive: false,
       restTimerExerciseRole: undefined,
       restTimerLastRPE: undefined,
+      restTimerEndTs: undefined,
+      restTimerTotalDuration: undefined,
     });
   },
     }),
@@ -626,6 +684,15 @@ export const useWorkoutStore = create<WorkoutState>()(
       name: "pulse_workout_session",
       partialize: (state) => ({
         activeWorkout: state.activeWorkout,
+        // Persist the rest-timer state so the timer survives tab close /
+        // page reload. The timestamp-based approach (restTimerEndTs) means
+        // on re-mount the component recomputes the remaining seconds from
+        // restTimerEndTs - Date.now() — no drift, no lost countdown.
+        restTimerActive: state.restTimerActive,
+        restTimerExerciseRole: state.restTimerExerciseRole,
+        restTimerLastRPE: state.restTimerLastRPE,
+        restTimerEndTs: state.restTimerEndTs,
+        restTimerTotalDuration: state.restTimerTotalDuration,
       }),
     }
   )

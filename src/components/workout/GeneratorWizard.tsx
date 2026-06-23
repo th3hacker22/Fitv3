@@ -16,14 +16,15 @@ import {
   Trophy,
   X,
 } from "lucide-react";
-import { useGeneratorStore } from "@/store/useGeneratorStore";
+import { useGeneratorStore, type GeneratorProfile } from "@/store/useGeneratorStore";
 import { useExerciseStore } from "@/store/useExerciseStore";
+import type { WorkoutSession } from "@/db/schema";
+import type { LearningLoopSummary } from "@/services/learningLoop";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import AnatomyMap from "@/components/AnatomyMap";
 import { generateProgram } from "@/services/workoutGenerator";
 import { useRouter } from "@/router";
 import { Button } from "@/components/ui-custom/Button";
-import { Skeleton } from "@/components/ui-custom/Skeleton";
 
 // ═══════════════════════════════════════════════════════════════
 // 5-STEP WIZARD (reduced from 14 steps)
@@ -251,7 +252,7 @@ export const GeneratorWizard = () => {
             duration: s.duration,
             completed: s.completed,
           })),
-          personalRecords: prs.map((pr) => ({ ...pr, exerciseId: String(pr.exerciseId) })),
+          personalRecords: prs,
           analytics: {
             streak,
             totalWorkouts: stats.totalWorkouts,
@@ -335,7 +336,7 @@ export const GeneratorWizard = () => {
       // userData.recentSessions shape would have lost.
       const { generateProgram } = await import("@/services/workoutGenerator");
 
-      let rawSessions: import("@/db/schema").WorkoutSession[] = [];
+      let rawSessions: WorkoutSession[] = [];
       try {
         const { db } = await import("@/db");
         // Fetch up to 30 completed sessions — enough for ACWR (28-day chronic window)
@@ -353,7 +354,7 @@ export const GeneratorWizard = () => {
       const exerciseMap = new Map(exercises.map((e) => [String(e.id), e]));
 
       // ── Load Learning Loop preferences (best-effort, non-blocking) ──
-      let learningLoop: import("@/services/learningLoop").LearningLoopSummary | undefined = undefined;
+      let learningLoop: LearningLoopSummary | undefined = undefined;
       try {
         const { buildLearningLoopSummary } = await import("@/services/learningLoop");
         learningLoop = await buildLearningLoopSummary(90);
@@ -716,7 +717,7 @@ export const GeneratorWizard = () => {
                 return (
                   <button
                     key={k}
-                    onClick={() => profile.updateProfile({ [k]: !active } as Partial<import("@/store/useGeneratorStore").GeneratorProfile>)}
+                    onClick={() => profile.updateProfile({ [k]: !active } as Partial<GeneratorProfile>)}
                     className="flex items-center gap-3 w-full p-4 bg-bg-elevated border border-border rounded-xl"
                   >
                     <div
@@ -986,7 +987,7 @@ export const GeneratorWizard = () => {
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => navigate("home")}
+              onClick={() => navigate({ to: "/#home" })}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-elevated text-text-secondary transition-colors hover:text-text-primary"
               aria-label="Exit generator"
             >
@@ -1156,23 +1157,6 @@ export const GeneratorWizard = () => {
             exit={{ opacity: 0 }}
             className="absolute inset-0 z-50 flex flex-col items-center justify-center rounded-[2rem] bg-bg-card/95 p-6 text-center backdrop-blur-md"
           >
-            {isGenerating && (
-              <div className="space-y-4 p-4 w-full max-w-md">
-                <Skeleton className="h-8 w-3/4" />
-                <Skeleton className="h-4 w-1/2" />
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="space-y-2 p-3 border border-border rounded-lg">
-                    <Skeleton className="h-5 w-2/3" />
-                    <div className="flex gap-4">
-                      <Skeleton className="h-4 w-20" />
-                      <Skeleton className="h-4 w-20" />
-                      <Skeleton className="h-4 w-20" />
-                    </div>
-                  </div>
-                ))}
-                <Skeleton className="h-12 w-full" />
-              </div>
-            )}
             <AILoadingAnimation />
           </motion.div>
         )}

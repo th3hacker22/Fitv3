@@ -31,7 +31,7 @@ import {
   requestNotificationPermission,
   getNotificationPermission,
   sendNotification,
-} from "@/utils/notifications";
+} from "@/services/notificationService";
 import { useTranslation } from "react-i18next";
 import { useToastStore } from "@/store/useToastStore";
 import { useVoiceCoach } from "@/hooks/useVoiceCoach";
@@ -58,8 +58,6 @@ export default function SettingsPage() {
     notificationsEnabled,
     toggleNotifications,
     setNotificationsEnabled,
-    workoutReminders,
-    toggleWorkoutReminders,
     soundEnabled,
     toggleSound,
     theme,
@@ -388,48 +386,6 @@ export default function SettingsPage() {
           </button>
         </div>
       </motion.div>
-
-      {/* ── Workout Reminders (sub-toggle of notifications) ── */}
-      {notificationsEnabled && (
-        <motion.div
-          className="glass-card rounded-[--radius-card] p-4 ml-4"
-          variants={fadeUp}
-          initial="hidden"
-          animate="visible"
-          custom={4}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-warning/10">
-                <Bell className="h-5 w-5 text-warning" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-text-primary uppercase tracking-wider truncate">
-                  Workout Reminders
-                </p>
-                <p className="text-xs text-text-secondary truncate">
-                  Get notified on planned workout days
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={toggleWorkoutReminders}
-              className={cn(
-                "relative h-8 w-14 shrink-0 rounded-full transition-colors duration-300",
-                workoutReminders
-                  ? "bg-primary shadow-[0_0_10px_var(--c-primary-glow)]"
-                  : "bg-toggle-off"
-              )}
-            >
-              <motion.div
-                className="absolute top-1 h-6 w-6 rounded-full bg-white shadow-md"
-                animate={{ x: workoutReminders ? 28 : 4 }}
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
-              />
-            </button>
-          </div>
-        </motion.div>
-      )}
 
       {/* ── Sounds ── */}
       <motion.div

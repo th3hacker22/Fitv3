@@ -32,10 +32,11 @@ import { useRoutineStore } from "@/store/useRoutineStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { uid } from "@/utils/id";
 import AnatomyMap from "@/components/AnatomyMap";
+import type { WorkoutSession } from "@/db/schema";
+import type { LearningLoopSummary } from "@/services/learningLoop";
 import { getMuscleIdsForExercise } from "@/utils/muscleMapper";
 import { getAlternativeExercises } from "@/services/exerciseService";
 import { generateProgram, type ProgramExercise } from "@/services/workoutGenerator";
-import type { WorkoutSession } from "@/db/schema";
 
 function cn(...classes: (string | undefined | null | false)[]) {
   return classes.filter(Boolean).join(" ");
@@ -173,7 +174,7 @@ export default function WorkoutResultView() {
         if (hasProgram) {
           profile.swapProgramExercise(activeDayIdx, idx, nextEx);
         } else {
-          profile.swapExercise(idx, nextEx);
+          profile.swapExercise(idx, { ...profile.routine!.exercises[idx], exercise: nextEx });
         }
       }
       setShufflingExIdx(null);
@@ -201,7 +202,7 @@ export default function WorkoutResultView() {
     const exerciseMap = new Map(exercises.map((e) => [String(e.id), e]));
 
     // ── Load Learning Loop preferences ──
-    let learningLoop: import("@/services/learningLoop").LearningLoopSummary | undefined = undefined;
+    let learningLoop: LearningLoopSummary | undefined = undefined;
     try {
       const { buildLearningLoopSummary } = await import("@/services/learningLoop");
       learningLoop = await buildLearningLoopSummary(90);
@@ -362,7 +363,7 @@ export default function WorkoutResultView() {
                       <div className="min-w-0">
                         {hasProgram && (
                           <span className="text-xs font-black uppercase tracking-widest text-primary/80 mb-0.5 block">
-                            {hasProgram ? (item as ProgramExercise).role : "Exercise"}
+                            {"role" in item ? ((item as Record<string, unknown>).role as string) : "Exercise"}
                           </span>
                         )}
                         <div className="flex items-center gap-2 flex-wrap">
@@ -409,10 +410,10 @@ export default function WorkoutResultView() {
                           <span>{item.restSeconds}s Rest</span>
                         </>
                       ) : null}
-                      {hasProgram && (item as ProgramExercise).tempo ? (
+                      {"tempo" in item && (item as Record<string, unknown>).tempo ? (
                         <>
                           <span className="opacity-30">•</span>
-                          <span>{(item as ProgramExercise).tempo}</span>
+                          <span>{(item as Record<string, unknown>).tempo as string}</span>
                         </>
                       ) : null}
                     </div>
@@ -426,9 +427,9 @@ export default function WorkoutResultView() {
                       </div>
                     )}
 
-                    {hasProgram && (item as ProgramExercise).note && (
+                    {"note" in item && (item as Record<string, unknown>).note && (
                       <p className="mt-2 text-xs text-text-secondary italic leading-snug border-l border-primary/30 pl-2">
-                        {(item as ProgramExercise).note}
+                        {(item as Record<string, unknown>).note as string}
                       </p>
                     )}
                   </div>
@@ -453,7 +454,7 @@ export default function WorkoutResultView() {
       {/* RIGHT COLUMN */}
       <div className="w-full lg:w-[400px] shrink-0">
         <motion.div
-          className="glass-card sticky top-6 rounded-[2rem] border border-border p-6 shadow-2xl pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+          className="glass-card sticky top-6 rounded-[2rem] border border-border p-6 shadow-2xl"
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2 }}

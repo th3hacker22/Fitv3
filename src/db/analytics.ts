@@ -1,6 +1,7 @@
 import { db, type WorkoutSession } from "./schema";
 import type { Exercise } from "@/types/exercise";
 import { estimateOneRepMax } from "@/utils/fitnessMath";
+import { countsInVolume, countsForPR } from "@/config/setTypes";
 
 // Helper: Get completed sessions from cache or indexed query
 async function getCompletedSessions(
@@ -56,7 +57,9 @@ function calculateWeeklyTonnageRaw(weeks: number, sessions: WorkoutSession[]): M
     const weekKey = getWeekKey(new Date(session.date));
     if (weeklyData.has(weekKey)) {
       const vol = session.exercises.reduce(
-        (acc, ex) => acc + ex.sets.reduce((setAcc, s) => setAcc + s.weight * s.reps, 0),
+        (acc, ex) =>
+          acc +
+          ex.sets.reduce((setAcc, s) => setAcc + (countsInVolume(s.setType) ? s.weight * s.reps : 0), 0),
         0
       );
       weeklyData.set(weekKey, (weeklyData.get(weekKey) || 0) + vol);
@@ -108,13 +111,15 @@ export async function getPersonalRecords(preloadedSessions?: WorkoutSession[]) {
 
   for (const session of sessions) {
     for (const ex of session.exercises) {
-      const completedSets = ex.sets.filter((s) => s.completed);
-      if (completedSets.length === 0) continue;
+      // PR-eligible sets: completed AND countsForPR(setType).
+      // Excludes warmup, drop, failure, negative, partial, back-off, myo-rep.
+      const prEligibleSets = ex.sets.filter((s) => s.completed && countsForPR(s.setType));
+      if (prEligibleSets.length === 0) continue;
 
       let bestSet1RM = 0,
         bestSetWeight = 0,
         bestSetReps = 0;
-      for (const s of completedSets) {
+      for (const s of prEligibleSets) {
         const e1rm = s.estimated1RM ?? estimateOneRepMax(s.weight, s.reps);
         if (e1rm > bestSet1RM) {
           bestSet1RM = e1rm;
@@ -192,7 +197,8 @@ export async function getEstimated1RM(
     if (ex && ex.sets.length > 0) {
       let bestE1rm = 0;
       for (const s of ex.sets) {
-        if (!s.completed) continue;
+        // Only PR-eligible sets count toward the e1RM progression trend.
+        if (!s.completed || !countsForPR(s.setType)) continue;
         const e1rm = estimateOneRepMax(s.weight, s.reps);
         if (e1rm > bestE1rm) bestE1rm = e1rm;
       }
@@ -229,7 +235,7 @@ export async function getMuscleGroupStats(
       const exerciseDef = exerciseMap.get(String(ex.exerciseId));
       if (!exerciseDef) continue;
       const volume = ex.sets
-        .filter((s) => s.completed)
+        .filter((s) => s.completed && countsInVolume(s.setType))
         .reduce((sum, s) => sum + s.weight * s.reps, 0);
       muscleData.set(
         exerciseDef.muscleGroup,
@@ -258,7 +264,7 @@ export async function getTotalStats(preloadedSessions?: WorkoutSession[]) {
         (exAcc, ex) =>
           exAcc +
           ex.sets
-            .filter((set) => set.completed)
+            .filter((set) => set.completed && countsInVolume(set.setType))
             .reduce((setAcc, set) => setAcc + set.weight * set.reps, 0),
         0
       ),
@@ -268,3 +274,118 @@ export async function getTotalStats(preloadedSessions?: WorkoutSession[]) {
 
   return { totalWorkouts, totalVolume, totalDuration };
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Monthly calendar analytics (B2)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Per-day activity summary for a single calendar day. Used by CalendarPage
+ * to shade day cells and by DaySessionsDrawer to show the day's breakdown.
+ */
+export interface DayActivitySummary {
+  /** Local date key YYYY-MM-DD (NOT UTC) — matches the streak helper. */
+  dateKey: string;
+  /** Number of completed (non-freeze) sessions on this day. */
+  sessionCount: number;
+  /** Total volume (kg-reps) on this day, respecting countsInVolume. */
+  volume: number;
+  /** Total duration in seconds across all sessions on this day. */
+  duration: number;
+  /** Number of distinct exercises trained. */
+  exerciseCount: number;
+  /** Whether the day has any activity (convenience flag for the grid). */
+  isActive: boolean;
+}
+
+/**
+ * Get all completed workout sessions that fall within a given calendar month.
+ *
+ * Month is 0-indexed (0 = January, 11 = December) to match JavaScript's Date.
+ * Uses local-timezone date keys (YYYY-MM-DD) so a workout logged at 11pm local
+ * on Jan 31 isn't bucketed into Feb 1 (UTC) — DST-safe, consistent with
+ * getWorkoutStreak.
+ *
+ * Pure data fetch — callers decide how to render. Tested in isolation.
+ *
+ * @param year  Full year (e.g. 2026).
+ * @param month 0-11.
+ * @param preloadedSessions Optional preloaded list (skips the Dexie query).
+ */
+export async function getSessionsByMonth(
+  year: number,
+  month: number,
+  preloadedSessions?: WorkoutSession[]
+): Promise<WorkoutSession[]> {
+  const sessions = await getCompletedSessions(preloadedSessions);
+
+  // Month boundaries in LOCAL time (not UTC). DST-safe: we midnight-truncate
+  // both edges, which handles the 23/25-hour day edge cases.
+  const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0);
+  const startOfNextMonth = new Date(year, month + 1, 1, 0, 0, 0, 0);
+
+  return sessions.filter((s) => {
+    const d = new Date(s.date);
+    return d >= startOfMonth && d < startOfNextMonth;
+  });
+}
+
+/**
+ * Build a per-day activity summary for an entire month.
+ *
+ * Returns a Map keyed by local date (YYYY-MM-DD) → DayActivitySummary.
+ * Days with no sessions are omitted from the map (callers treat missing keys
+ * as inactive). Freeze sessions are excluded (consistent with streak/volume).
+ *
+ * @param year  Full year.
+ * @param month 0-11.
+ * @param preloadedSessions Optional preloaded list.
+ */
+export async function getMonthActivitySummary(
+  year: number,
+  month: number,
+  preloadedSessions?: WorkoutSession[]
+): Promise<Map<string, DayActivitySummary>> {
+  const monthSessions = await getSessionsByMonth(year, month, preloadedSessions);
+  const result = new Map<string, DayActivitySummary>();
+
+  for (const session of monthSessions) {
+    if (session.isFreeze) continue;
+    const dateKey = localDateKey(new Date(session.date));
+
+    const existing = result.get(dateKey);
+    const sessionVolume = session.exercises.reduce(
+      (exAcc, ex) =>
+        exAcc +
+        ex.sets
+          .filter((set) => set.completed && countsInVolume(set.setType))
+          .reduce((setAcc, set) => setAcc + set.weight * set.reps, 0),
+      0
+    );
+    const exerciseCount = new Set(
+      session.exercises
+        .filter((ex) => ex.sets.some((set) => set.completed))
+        .map((ex) => String(ex.exerciseId))
+    ).size;
+
+    if (existing) {
+      existing.sessionCount += 1;
+      existing.volume += sessionVolume;
+      existing.duration += session.duration;
+      existing.exerciseCount += exerciseCount;
+      existing.isActive = true;
+    } else {
+      result.set(dateKey, {
+        dateKey,
+        sessionCount: 1,
+        volume: sessionVolume,
+        duration: session.duration,
+        exerciseCount,
+        isActive: true,
+      });
+    }
+  }
+
+  return result;
+}
+

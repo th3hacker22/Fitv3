@@ -31,7 +31,14 @@ export interface ExerciseSetData {
   rpe?: number;
   completed: boolean;
   estimated1RM?: number;
-  setType?: "normal" | "warmup" | "drop_set";
+  /**
+   * Set variant (normal / warmup / drop_set / failure / right / left /
+   * negative / partial / myo_reps / top_set / back_off).
+   * Optional for backward compatibility — old sessions without this field
+   * are treated as "normal" via `normalizeSetType()`.
+   * See src/config/setTypes.ts for the canonical metadata.
+   */
+  setType?: string;
 }
 
 // ── Body Measurement Types ──
@@ -54,7 +61,8 @@ export interface ProgressPhoto {
   id: string;
   date: string;
   type: "front" | "side" | "back";
-  imageBlob: Blob;
+  imageUrl: string;
+  imageBlob?: Blob;
   thumbnailBlob?: Blob;
   notes?: string;
   createdAt: string;

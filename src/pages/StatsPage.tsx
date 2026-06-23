@@ -27,7 +27,9 @@ import {
   Activity,
   AlertTriangle,
   ChevronRight,
+  Calendar,
 } from "lucide-react";
+import { Link } from "@/router-shim";
 import { KineticEmptyState } from "@/components/ui-custom/KineticEmptyState";
 import { Skeleton } from "@/components/ui-custom/Skeleton";
 import {
@@ -40,8 +42,6 @@ import {
   getMuscleGroupStats,
 } from "@/db";
 import { useExerciseStore } from "@/store/useExerciseStore";
-import { useGeneratorStore } from "@/store/useGeneratorStore";
-import { classifyStrength } from "@/services/strengthStandards";
 import ExerciseProgressChart from "@/components/stats/ExerciseProgressChart";
 import MuscleVolumeMap from "@/components/stats/MuscleVolumeMap";
 import { useThemeColors } from "@/hooks/useThemeColors";
@@ -60,7 +60,6 @@ export default function StatsPage() {
   const exercisesCount = exercises.length;
   const loadExercises = useExerciseStore((s) => s.loadExercises);
   const chartColors = useThemeColors();
-  const bodyweight = useGeneratorStore((s) => s.weightKg) || 70;
 
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [streak, setStreak] = useState(0);
@@ -409,7 +408,7 @@ export default function StatsPage() {
               </defs>
               <XAxis
                 dataKey="week"
-                tick={{ fill: chartColors.textMuted, fontSize: 9 }}
+                tick={{ fill: chartColors.textSecondary, fontSize: 9 }}
                 axisLine={false}
                 tickLine={false}
               />
@@ -421,7 +420,7 @@ export default function StatsPage() {
                   borderRadius: 8,
                   fontSize: 12,
                 }}
-                labelStyle={{ color: chartColors.textMuted }}
+                labelStyle={{ color: chartColors.textSecondary }}
                 formatter={(v: number) => [`${Math.round(v)} kg`, "Volume"]}
               />
               <Bar dataKey="volume" fill="url(#barGradient)" radius={[4, 4, 0, 0]} />
@@ -457,7 +456,7 @@ export default function StatsPage() {
             </div>
             <Activity className="h-4 w-4 text-text-secondary" />
           </div>
-          <ExerciseProgressChart preloadedSessions={sessions} />
+          <ExerciseProgressChart exercises={exercises} sessions={sessions} />
         </motion.section>
       )}
 
@@ -512,14 +511,6 @@ export default function StatsPage() {
                   <span className="inline-block rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
                     1RM: {Math.round(pr.max1RM)}kg
                   </span>
-                  {(() => {
-                    const s = classifyStrength(pr.max1RM, bodyweight, pr.exerciseName);
-                    return (
-                      <span className={`ml-1 inline-block rounded border ${s.borderClass} ${s.bgClass} px-1.5 py-0.5 text-[9px] font-bold ${s.colorClass}`}>
-                        {s.level}
-                      </span>
-                    );
-                  })()}
                 </div>
               </div>
             ))}
@@ -538,15 +529,24 @@ export default function StatsPage() {
         >
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase italic text-text-primary">Consistency</h2>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] font-bold uppercase text-text-secondary">Less</span>
-              <div className="flex gap-0.5">
-                <div className="h-2.5 w-2.5 rounded-sm border border-border bg-bg-elevated" />
-                <div className="h-2.5 w-2.5 rounded-sm bg-primary/30" />
-                <div className="h-2.5 w-2.5 rounded-sm bg-primary/60" />
-                <div className="h-2.5 w-2.5 rounded-sm bg-primary" />
+            <div className="flex items-center gap-3">
+              <Link
+                to="/calendar"
+                className="flex items-center gap-1.5 rounded-lg bg-bg-elevated px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-primary transition-colors hover:bg-bg-hover active:scale-95"
+              >
+                <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+                Calendar
+              </Link>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] font-bold uppercase text-text-secondary">Less</span>
+                <div className="flex gap-0.5">
+                  <div className="h-2.5 w-2.5 rounded-sm border border-border bg-bg-elevated" />
+                  <div className="h-2.5 w-2.5 rounded-sm bg-primary/30" />
+                  <div className="h-2.5 w-2.5 rounded-sm bg-primary/60" />
+                  <div className="h-2.5 w-2.5 rounded-sm bg-primary" />
+                </div>
+                <span className="text-[9px] font-bold uppercase text-text-secondary">More</span>
               </div>
-              <span className="text-[9px] font-bold uppercase text-text-secondary">More</span>
             </div>
           </div>
 

@@ -5,6 +5,7 @@ import { Check, Trash2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import type { WorkoutSet } from "@/store/useWorkoutStore";
 import { rpeColorClass, rpeLabel } from "@/services/smartRest";
+import { getSetTypeMeta } from "@/config/setTypes";
 
 interface SetRowProps {
   set: WorkoutSet;
@@ -16,8 +17,9 @@ interface SetRowProps {
   onUpdateWeight: (value: string) => void;
   onUpdateReps: (value: string) => void;
   onUpdateRpe?: (value: string) => void;
-  onRemoveSet?: () => void;
+  /** Tap-to-cycle the set type chip (11 types). See src/config/setTypes.ts. */
   onCycleSetType?: () => void;
+  onRemoveSet?: () => void;
 }
 
 const SetRow = memo(
@@ -30,33 +32,14 @@ const SetRow = memo(
     onUpdateWeight,
     onUpdateReps,
     onUpdateRpe,
-    onRemoveSet,
     onCycleSetType,
+    onRemoveSet,
   }: SetRowProps) => {
     const isCompleted = set.completed;
-    const setType = set.setType || "normal";
 
-    // Set type visual styles
-    const setTypeBg =
-      setType === "warmup"
-        ? "bg-warning/5"
-        : setType === "drop_set"
-          ? "bg-secondary/5"
-          : isCompleted
-            ? "bg-success/5"
-            : "bg-transparent";
-
-    const setNumberBg =
-      setType === "warmup"
-        ? "bg-warning/15 text-warning"
-        : setType === "drop_set"
-          ? "bg-secondary/15 text-secondary"
-          : isCompleted
-            ? "bg-success/15 text-success"
-            : "bg-bg-elevated text-text-secondary";
-
-    const setNumberLabel =
-      setType === "warmup" ? "W" : setType === "drop_set" ? "D" : setIndex + 1;
+    // ---- Set type metadata (badge + color) -----------------------------------
+    const typeMeta = getSetTypeMeta(set.setType);
+    const isNonDefaultType = typeMeta.id !== "normal";
 
     // ---- RPE-based color coding ----------------------------------------------
     // RPE scale (1-10): ≤7 easy (green), 8 moderate (yellow), 9 hard (orange),
@@ -87,22 +70,37 @@ const SetRow = memo(
         exit={{ opacity: 0, height: 0 }}
         className={cn(
           "grid grid-cols-[2rem_1fr_1fr_3rem_3rem_2.75rem] gap-2 px-4 py-2.5 transition-colors duration-300 items-center",
-          setTypeBg
+          isCompleted ? "bg-success/5" : "bg-transparent"
         )}
       >
-        <div className="flex items-center justify-center">
-          <button
-            onClick={onCycleSetType}
-            disabled={isCompleted}
+        <div className="flex flex-col items-center justify-center gap-1">
+          <span
             className={cn(
-              "flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold transition-colors",
-              setNumberBg,
-              !isCompleted && "cursor-pointer hover:opacity-80 active:scale-90"
+              "flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold",
+              isCompleted ? "bg-success/15 text-success" : "bg-bg-elevated text-text-secondary"
             )}
-            aria-label={`Set type: ${setType}. Tap to cycle.`}
           >
-            {setNumberLabel}
-          </button>
+            {setIndex + 1}
+          </span>
+          {/* Set-type chip: tap to cycle through 11 types.
+              Hidden when completed (no mid-workout type change after logging). */}
+          {onCycleSetType && (
+            <button
+              type="button"
+              onClick={onCycleSetType}
+              disabled={isCompleted}
+              aria-label={`Set type: ${typeMeta.labelEn}. Tap to change.`}
+              title={`${typeMeta.labelEn} (${typeMeta.labelAr})`}
+              className={cn(
+                "flex h-5 min-w-[1.75rem] items-center justify-center rounded-md px-1 text-[10px] font-black tracking-tight transition-all active:scale-90 disabled:opacity-50 disabled:active:scale-100 cursor-pointer",
+                typeMeta.chipBg,
+                typeMeta.chipText,
+                !isNonDefaultType && "opacity-40 hover:opacity-100"
+              )}
+            >
+              {typeMeta.badge}
+            </button>
+          )}
         </div>
 
         <div className="flex flex-col items-center w-full min-w-0">

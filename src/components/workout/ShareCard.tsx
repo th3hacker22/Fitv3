@@ -1,17 +1,9 @@
 "use client";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toPng } from "html-to-image";
-import confetti from "canvas-confetti";
 import { Button } from "@/components/ui-custom/Button";
 import { Share2, Download, X, Dumbbell, Clock, Trophy, Flame } from "lucide-react";
-
-export interface ShareCardPR {
-  exerciseName: string;
-  weight: number;
-  reps: number;
-  estimated1RM: number;
-}
 
 interface ShareCardProps {
   isOpen: boolean;
@@ -23,27 +15,12 @@ interface ShareCardProps {
     exerciseCount: number;
     setCount: number;
     streak?: number;
-    prs?: ShareCardPR[];
   };
 }
 
 export default function ShareCard({ isOpen, onClose, workoutData }: ShareCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-
-  // Fire confetti when the share card opens with PRs
-  useEffect(() => {
-    if (!isOpen || !workoutData.prs || workoutData.prs.length === 0) return;
-    const defaults = {
-      colors: ["#CCFF00", "#00FFFF", "#FF00FF", "#00FF66", "#FFD700"],
-      origin: { y: 0.4 },
-    };
-    confetti({ ...defaults, particleCount: 80, spread: 70, angle: 60 });
-    confetti({ ...defaults, particleCount: 80, spread: 70, angle: 120 });
-    const t1 = setTimeout(() => confetti({ ...defaults, particleCount: 50, spread: 100 }), 300);
-    const t2 = setTimeout(() => confetti({ ...defaults, particleCount: 40, spread: 120, origin: { y: 0.3 } }), 600);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [isOpen, workoutData.prs]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -235,36 +212,6 @@ export default function ShareCard({ isOpen, onClose, workoutData }: ShareCardPro
                   <p className="text-sm font-black text-warning uppercase tracking-widest drop-shadow-sm">
                     {workoutData.streak} Day Streak 🔥
                   </p>
-                </div>
-              )}
-
-              {/* Personal Records */}
-              {workoutData.prs && workoutData.prs.length > 0 && (
-                <div className="relative z-10 mt-4 space-y-2">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Trophy className="h-4 w-4 text-warning" />
-                    <p className="text-xs font-black text-warning uppercase tracking-widest">
-                      {workoutData.prs.length === 1 ? "New Personal Record!" : `${workoutData.prs.length} New Personal Records!`}
-                    </p>
-                  </div>
-                  {workoutData.prs.map((pr, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between rounded-xl bg-warning/10 border border-warning/20 px-4 py-2.5"
-                    >
-                      <span className="text-sm font-bold text-white capitalize truncate max-w-[140px]">
-                        {pr.exerciseName}
-                      </span>
-                      <div className="text-right shrink-0">
-                        <span className="text-sm font-black text-warning tabular-nums">
-                          {pr.weight}kg × {pr.reps}
-                        </span>
-                        <span className="ml-2 text-[10px] font-bold text-warning/60 uppercase">
-                          1RM: {pr.estimated1RM}kg
-                        </span>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               )}
 

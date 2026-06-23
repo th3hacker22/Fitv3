@@ -1,32 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { validateId, serverErrorResponse } from "@/lib/validation";
+import { serverErrorResponse } from "@/lib/validation";
 import { requireUser } from "@/lib/authServer";
+import { parseRequestBody } from "@/lib/apiSchemas";
+import { followBodySchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-interface FollowBody {
-  currentUid: string;
-  targetUid: string;
-}
 
 // Upsert placeholder PublicProfiles for both sides (foreign-key safety),
 // then create the Follow relationship — all in a transaction.
 export async function POST(req: NextRequest) {
   try {
-    const { currentUid, targetUid } = (await req.json()) as FollowBody;
-
-    // ── Input validation ──
-    const follower = validateId(currentUid);
-    const following = validateId(targetUid);
-
-    if (!follower || !following) {
-      return NextResponse.json(
-        { error: "Missing or invalid currentUid or targetUid" },
-        { status: 400 }
-      );
-    }
+    const parsed = await parseRequestBody(req, followBodySchema);
+    if (!parsed.success) return parsed.response;
+    const { currentUid: follower, targetUid: following } = parsed.data;
 
     if (follower === following) {
       return NextResponse.json(
@@ -77,17 +65,9 @@ export async function POST(req: NextRequest) {
 // Remove the Follow relationship if it exists.
 export async function DELETE(req: NextRequest) {
   try {
-    const { currentUid, targetUid } = (await req.json()) as FollowBody;
-
-    const follower = validateId(currentUid);
-    const following = validateId(targetUid);
-
-    if (!follower || !following) {
-      return NextResponse.json(
-        { error: "Missing or invalid currentUid or targetUid" },
-        { status: 400 }
-      );
-    }
+    const parsed = await parseRequestBody(req, followBodySchema);
+    if (!parsed.success) return parsed.response;
+    const { currentUid: follower, targetUid: following } = parsed.data;
 
     // Prevent impersonation
     const auth = await requireUser(req);

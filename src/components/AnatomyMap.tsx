@@ -607,24 +607,18 @@ function AnatomyMapComponent({
     [hovered, activeTip, muscles]
   );
 
-  const isMuscleActive = useCallback(
-    (id: string) => {
-      if (highlightedMuscles && highlightedMuscles.includes(id)) return true;
-      return selected.has(id);
-    },
-    [highlightedMuscles, selected]
-  );
+  const isMuscleActive = (id: string) => {
+    if (highlightedMuscles && highlightedMuscles.includes(id)) return true;
+    return selected.has(id);
+  };
 
-  const isMuscleSecondary = useCallback(
-    (id: string): boolean => {
-      return !!(
-        secondaryHighlightedMuscles &&
-        secondaryHighlightedMuscles.includes(id) &&
-        !isMuscleActive(id)
-      );
-    },
-    [secondaryHighlightedMuscles, isMuscleActive]
-  );
+  const isMuscleSecondary = (id: string): boolean => {
+    return !!(
+      secondaryHighlightedMuscles &&
+      secondaryHighlightedMuscles.includes(id) &&
+      !isMuscleActive(id)
+    );
+  };
 
   const muscleGroups = useMemo(() => {
     return muscles.map((m) => {
@@ -780,9 +774,10 @@ function AnatomyMapComponent({
         ))}
       </div>
 
-      <div className="relative bg-[#050505] rounded-2xl overflow-hidden">
-        <div className="absolute inset-0 anatomy-grid opacity-30" />
-        <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-10">
+      <div className="relative bg-bg-surface/70 rounded-2xl border border-border/40 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/30">
+        <div className="absolute inset-0 anatomy-grid" />
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.02] via-transparent to-secondary/[0.02]" />
+        <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20">
           {!prefersReducedMotion && isInView && (
             <div className="w-full h-16 bg-gradient-to-b from-transparent via-primary/10 to-transparent anatomy-scan-line" />
           )}
@@ -850,6 +845,8 @@ function AnatomyMapComponent({
                 </defs>
                 {bodyOutlineElement}
                 {muscleGroups}
+                {/* Depth overlay for 3D feel */}
+                <rect width="676.49" height="1203.49" fill="url(#depth3d)" pointerEvents="none" />
               </svg>
             </motion.div>
           </AnimatePresence>

@@ -23,7 +23,8 @@ export type RouteName =
   | "wizard"
   | "generator-result"
   | "challenges"
-  | "challenge-detail";
+  | "challenge-detail"
+  | "calendar";
 
 interface RouterState {
   route: RouteName;

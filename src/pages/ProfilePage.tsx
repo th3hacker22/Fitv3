@@ -20,8 +20,6 @@ import {
 import { getWorkoutStreak, getTotalStats, db, getPersonalRecords, getWeeklyTonnage } from "@/db";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { useAuthStore } from "@/store/useAuthStore";
-import { useGeneratorStore } from "@/store/useGeneratorStore";
-import { classifyStrength } from "@/services/strengthStandards";
 import { pushToCloud } from "@/lib/syncEngine";
 import { useAchievementsStore } from "@/store/useAchievementsStore";
 import { ACHIEVEMENTS } from "@/data/achievements";
@@ -46,7 +44,6 @@ export default function ProfilePage() {
   const ramadanMode = useSettingsStore((s) => s.ramadanMode);
   const unlockedList = useAchievementsStore((s) => s.unlockedList);
   const loadUnlocked = useAchievementsStore((s) => s.loadUnlocked);
-  const bodyweight = useGeneratorStore((s) => s.weightKg) || 70;
 
   const [showEditNameModal, setShowEditNameModal] = useState(false);
   const [newName, setNewName] = useState("");
@@ -70,21 +67,31 @@ export default function ProfilePage() {
     }
     if (user) {
       try {
-        await fetch("/api/social/profile", {
+        const res = await fetch("/api/social/profile", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ displayName: newName.trim() }),
+          body: JSON.stringify({ uid: user.uid, displayName: newName.trim() }),
         });
-        useAuthStore.getState().setUser({
-          ...user,
-          displayName: newName.trim(),
-        });
+        if (res.ok) {
+          useAuthStore.getState().setUser({
+            ...user,
+            displayName: newName.trim(),
+          });
+          setShowEditNameModal(false);
+          useToastStore.getState().addToast("success", "Profile name updated!");
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          console.error("Failed to update profile name:", errData);
+          useToastStore.getState().addToast("error", errData.error || "Failed to update name");
+        }
       } catch (err) {
         console.error("Failed to update profile name on server:", err);
+        useToastStore.getState().addToast("error", "Network error — name saved locally only");
       }
+    } else {
+      setShowEditNameModal(false);
+      useToastStore.getState().addToast("success", "Profile name updated!");
     }
-    setShowEditNameModal(false);
-    useToastStore.getState().addToast("success", "Profile name updated!");
   };
 
   const [streak, setStreak] = useState(0);
@@ -452,14 +459,6 @@ export default function ProfilePage() {
                   <span className="inline-block rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
                     1RM: {Math.round(pr.max1RM)}
                   </span>
-                  {(() => {
-                    const s = classifyStrength(pr.max1RM, bodyweight, pr.exerciseName);
-                    return (
-                      <span className={`ml-1 inline-block rounded border ${s.borderClass} ${s.bgClass} px-1.5 py-0.5 text-[9px] font-bold ${s.colorClass}`}>
-                        {s.level}
-                      </span>
-                    );
-                  })()}
                 </div>
               </div>
             ))}
@@ -483,34 +482,18 @@ export default function ProfilePage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {ACHIEVEMENTS.map((ach) => {
+          {ACHIEVEMENTS.slice(0, 4).map((ach) => {
             const unlocked = unlockedList.find((u) => u.achievementId === ach.id);
             const isUnlocked = !!unlocked;
 
             // Calculate progress for locked achievements
             let currentValue = 0;
-            if (
-              ach.id === "first_workout" ||
-              ach.id === "10_workouts" ||
-              ach.id === "25_workouts" ||
-              ach.id === "50_workouts" ||
-              ach.id === "100_workouts" ||
-              ach.id === "250_workouts" ||
-              ach.id === "500_workouts" ||
-              ach.id === "1000_workouts"
-            ) {
+            if (ach.id === "first_workout" || ach.id === "100_workouts") {
               currentValue = totalWorkouts;
-            } else if (
-              ach.id === "3_day_streak" ||
-              ach.id === "7_day_streak" ||
-              ach.id === "14_day_streak" ||
-              ach.id === "30_day_streak"
-            ) {
+            } else if (ach.id === "3_day_streak" || ach.id === "7_day_streak") {
               currentValue = streak;
-            } else if (ach.id === "10k_tonnage" || ach.id === "50k_tonnage") {
+            } else if (ach.id === "10k_tonnage") {
               currentValue = maxWeeklyTonnage;
-            } else if (ach.id === "10_prs") {
-              currentValue = personalRecords.length;
             }
 
             const threshold = ach.threshold || 1;

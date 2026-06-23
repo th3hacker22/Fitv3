@@ -33,6 +33,7 @@ import WizardPage from "@/pages/WizardPage";
 import WorkoutResultView from "@/pages/WorkoutResultView";
 import ChallengesPage from "@/pages/ChallengesPage";
 import ChallengeDetailPage from "@/pages/ChallengeDetailPage";
+import CalendarPage from "@/pages/CalendarPage";
 
 const ONBOARDING_KEY = "pulse_onboarding_done";
 const SPLASH_KEY = "pulse_splash_seen";
@@ -175,6 +176,9 @@ function AppShell() {
         break;
       case "challenge-detail":
         content = <ChallengeDetailPage />;
+        break;
+      case "calendar":
+        content = <CalendarPage />;
         break;
       default:
         content = <HomePage />;

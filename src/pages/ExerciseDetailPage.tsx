@@ -13,6 +13,7 @@ import {
   Zap,
   LineChart as ChartIcon,
 } from "lucide-react";
+import ExerciseVideoPlayer from "@/components/exercise/ExerciseVideoPlayer";
 import { useWorkoutStore } from "@/store/useWorkoutStore";
 import { useTranslation } from "react-i18next";
 import { useExerciseStore } from "@/store/useExerciseStore";
@@ -43,7 +44,6 @@ export default function ExerciseDetailPage() {
   const exercises = useExerciseStore((s) => s.exercises);
   const loadExercises = useExerciseStore((s) => s.loadExercises);
   const isLoading = useExerciseStore((s) => s.isLoading);
-  const [showGif, setShowGif] = useState(false);
   const colors = useThemeColors();
   const [metric, setMetric] = useState<"e1rm" | "volume">("e1rm");
   const [progressData, setProgressData] = useState<
@@ -148,52 +148,26 @@ export default function ExerciseDetailPage() {
         {t("back")}
       </Link>
 
-      {/* ── Exercise Visual (Image/GIF Toggle) ── */}
+      {/* ── Exercise Visual (Image/GIF/Video via ExerciseVideoPlayer) ── */}
       <motion.div
         className="glass-card relative overflow-hidden rounded-[--radius-card]"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <div className="relative aspect-video overflow-hidden bg-bg-elevated w-full">
-          {/* Main Image/GIF */}
-          <img
-            src={showGif ? exercise.gifUrl : exercise.imageUrl}
-            alt={exercise.name}
-            className="image-overlay h-full w-full object-contain"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
-            }}
-          />
+        <ExerciseVideoPlayer
+          exerciseName={exercise.name}
+          imageUrl={exercise.imageUrl}
+          gifUrl={exercise.gifUrl}
+          variant="detail"
+          className="image-overlay w-full"
+        />
 
-          {/* Fallback */}
-          <div className="absolute inset-0 -z-10 flex items-center justify-center">
-            <Dumbbell className="h-20 w-20 text-text-secondary/20" />
-          </div>
-
-          {/* Toggle Button */}
-          <button
-            onClick={() => setShowGif(!showGif)}
-            className="absolute bottom-4 start-4 flex items-center gap-2 rounded-xl bg-bg/90 px-4 py-2 text-xs font-semibold text-text-primary backdrop-blur-sm transition-colors hover:bg-bg border border-border/50"
-          >
-            {showGif ? (
-              <>
-                <span>{t("view_image")}</span>
-              </>
-            ) : (
-              <>
-                <Play className="h-4 w-4 fill-primary text-primary" />
-                <span>{t("view_animation")}</span>
-              </>
-            )}
-          </button>
-
-          {/* Equipment Badge */}
-          <div className="absolute top-4 end-4">
-            <span className="rounded-full bg-primary/20 px-3 py-1 text-xs font-semibold text-primary backdrop-blur-sm capitalize border border-primary/20">
-              {exercise.equipment}
-            </span>
-          </div>
+        {/* Equipment Badge */}
+        <div className="absolute top-4 end-4 z-10">
+          <span className="rounded-full bg-primary/20 px-3 py-1 text-xs font-semibold text-primary backdrop-blur-sm capitalize border border-primary/20">
+            {exercise.equipment}
+          </span>
         </div>
       </motion.div>
 

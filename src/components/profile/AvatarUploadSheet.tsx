@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { X, Camera, Trash2, Upload } from "lucide-react";
 import { resizeImage, saveAvatar, removeAvatar, hasAvatar } from "@/services/avatarService";
 import { notifyAvatarUpdated } from "@/components/ui-custom/Avatar";
+import { useAuthStore } from "@/store/useAuthStore";
 
 interface AvatarUploadSheetProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ export default function AvatarUploadSheet({ isOpen, onClose }: AvatarUploadSheet
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const currentUser = useAuthStore((s) => s.user);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -34,8 +36,13 @@ export default function AvatarUploadSheet({ isOpen, onClose }: AvatarUploadSheet
         return;
       }
 
+      if (!currentUser?.uid) {
+        setError("You must be signed in to upload an avatar");
+        return;
+      }
+
       const resized = await resizeImage(file, 256);
-      saveAvatar(resized);
+      await saveAvatar(resized, currentUser.uid);
       notifyAvatarUpdated();
       onClose();
     } catch (err) {

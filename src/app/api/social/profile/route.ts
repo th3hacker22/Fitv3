@@ -1,39 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import {
-  validateId,
-  validateDisplayName,
-  validateOptionalUrl,
-  serverErrorResponse,
-} from "@/lib/validation";
+import { serverErrorResponse } from "@/lib/validation";
 import { requireUser } from "@/lib/authServer";
+import { parseRequestBody } from "@/lib/apiSchemas";
+import { profileBodySchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-interface ProfileBody {
-  uid: string;
-  displayName: string;
-  photoURL?: string | null;
-}
 
 // Upsert a PublicProfile (used by the social store whenever the local
 // user's profile changes — display name, avatar, etc.).
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as ProfileBody;
-
-    // ── Input validation ──
-    const uid = validateId(body.uid);
-    const displayName = validateDisplayName(body.displayName);
-    const photoURL = validateOptionalUrl(body.photoURL);
-
-    if (!uid || !displayName) {
-      return NextResponse.json(
-        { error: "Missing or invalid uid or displayName" },
-        { status: 400 }
-      );
-    }
+    const parsed = await parseRequestBody(req, profileBodySchema);
+    if (!parsed.success) return parsed.response;
+    const { uid, displayName, photoURL } = parsed.data;
 
     // Verify JWT and prevent impersonation
     const auth = await requireUser(req);

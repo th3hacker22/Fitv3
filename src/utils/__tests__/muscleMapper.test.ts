@@ -4,8 +4,6 @@ import { getMuscleIdsForExercise } from "../muscleMapper";
 // All muscle IDs that actually exist as selectable regions in AnatomyMap.tsx.
 // The mapper must never emit an ID outside this set, or the body map will
 // silently fail to highlight a muscle.
-// IMPORTANT: Keep this list in sync with FRONT[] and BACK[] in AnatomyMap.tsx.
-// Ideally this should be auto-extracted from a shared data file.
 const VALID_IDS = new Set([
   "neck",
   "neck-back",

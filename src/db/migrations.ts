@@ -105,4 +105,20 @@ export function registerMigrations(db: Dexie) {
     unlockedAchievements: "id, achievementId, updatedAt, deleted",
     exerciseFeedback: "++id, exerciseId, action, timestamp, sessionId",
   });
+
+  // Version 11 – add imageUrl field for Firebase Storage-backed progress photos.
+  // The schema string is unchanged (imageUrl is not a primary key or index);
+  // existing blobs remain unchanged.
+  db.version(11).stores({
+    exercises_v2: "id, category, muscleGroup, supersetId",
+    workoutSessions: "++id, date, completed, updatedAt, deleted, supersetId",
+    bodyMeasurements: "++id, date, updatedAt, deleted",
+    progressPhotos: "++id, date, type, updatedAt, deleted",
+    userProfile: "++id, updatedAt, deleted",
+    routines: "++id, name, updatedAt, deleted",
+    foodEntries: "id, date, mealType, updatedAt, deleted",
+    nutritionGoals: "id, updatedAt, deleted",
+    unlockedAchievements: "id, achievementId, updatedAt, deleted",
+    exerciseFeedback: "++id, exerciseId, action, timestamp, sessionId",
+  });
 }

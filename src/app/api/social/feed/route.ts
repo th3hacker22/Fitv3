@@ -1,31 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import {
-  validateId,
-  validateDisplayName,
-  validateOptionalUrl,
-  validateString,
-  validateInt,
-  serverErrorResponse,
-} from "@/lib/validation";
+import { serverErrorResponse } from "@/lib/validation";
 import { requireUser } from "@/lib/authServer";
+import { parseRequestBody } from "@/lib/apiSchemas";
+import { feedPostSchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-interface FeedPostBody {
-  authorUid: string;
-  authorName: string;
-  authorPhotoURL?: string | null;
-  workoutTitle: string;
-  duration: number;
-  totalVolume: number;
-  exercisesCount: number;
-}
-
 // GET — return the 50 most recent feed posts (createdAt desc).
-export async function GET() {
+// Requires authentication to prevent public scraping.
+export async function GET(req: NextRequest) {
   try {
+    // ── Authentication: require valid session ──
+    const { uid, response: authResponse } = await requireUser(req);
+    if (!uid) return authResponse!;
+
     const posts = await prisma.feedPost.findMany({
       orderBy: { createdAt: "desc" },
       take: 50,
@@ -56,30 +46,9 @@ export async function GET() {
 // then create the FeedPost and return it.
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as FeedPostBody;
-
-    // ── Input validation ──
-    const authorUid = validateId(body.authorUid);
-    const authorName = validateDisplayName(body.authorName);
-    const authorPhotoURL = validateOptionalUrl(body.authorPhotoURL);
-    const workoutTitle = validateString(body.workoutTitle, 100);
-    const duration = validateInt(body.duration, 0, 86400); // max 24h
-    const totalVolume = validateInt(body.totalVolume, 0, 1e9);
-    const exercisesCount = validateInt(body.exercisesCount, 0, 100);
-
-    if (!authorUid || !authorName || !workoutTitle) {
-      return NextResponse.json(
-        { error: "Missing or invalid required fields (authorUid, authorName, workoutTitle)" },
-        { status: 400 }
-      );
-    }
-
-    if (duration === null || totalVolume === null || exercisesCount === null) {
-      return NextResponse.json(
-        { error: "Invalid numeric fields (duration, totalVolume, exercisesCount)" },
-        { status: 400 }
-      );
-    }
+    const parsed = await parseRequestBody(req, feedPostSchema);
+    if (!parsed.success) return parsed.response;
+    const { authorUid, authorName, authorPhotoURL, workoutTitle, duration, totalVolume, exercisesCount } = parsed.data;
 
     // Verify JWT and prevent impersonation
     const auth = await requireUser(req);

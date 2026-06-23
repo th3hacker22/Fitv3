@@ -1,24 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/authServer";
+import { parseQueryParams } from "@/lib/apiSchemas";
+import { followingQuerySchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Return an array of UIDs the given user is following.
 // Query: ?uid=<followerUid>
+// Requires authentication to prevent enumeration attacks.
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const uid = searchParams.get("uid");
+    // ── Authentication: require valid session ──
+    const { uid: callerUid, response: authResponse } = await requireUser(req);
+    if (!callerUid) return authResponse!;
 
-    if (!uid) {
-      return NextResponse.json(
-        { error: "Missing uid query parameter" },
-        { status: 400 }
-      );
-    }
-
-    const includeProfiles = searchParams.get("includeProfiles") === "true";
+    const parsed = parseQueryParams(req, followingQuerySchema);
+    if (!parsed.success) return parsed.response;
+    const { uid, includeProfiles } = parsed.data;
 
     if (includeProfiles) {
       const follows = await prisma.follow.findMany({

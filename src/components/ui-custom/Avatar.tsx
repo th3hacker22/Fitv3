@@ -17,10 +17,6 @@ const SIZE_MAP = {
   xl: { container: "h-24 w-24", icon: "h-12 w-12" },
 };
 
-/**
- * Avatar component — displays user's uploaded photo or falls back to User icon.
- * Reads from localStorage (pulse_user_avatar).
- */
 export function Avatar({ size = "md", className, withRing = false }: AvatarProps) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const dims = SIZE_MAP[size];
@@ -28,9 +24,7 @@ export function Avatar({ size = "md", className, withRing = false }: AvatarProps
   useEffect(() => {
     const updateAvatar = () => setAvatarUrl(getAvatar());
     updateAvatar();
-    // Listen for storage changes (in case avatar is updated in another tab)
     window.addEventListener("storage", updateAvatar);
-    // Custom event for same-tab updates
     window.addEventListener("pulse-avatar-updated", updateAvatar);
     return () => {
       window.removeEventListener("storage", updateAvatar);

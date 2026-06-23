@@ -13,7 +13,7 @@
 
 export interface PlateConfig {
   /** Available plate weights in kg, largest first. */
-  availablePlates: readonly number[];
+  availablePlates: number[];
   /** Barbell weight in kg (default 20). */
   barWeight: number;
 }

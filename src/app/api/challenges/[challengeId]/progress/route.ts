@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { validateId, serverErrorResponse } from "@/lib/validation";
+import { serverErrorResponse } from "@/lib/validation";
+import { parseQueryParams, parsePathParam } from "@/lib/apiSchemas";
+import { requireUser } from "@/lib/authServer";
+import { progressQuerySchema } from "./schema";
+import { challengeIdParamSchema } from "../../schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,22 +12,24 @@ export const dynamic = "force-dynamic";
 // GET /api/challenges/[challengeId]/progress?userId=<userId>
 // Return the Participation for (challengeId, userId) or null if not
 // joined yet. Returns 404 if the challenge doesn't exist.
+// Requires authentication to prevent PII leakage.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ challengeId: string }> }
 ) {
   try {
-    const { challengeId } = await params;
-    const { searchParams } = new URL(req.url);
-    const rawUserId = searchParams.get("userId");
+    // ── Authentication: require valid session ──
+    const { uid: callerUid, response: authResponse } = await requireUser(req);
+    if (!callerUid) return authResponse!;
 
-    const userId = validateId(rawUserId);
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Missing or invalid userId query parameter" },
-        { status: 400 }
-      );
-    }
+    const { challengeId: rawChallengeId } = await params;
+    const pathParsed = parsePathParam(rawChallengeId, challengeIdParamSchema);
+    if (!pathParsed.success) return pathParsed.response;
+    const challengeId = pathParsed.data;
+
+    const queryParsed = parseQueryParams(req, progressQuerySchema);
+    if (!queryParsed.success) return queryParsed.response;
+    const { userId } = queryParsed.data;
 
     // Verify the challenge exists.
     const challenge = await prisma.challenge.findUnique({

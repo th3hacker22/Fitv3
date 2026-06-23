@@ -41,10 +41,8 @@ describe("Social store auth headers integration", () => {
       "/api/social/follow",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({
-          "x-user-name": "Test Athlete",
-          "x-user-photo": "https://example.com/photo.jpg",
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentUid: "test-user-123", targetUid: "target-user" }),
       })
     );
 
@@ -80,9 +78,8 @@ describe("Social store auth headers integration", () => {
       "/api/social/kudos",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({
-          "x-user-name": "Test Athlete",
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: "post1" }),
       })
     );
 
@@ -119,15 +116,13 @@ describe("Social store auth headers integration", () => {
 
     await useSocialStore.getState().addComment("post1", "Great workout!");
 
-    // First call should be POST with auth headers
+    // First call should be POST with JSON body (identity verified via cookie, not headers)
     expect(mockFetch).toHaveBeenNthCalledWith(
       1,
       "/api/social/comments",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({
-          "x-user-name": "Test Athlete",
-        }),
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ postId: "post1", text: "Great workout!" }),
       })
     );

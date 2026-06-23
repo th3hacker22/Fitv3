@@ -104,7 +104,7 @@ export default function RecoveryHeatmap() {
       </div>
 
       {/* AnatomyMap with recovery overlay */}
-      <div className="rounded-2xl bg-[#050505] p-2 min-h-[280px]">
+      <div className="rounded-2xl bg-bg-elevated/30 p-2 border border-border/50 min-h-[280px]">
         <AnatomyMap
           readOnly
           highlightedMuscles={justTrainedMuscles}

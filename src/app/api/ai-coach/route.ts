@@ -1,93 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { aiRouter } from "@/server/aiProviders";
-import { validateString, serverErrorResponse } from "@/lib/validation";
+import { serverErrorResponse } from "@/lib/validation";
+import { parseRequestBody } from "@/lib/apiSchemas";
+import { requireUser } from "@/lib/authServer";
 import { assessFatigueACWR } from "@/services/fatigueEngine";
 import { computeMuscleVolumeStatus, buildExerciseHistory } from "@/services/overloadEngine";
 import { assessDeloadNeed } from "@/services/deloadEngine";
 import type { WorkoutSession } from "@/db/schema";
 import type { GeneratorProfile } from "@/store/useGeneratorStore";
+import { coachRequestSchema, type CoachRequest } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-interface CoachRequest {
-  // Wizard profile
-  profile: {
-    gender: string | null;
-    age: number;
-    goal: string | null;
-    fitnessLevel: string | null;
-    trainingYears: number;
-    equipment: string[];
-    priorityMuscles: string[];
-    physiqueFocus: string;
-    injuries: string[];
-    medicalCautions: string[];
-    mobilityLimited: boolean;
-    daysPerWeek: number;
-    sessionLengthMin: number;
-    intensityStyle: string;
-    includeCardio: boolean;
-    includeWarmup: boolean;
-    includeCoreFinisher: boolean;
-    bodyFatLevel: string | null;
-    heightCm: number;
-    weightKg: number;
-  };
-  // Workout history (from client IndexedDB — passed up)
-  recentSessions: Array<{
-    date: string;
-    name: string;
-    exercises: Array<{
-      exerciseId: string;
-      exerciseName: string;
-      sets: Array<{ weight: number; reps: number; completed: boolean }>;
-    }>;
-    duration: number;
-    completed: boolean;
-  }>;
-  // Personal records
-  personalRecords: Array<{
-    exerciseId: string;
-    exerciseName: string;
-    maxWeight: number;
-    max1RM: number;
-    date: string;
-  }>;
-  // Analytics summary
-  analytics: {
-    streak: number;
-    totalWorkouts: number;
-    totalVolume: number;
-    totalDuration: number;
-    muscleGroupStats: Array<{ muscle: string; volume: number }>;
-    weeklyTonnage: Array<{ week: string; tonnage: number }>;
-  };
-  // Available exercises (subset — just IDs + names + targets + equipment)
-  exercises: Array<{
-    id: string;
-    name: string;
-    target: string;
-    equipment: string;
-    bodyPart: string;
-  }>;
-  // Optional user prompt
-  userPrompt?: string;
-}
-
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as CoachRequest;
+    // ── Authentication: require valid session ──
+    const { uid, response: authResponse } = await requireUser(req);
+    if (!uid) return authResponse!;
 
-    // Basic validation
-    const userPrompt = validateString(body.userPrompt, 1000) || "Generate my next workout";
-    if (!body.profile || !body.exercises || body.exercises.length === 0) {
-      return NextResponse.json(
-        { error: "Missing profile or exercises data" },
-        { status: 400 }
-      );
-    }
+    const bodyParsed = await parseRequestBody(req, coachRequestSchema);
+    if (!bodyParsed.success) return bodyParsed.response;
+    const body: CoachRequest = bodyParsed.data;
+
+    // userPrompt is optional; default if absent.
+    const userPrompt = body.userPrompt || "Generate my next workout";
 
     // ── Build comprehensive system prompt ──
     const systemPrompt = buildCoachPrompt(body);
@@ -245,7 +183,14 @@ function buildCoachPrompt(data: CoachRequest): string {
     exerciseMap.set(String(e.id), { muscleGroup: e.bodyPart });
   }
 
-  const fatigue = assessFatigueACWR(sessionsForEngine, { age: profile.age, medicalCautions: profile.medicalCautions, daysPerWeek: profile.daysPerWeek as 2 | 3 | 4 | 5 | 6 }, exerciseMap);
+  // Synthesize a minimal profile for the engine (only the fields it reads)
+  const engineProfile = {
+    age: profile.age,
+    medicalCautions: profile.medicalCautions,
+    daysPerWeek: profile.daysPerWeek,
+  } as GeneratorProfile;
+
+  const fatigue = assessFatigueACWR(sessionsForEngine, engineProfile, exerciseMap);
 
   const fatigueSection = `
 ═══ FATIGUE STATUS (ACWR — Acute:Chronic Workload Ratio) ═══
@@ -287,7 +232,7 @@ ${aboveMAV.map((m) => `  - ${m.muscle}: ${m.weeklySets} sets (MAV: ${m.mav})`).j
   const exerciseHistory = buildExerciseHistory(sessionsForEngine as unknown as WorkoutSession[]);
   const deloadRec = assessDeloadNeed(
     sessionsForEngine as unknown as WorkoutSession[],
-    { age: profile.age },
+    engineProfile as unknown as GeneratorProfile,
     fatigue,
     exerciseHistory
   );

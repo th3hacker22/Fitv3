@@ -1,9 +1,10 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lightbulb, Dumbbell, ChevronDown, ChevronUp, Play, Plus, Flame, SkipForward, RotateCcw } from "lucide-react";
+import { Lightbulb, Dumbbell, ChevronDown, ChevronUp, Plus, Flame, SkipForward, RotateCcw } from "lucide-react";
 import { useState, useCallback, memo } from "react";
 import { cn } from "@/utils/cn";
 import { useWorkoutStore, type WorkoutExerciseItem } from "@/store/useWorkoutStore";
+import ExerciseVideoPlayer from "@/components/exercise/ExerciseVideoPlayer";
 import ReplaceExerciseSheet from "./ReplaceExerciseSheet";
 import WarmupSheet from "./WarmupSheet";
 import PlateCalculatorSheet from "./PlateCalculatorSheet";
@@ -23,14 +24,12 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
 
   const updateSet = useWorkoutStore((s) => s.updateSet);
   const toggleSetComplete = useWorkoutStore((s) => s.toggleSetComplete);
+  const cycleSetType = useWorkoutStore((s) => s.cycleSetType);
   const addSet = useWorkoutStore((s) => s.addSet);
-  const insertWarmupSets = useWorkoutStore((s) => s.insertWarmupSets);
-  const setSetType = useWorkoutStore((s) => s.setSetType);
   const removeSet = useWorkoutStore((s) => s.removeSet);
   const setExerciseNotes = useWorkoutStore((s) => s.setExerciseNotes);
   const [tipsOpen, setTipsOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
-  const [showGif, setShowGif] = useState(false);
   const [showWarmup, setShowWarmup] = useState(false);
   const [showPlates, setShowPlates] = useState(false);
   const [showSkipModal, setShowSkipModal] = useState(false);
@@ -167,35 +166,15 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
       transition={{ duration: 0.4, delay: exerciseIndex * 0.1 }}
     >
       <div className="relative aspect-video bg-bg-elevated overflow-hidden">
-        {/* Fallback icon rendered BEHIND the image (no negative z-index —
-            -z-10 put it behind the parent's bg-bg-elevated, making it
-            invisible when the image errored). */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Dumbbell className="h-12 w-12 text-text-secondary/20" />
-        </div>
-        <img
-          src={showGif ? exercise.gifUrl : exercise.imageUrl}
-          alt={localizedName}
-          className="relative h-full w-full object-contain"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-          }}
+        <ExerciseVideoPlayer
+          exerciseName={localizedName}
+          imageUrl={exercise.imageUrl}
+          gifUrl={exercise.gifUrl}
+          variant="compact"
+          className="relative h-full w-full"
         />
 
-        <button
-          onClick={() => setShowGif(!showGif)}
-          className="absolute bottom-2 start-2 flex items-center gap-1.5 rounded-lg bg-bg/80 px-2.5 py-1.5 text-xs font-semibold text-text-primary backdrop-blur-sm tracking-wider uppercase border border-border/50"
-        >
-          {showGif ? (
-            "Image"
-          ) : (
-            <>
-              <Play className="h-3 w-3 fill-primary text-primary" /> Anim
-            </>
-          )}
-        </button>
-
-        <div className="absolute top-2 end-2 rounded-full bg-bg/80 px-2.5 py-1 text-xs font-bold text-primary backdrop-blur-sm">
+        <div className="absolute top-2 end-2 z-10 rounded-full bg-bg/80 px-2.5 py-1 text-xs font-bold text-primary backdrop-blur-sm">
           {completedSets}/{totalSets}
         </div>
       </div>
@@ -370,12 +349,8 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
               onUpdateWeight={(val) => handleUpdateWeight(set.id, val)}
               onUpdateReps={(val) => handleUpdateReps(set.id, val)}
               onUpdateRpe={(val) => handleUpdateRpe(set.id, val)}
+              onCycleSetType={() => cycleSetType(exerciseIndex, set.id)}
               onRemoveSet={() => handleRemoveSet(set.id)}
-              onCycleSetType={() => {
-                const current = set.setType || "normal";
-                const next = current === "normal" ? "warmup" : current === "warmup" ? "drop_set" : "normal";
-                setSetType(exerciseIndex, set.id, next);
-              }}
             />
           ))}
         </AnimatePresence>
@@ -397,7 +372,6 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
         workingWeight={firstSetWeight}
         exerciseName={localizedName}
         exerciseEquipment={exercise.equipment}
-        onInsert={(warmupSets) => insertWarmupSets(exerciseIndex, warmupSets)}
       />
       <PlateCalculatorSheet
         isOpen={showPlates}

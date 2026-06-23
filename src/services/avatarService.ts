@@ -1,17 +1,9 @@
-/**
- * Avatar Storage Service.
- *
- * Stores user avatar as base64 in localStorage (small images only).
- * For larger images, falls back to IndexedDB via db.userProfile.
- *
- * Avatar is resized to 256x256 before storage to keep size reasonable.
- */
+import { auth, storage } from "@/lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { updateProfile } from "firebase/auth";
 
 const AVATAR_KEY = "pulse_user_avatar";
 
-/**
- * Resize an image file to 256x256 and convert to base64.
- */
 export async function resizeImage(file: File, maxSize = 256): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -25,7 +17,6 @@ export async function resizeImage(file: File, maxSize = 256): Promise<string> {
           return;
         }
 
-        // Calculate dimensions preserving aspect ratio
         let { width, height } = img;
         if (width > height) {
           if (width > maxSize) {
@@ -42,7 +33,6 @@ export async function resizeImage(file: File, maxSize = 256): Promise<string> {
         canvas.width = maxSize;
         canvas.height = maxSize;
 
-        // Center-crop to square
         const minDim = Math.min(img.width, img.height);
         const sx = (img.width - minDim) / 2;
         const sy = (img.height - minDim) / 2;
@@ -60,36 +50,66 @@ export async function resizeImage(file: File, maxSize = 256): Promise<string> {
   });
 }
 
-/**
- * Save avatar to localStorage.
- */
-export function saveAvatar(dataUrl: string): void {
-  try {
-    localStorage.setItem(AVATAR_KEY, dataUrl);
-  } catch (err) {
-    console.error("[avatar] Failed to save:", err);
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, base64] = dataUrl.split(",");
+  const mime = header.match(/:(.*?);/)![1];
+  const binary = atob(base64);
+  const array = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    array[i] = binary.charCodeAt(i);
   }
+  return new Blob([array], { type: mime });
 }
 
 /**
- * Get avatar from localStorage.
+ * Persist the avatar.
+ *
+ * Primary path: upload to Firebase Storage + update the Firebase user profile.
+ * Fallback path (offline-first): when Firebase isn't configured, we keep the
+ * resized data URL in localStorage so the avatar still appears in the UI.
  */
+export async function saveAvatar(dataUrl: string, uid: string): Promise<void> {
+  if (storage && auth?.currentUser) {
+    try {
+      const blob = dataUrlToBlob(dataUrl);
+      const storageRef = ref(storage, `avatars/${uid}.jpg`);
+      await uploadBytesResumable(storageRef, blob);
+      const downloadUrl = await getDownloadURL(storageRef);
+      await updateProfile(auth.currentUser, { photoURL: downloadUrl });
+      localStorage.setItem(AVATAR_KEY, downloadUrl);
+      return;
+    } catch (err) {
+      console.warn("Firebase avatar upload failed, falling back to local:", err);
+    }
+  }
+  localStorage.setItem(AVATAR_KEY, dataUrl);
+}
+
 export function getAvatar(): string | null {
   if (typeof window === "undefined") return null;
+  if (auth?.currentUser?.photoURL) return auth.currentUser.photoURL;
   return localStorage.getItem(AVATAR_KEY);
 }
 
-/**
- * Remove avatar from localStorage.
- */
-export function removeAvatar(): void {
+export async function removeAvatar(): Promise<void> {
+  const user = auth?.currentUser;
+  if (user?.uid && storage) {
+    try {
+      const storageRef = ref(storage, `avatars/${user.uid}.jpg`);
+      await deleteObject(storageRef);
+    } catch {
+      /* swallow — object may not exist */
+    }
+    try {
+      await updateProfile(user, { photoURL: null });
+    } catch {
+      /* swallow — profile update is best-effort */
+    }
+  }
   localStorage.removeItem(AVATAR_KEY);
 }
 
-/**
- * Check if user has an avatar.
- */
 export function hasAvatar(): boolean {
   if (typeof window === "undefined") return false;
-  return !!localStorage.getItem(AVATAR_KEY);
+  return !!(auth?.currentUser?.photoURL || localStorage.getItem(AVATAR_KEY));
 }

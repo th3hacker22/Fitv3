@@ -1,27 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/authServer";
+import { parseRequestBody } from "@/lib/apiSchemas";
+import { postDeleteSchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-interface PostDeleteBody {
-  postId: string;
-}
 
 // DELETE — remove a feed post (ownership-scoped).
 // Only the post author can delete their own post.
 export async function DELETE(req: NextRequest) {
   try {
-    const body = (await req.json()) as PostDeleteBody;
-    const { postId } = body;
-
-    if (!postId) {
-      return NextResponse.json(
-        { error: "Missing postId" },
-        { status: 400 }
-      );
-    }
+    const parsed = await parseRequestBody(req, postDeleteSchema);
+    if (!parsed.success) return parsed.response;
+    const { postId } = parsed.data;
 
     // Read author UID from JWT cookie
     const auth = await requireUser(req);

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { serverErrorResponse } from "@/lib/validation";
+import { parsePathParam } from "@/lib/apiSchemas";
+import { challengeIdParamSchema } from "../../schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +15,10 @@ export async function GET(
   { params }: { params: Promise<{ challengeId: string }> }
 ) {
   try {
-    const { challengeId } = await params;
+    const { challengeId: rawChallengeId } = await params;
+    const pathParsed = parsePathParam(rawChallengeId, challengeIdParamSchema);
+    if (!pathParsed.success) return pathParsed.response;
+    const challengeId = pathParsed.data;
 
     // Verify the challenge exists.
     const challenge = await prisma.challenge.findUnique({
@@ -36,7 +41,7 @@ export async function GET(
     });
 
     return NextResponse.json(
-      participations.map((p) => ({
+      participations.map((p: { userId: string; userName: string; userPhotoURL: string | null; progressKg: number; completed: boolean; completedAt: Date | null; joinedAt: Date }) => ({
         userId: p.userId,
         userName: p.userName,
         userPhotoURL: p.userPhotoURL,

@@ -51,7 +51,34 @@ prompt
 
 server.log
 # Skills directory
-/skills/
+
+# Agent / tooling artifacts
+.agents/
+agent-ctx/
+.zscripts/
+tool-results/
+download/
+examples/
+mini-services/
+write-files.js
+
+# Planning / review docs (no longer relevant after initial implementation)
+AI_GENERATOR_PLAN.md
+ALGORITHM_REVIEW.md
+CODE_AUDIT_V4.md
+CODE_REVIEW.md
+CODE_REVIEW_V3.md
+CONTINUATION_PROMPT.md
+DESIGN_IMPROVEMENT_PLAN.md
+IMPLEMENTATION_PLAN_REMAINING.md
+PULSE_UI_INVENTORY.md
+PULSE_VS_LYFTA_ANALYSIS.md
+PULSE_VS_LYFTA_V2.md
+STITCH_PROMPTS_ROUND2.md
+UI_UX_IMPROVEMENT_PLAN.md
+USER_STORIES_AND_FLOWS.md
+worklog.md
+
 # Database files
 db/custom.db
 db/custom.db-journal
@@ -62,3 +89,7 @@ db/custom.db-journal
 # Source project clone (not part of this repo)
 fitv3-source/
 nul
+
+# Firebase service account (contains private key — NEVER commit)
+service-account.json
+*.firebase-adminsdk-*.json

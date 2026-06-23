@@ -34,6 +34,7 @@ const PATH_TO_ROUTE: Record<string, RouteName> = {
   "/generator/result": "generator-result",
   "/challenges": "challenges",
   "/challenges/$challengeId": "challenge-detail",
+  "/calendar": "calendar",
 };
 
 export function Link({ to, params, className, children, onClick, ...rest }: LinkProps) {

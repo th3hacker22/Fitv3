@@ -1,29 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/authServer";
+import { parseRequestBody, parseQueryParams } from "@/lib/apiSchemas";
+import { commentCreateSchema, commentDeleteSchema, commentsQuerySchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-interface CommentCreateBody {
-  postId: string;
-  text: string;
-}
-
-interface CommentDeleteBody {
-  postId: string;
-  commentId: string;
-}
-
-// Read author identity from headers (name/photo) and JWT cookie (uid).
+// Verify the caller's session and fetch their profile from the database.
+// NEVER trust client-supplied x-user-name or x-user-photo headers.
 async function readAuthor(req: NextRequest) {
   const { uid: verifiedUid, response: authResponse } = await requireUser(req);
   if (!verifiedUid) {
-    return { uid: "local-athlete", name: "Local Athlete", photoURL: null as string | null, authResponse };
+    return { uid: null as string | null, name: "", photoURL: null as string | null, authResponse };
   }
-  const name = req.headers.get("x-user-name")?.trim() || "Local Athlete";
-  const photoHeader = req.headers.get("x-user-photo")?.trim();
-  const photoURL = photoHeader ? photoHeader : null;
+
+  // Fetch the user's profile from the database — do NOT trust client headers
+  const profile = await prisma.publicProfile.findUnique({
+    where: { uid: verifiedUid },
+    select: { displayName: true, photoURL: true },
+  });
+
+  const name = profile?.displayName || "Athlete";
+  const photoURL = profile?.photoURL || null;
+
   return { uid: verifiedUid, name, photoURL, authResponse: null as Response | null };
 }
 
@@ -31,15 +31,9 @@ async function readAuthor(req: NextRequest) {
 // Query: ?postId=<postId>
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const postId = searchParams.get("postId");
-
-    if (!postId) {
-      return NextResponse.json(
-        { error: "Missing postId query parameter" },
-        { status: 400 }
-      );
-    }
+    const parsed = parseQueryParams(req, commentsQuerySchema);
+    if (!parsed.success) return parsed.response;
+    const { postId } = parsed.data;
 
     const comments = await prisma.comment.findMany({
       where: { postId },
@@ -66,21 +60,14 @@ export async function GET(req: NextRequest) {
 }
 
 // POST — create a comment and bump commentCount on the post.
-// Author identity is taken from x-user-* headers (local-auth).
+// Author identity is fetched from PublicProfile by callerUid (never from headers).
 // Wrapped in a transaction so the comment + count are atomic.
 export async function POST(req: NextRequest) {
   try {
-    const { postId, text } = (await req.json()) as CommentCreateBody;
-
-    if (!postId || !text?.trim()) {
-      return NextResponse.json(
-        { error: "Missing postId or text" },
-        { status: 400 }
-      );
-    }
-
-    // Cap text length to prevent abuse.
-    const trimmedText = text.trim().slice(0, 500);
+    const parsed = await parseRequestBody(req, commentCreateSchema);
+    if (!parsed.success) return parsed.response;
+    const { postId, text } = parsed.data;
+    // text is already trimmed + capped at 500 chars by the schema.
     const author = await readAuthor(req);
 
     if (author.authResponse) {
@@ -91,10 +78,10 @@ export async function POST(req: NextRequest) {
       const c = await tx.comment.create({
         data: {
           postId,
-          authorUid: author.uid,
+          authorUid: author.uid!,
           authorName: author.name,
           authorPhotoURL: author.photoURL,
-          text: trimmedText,
+          text,
         },
       });
       await tx.feedPost.update({
@@ -126,14 +113,9 @@ export async function POST(req: NextRequest) {
 // Wrapped in a transaction so delete + decrement are atomic.
 export async function DELETE(req: NextRequest) {
   try {
-    const { postId, commentId } = (await req.json()) as CommentDeleteBody;
-
-    if (!postId || !commentId) {
-      return NextResponse.json(
-        { error: "Missing postId or commentId" },
-        { status: 400 }
-      );
-    }
+    const parsed = await parseRequestBody(req, commentDeleteSchema);
+    if (!parsed.success) return parsed.response;
+    const { postId, commentId } = parsed.data;
 
     const { uid: callerUid, authResponse } = await readAuthor(req);
 
@@ -162,7 +144,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    if (existing.authorUid !== callerUid) {
+    if (existing.authorUid !== callerUid!) {
       return NextResponse.json(
         { error: "You can only delete your own comments" },
         { status: 403 }

@@ -5,6 +5,20 @@ import React from "react";
 import { render } from "@testing-library/react";
 import ReactDOMServer from "react-dom/server";
 
+// jsdom does not implement IntersectionObserver, which framer-motion's useInView
+// calls during mount effects. Provide a minimal mock so the component renders.
+class MockIntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords() {
+    return [];
+  }
+}
+if (typeof globalThis.IntersectionObserver === "undefined") {
+  globalThis.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
+}
+
 import AnatomyMap from "../AnatomyMap";
 
 describe("AnatomyMap Performance", () => {

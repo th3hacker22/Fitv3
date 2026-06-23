@@ -6,7 +6,6 @@ import {
   Flame,
   Target,
   TrendingUp,
-  TrendingDown,
   ChevronRight,
   Zap,
   Dumbbell,
@@ -16,18 +15,15 @@ import {
   Trash2,
   Copy,
   Trophy,
-  Snowflake,
-  X,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { getWorkoutStreak, getTotalStats, getWeeklyVolume, db } from "@/db";
+import { getWorkoutStreak, getTotalStats, db } from "@/db";
 import { useRoutineStore } from "@/store/useRoutineStore";
 import { useWorkoutStore } from "@/store/useWorkoutStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useExerciseStore } from "@/store/useExerciseStore";
 import { useAchievementsStore } from "@/store/useAchievementsStore";
 import { useGeneratorStore } from "@/store/useGeneratorStore";
-import { useSettingsStore } from "@/store/useSettingsStore";
 import { useChallengesStore } from "@/store/useChallengesStore";
 import AchievementBadge from "@/components/AchievementBadge";
 import { useTranslation } from "react-i18next";
@@ -36,7 +32,6 @@ import { ACHIEVEMENTS } from "@/data/achievements";
 import { routineTemplates, buildTemplateRoutine } from "@/data/routineTemplates";
 import { uid } from "@/utils/id";
 import RecoveryHeatmap from "@/components/RecoveryHeatmap";
-import { KineticEmptyState } from "@/components/ui-custom/KineticEmptyState";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -64,7 +59,6 @@ export default function HomePage() {
     totalVolume: 0,
     totalDuration: 0,
   });
-  const [weeklyVolume, setWeeklyVolume] = useState<{ week: string; volume: number }[]>([]);
   const [recentWorkouts, setRecentWorkouts] = useState<
     { id: string; name: string; date: string; exerciseCount: number; volume: number; prCount: number }[]
   >([]);
@@ -85,12 +79,9 @@ export default function HomePage() {
 
   // Program + Challenges for "Next Workout" + active challenge cards
   const program = useGeneratorStore((s) => s.program);
-  const daysPerWeek = useGeneratorStore((s) => s.daysPerWeek);
-  const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);
   const activeChallenges = useChallengesStore((s) => s.activeChallenges);
   const fetchActiveChallenges = useChallengesStore((s) => s.fetchActiveChallenges);
 
-  const [showStreakBanner, setShowStreakBanner] = useState(true);
   const [localName, setLocalName] = useState<string>("");
 
   useEffect(() => {
@@ -113,35 +104,14 @@ export default function HomePage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [streakData, statsData, weeklyData, sessions] = await Promise.all([
+        const [streakData, statsData, sessions] = await Promise.all([
           getWorkoutStreak(),
           getTotalStats(),
-          getWeeklyVolume(2),
           db.workoutSessions.filter((s) => s.completed === true).reverse().limit(3).toArray(),
         ]);
 
         setStreak(streakData);
         setTotalStats(statsData);
-        setWeeklyVolume(weeklyData);
-
-        // ── Sync notification infrastructure ──
-        // Store streak count for notification text
-        localStorage.setItem("pulse_streak_count", String(streakData));
-        // Store whether user trained today (for reminder suppression)
-        const todayStr = new Date().toLocaleDateString("en-CA");
-        const lastSessionDate = sessions[0]?.date
-          ? new Date(sessions[0].date).toLocaleDateString("en-CA")
-          : null;
-        localStorage.setItem("pulse_trained_today", String(lastSessionDate === todayStr));
-        // Sync daysPerWeek to localStorage for notification scheduling
-        localStorage.setItem("pulse_workout_days", String(daysPerWeek));
-        // Initialize workout reminders if notifications are enabled
-        if (notificationsEnabled) {
-          import("@/services/notificationService").then(({ initNotifications }) => {
-            initNotifications();
-          }).catch(() => {});
-        }
-
         setRecentWorkouts(
           sessions.map((s) => ({
             id: s.id,
@@ -202,56 +172,6 @@ export default function HomePage() {
     } catch (e) {
       console.error(e);
     }
-  };
-
-  // ── Streak Protection Banner logic ──
-  // Show the banner when: streak >= 3, user hasn't trained today, and hasn't
-  // already frozen today. Detect "trained today" by comparing the most recent
-  // workout's date to today's local date.
-  const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
-  const lastWorkoutDate = recentWorkouts[0]?.date
-    ? new Date(recentWorkouts[0].date).toLocaleDateString("en-CA")
-    : null;
-  const trainedToday = lastWorkoutDate === todayStr;
-
-  // Also check if a freeze session was already added today
-  const [frozenToday, setFrozenToday] = useState(false);
-  useEffect(() => {
-    db.workoutSessions
-      .filter((s) => s.isFreeze === true)
-      .reverse()
-      .limit(1)
-      .toArray()
-      .then((freezes) => {
-        if (freezes.length > 0) {
-          const freezeDate = new Date(freezes[0].date).toLocaleDateString("en-CA");
-          setFrozenToday(freezeDate === todayStr);
-        }
-      })
-      .catch(() => {});
-  }, [todayStr]);
-
-  const showStreakProtection =
-    showStreakBanner && streak >= 3 && !trainedToday && !frozenToday;
-
-  const handleFreezeStreak = async () => {
-    const dbDate = new Date().toISOString();
-    await db.workoutSessions.add({
-      id: uid(),
-      name: "Streak Freeze ❄️",
-      date: dbDate,
-      duration: 0,
-      exercises: [],
-      completed: true,
-      isFreeze: true,
-      createdAt: dbDate,
-      updatedAt: dbDate,
-    });
-    // Update toast via the store
-    const { useToastStore } = await import("@/store/useToastStore");
-    useToastStore.getState().addToast("success", "Streak frozen for today! ❄️");
-    setFrozenToday(true);
-    setShowStreakBanner(false);
   };
 
   return (
@@ -346,115 +266,6 @@ export default function HomePage() {
           </div>
         </motion.div>
       )}
-
-      {/* ── Streak Protection Banner ── */}
-      {showStreakProtection && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className="glass-card flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/5 p-3"
-        >
-          <Snowflake className="h-5 w-5 shrink-0 text-warning" />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-text-primary">
-              Your {streak}-day streak is active.
-            </p>
-            <p className="text-[10px] text-text-secondary">
-              Rest day? Freeze it to protect your streak. ❄️
-            </p>
-          </div>
-          <button
-            onClick={handleFreezeStreak}
-            className="shrink-0 rounded-lg bg-warning/20 px-3 min-h-[44px] flex items-center justify-center text-xs font-black uppercase tracking-wider text-warning transition-colors hover:bg-warning/30"
-          >
-            Freeze
-          </button>
-          <button
-            onClick={() => setShowStreakBanner(false)}
-            aria-label="Dismiss streak banner"
-            className="shrink-0 flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary transition-colors hover:text-text-primary"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </motion.div>
-      )}
-
-      {/* ── Weekly Recap Card ── */}
-      {(() => {
-        const thisWeek = weeklyVolume[0]?.volume ?? 0;
-        const lastWeek = weeklyVolume[1]?.volume ?? 0;
-        const change = lastWeek > 0 ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : null;
-        const hasData = thisWeek > 0 || lastWeek > 0;
-
-        return (
-          <motion.section
-            custom={0.5}
-            variants={fadeUp}
-            initial="hidden"
-            animate="visible"
-            className="glass-card rounded-2xl border border-border p-4"
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="h-4 w-1 rounded-full bg-primary" />
-                <h2 className="text-xs font-black uppercase tracking-widest text-text-primary">
-                  This Week
-                </h2>
-              </div>
-              {change !== null && hasData && (
-                <div className={cn(
-                  "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black",
-                  change > 0
-                    ? "bg-success/10 text-success"
-                    : change < 0
-                      ? "bg-danger/10 text-danger"
-                      : "bg-bg-elevated text-text-secondary"
-                )}>
-                  {change > 0 ? <TrendingUp className="h-3 w-3" /> : change < 0 ? <TrendingDown className="h-3 w-3" /> : null}
-                  {change > 0 ? "+" : ""}{change}% vs last week
-                </div>
-              )}
-            </div>
-
-            {hasData ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-bg-elevated/50 p-3 text-center">
-                  <p className="text-2xl font-black tabular-nums text-primary">
-                    {thisWeek >= 1000 ? `${(thisWeek / 1000).toFixed(1)}t` : `${thisWeek.toLocaleString()}`}
-                  </p>
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-text-secondary mt-0.5">
-                    Volume (kg)
-                  </p>
-                </div>
-                <div className="rounded-xl bg-bg-elevated/50 p-3 text-center">
-                  <p className="text-2xl font-black tabular-nums text-secondary">
-                    {lastWeek >= 1000 ? `${(lastWeek / 1000).toFixed(1)}t` : `${lastWeek.toLocaleString()}`}
-                  </p>
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-text-secondary mt-0.5">
-                    Last Week (kg)
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 py-3">
-                <p className="text-xs text-text-secondary text-center">
-                  No workouts this week yet. Start your first one!
-                </p>
-                <Button
-                  onClick={handleStartQuickWorkout}
-                  variant="primary"
-                  size="sm"
-                  className="text-xs"
-                  icon={<Play className="h-3.5 w-3.5 fill-current" />}
-                >
-                  Start Workout
-                </Button>
-              </div>
-            )}
-          </motion.section>
-        );
-      })()}
 
       {/* ── SECTION 2: Quick Stats (3 compact cards) ── */}
       <motion.section
@@ -674,7 +485,7 @@ export default function HomePage() {
                   className="w-full"
                   onClick={async () => {
                     const ids = routine.exercises.map((e) => e.exerciseId);
-                    const sessionId = await startWorkout(ids.map(String));
+                    const sessionId = await startWorkout(ids);
                     navigate({ to: "/workout/$sessionId", params: { sessionId } });
                   }}
                 >
@@ -685,11 +496,41 @@ export default function HomePage() {
             ))}
           </div>
         ) : (
-          <KineticEmptyState
-            variant="routines"
-            actionLabel="Create Routine"
-            onAction={() => navigate({ to: "/builder" })}
-          />
+          <div
+            className="glass-card flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-primary/20 bg-primary/[0.02] p-8 text-center"
+            style={{ boxShadow: "0 0 25px rgba(204,255,0,0.05)" }}
+          >
+            <div
+              className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20"
+              style={{ boxShadow: "0 0 15px rgba(204,255,0,0.2)" }}
+            >
+              <Dumbbell className="h-7 w-7 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-black italic uppercase tracking-wider text-text-primary">
+                Design Your Training Flow
+              </h3>
+              <p className="max-w-[280px] text-xs leading-relaxed text-text-secondary">
+                Build your own routine from scratch, or let our AI generate a personalized program for you.
+              </p>
+            </div>
+            <div className="flex w-full max-w-[260px] justify-center gap-3 mt-1">
+              <Button
+                onClick={() => navigate({ to: "/builder" })}
+                variant="outline"
+                className="flex-1 border-border bg-bg-elevated/40 text-xs py-2.5"
+              >
+                {t("build_manually")}
+              </Button>
+              <Button
+                onClick={() => navigate({ to: "/wizard" })}
+                variant="primary"
+                className="flex-1 text-xs py-2.5"
+              >
+                {t("generate_with_ai")}
+              </Button>
+            </div>
+          </div>
         )}
       </motion.section>
 
@@ -740,7 +581,7 @@ export default function HomePage() {
                       {
                         id: uid(),
                         name: template.name,
-                        exercises: built.exercises,
+                        exercises: built,
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
                       },
@@ -833,11 +674,34 @@ export default function HomePage() {
             ))}
           </div>
         ) : (
-          <KineticEmptyState
-            variant="workouts"
-            actionLabel="Start Workout"
-            onAction={handleStartQuickWorkout}
-          />
+          <div
+            className="glass-card flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-success/20 bg-success/[0.01] p-8 text-center"
+            style={{ boxShadow: "0 0 25px rgba(0,230,118,0.03)" }}
+          >
+            <div
+              className="flex h-14 w-14 items-center justify-center rounded-2xl bg-success/10 border border-success/20"
+              style={{ boxShadow: "0 0 15px rgba(0,230,118,0.15)" }}
+            >
+              <Target className="h-7 w-7 text-success" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-black italic uppercase tracking-wider text-text-primary">
+                Your Journey Starts Here!
+              </h3>
+              <p className="max-w-[280px] text-xs leading-relaxed text-text-secondary">
+                Every legendary athlete started with a single set. Log your first workout today to unlock streaks, stats, and achievements.
+              </p>
+            </div>
+            <Button
+              onClick={handleStartQuickWorkout}
+              variant="primary"
+              className="w-full max-w-[220px] text-xs font-black uppercase tracking-widest italic py-3 mt-2 bg-success text-[#050505] hover:bg-success/90"
+              style={{ boxShadow: "0 0 15px rgba(0,230,118,0.2)" }}
+            >
+              <Play className="h-3.5 w-3.5 fill-[#050505]" />
+              Start First Workout
+            </Button>
+          </div>
         )}
       </motion.section>
 

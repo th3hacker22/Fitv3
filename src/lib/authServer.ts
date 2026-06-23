@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { verifyJwt, type JwtPayload } from "./jwt";
 import { errorResponse } from "./validation";
+import { getAdminAuth } from "./firebaseAdmin";
 
 export function getTokenFromCookie(req: NextRequest): string | null {
   return req.cookies.get("pulse_session")?.value ?? null;
@@ -18,8 +18,12 @@ export async function requireUser(
   }
 
   try {
-    const payload: JwtPayload = await verifyJwt(token);
-    return { uid: payload.uid, response: null };
+    const adminAuth = getAdminAuth();
+    // Use verifySessionCookie (not verifyIdToken) because the cookie now
+    // contains a Firebase session cookie (7-day TTL), not a raw ID token (1-hour TTL).
+    // The second argument `true` enables revocation checking.
+    const decoded = await adminAuth.verifySessionCookie(token, true);
+    return { uid: decoded.uid, response: null };
   } catch {
     return {
       uid: null,

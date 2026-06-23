@@ -24,6 +24,9 @@ import {
 import { db, type BodyMeasurement, type ProgressPhoto } from "@/db";
 import { uid } from "@/utils/id";
 import { useThemeColors } from "@/hooks/useThemeColors";
+import { useAuthStore } from "@/store/useAuthStore";
+import { storage } from "@/lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -46,36 +49,45 @@ export default function BodyPage() {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chartColors = useThemeColors();
-  const cleanupRef = useRef<(() => void) | undefined>(undefined);
-
-  async function loadData() {
-    try {
-      const [measurementsData, photosData] = await Promise.all([
-        db.bodyMeasurements.orderBy("date").reverse().toArray(),
-        db.progressPhotos.orderBy("date").reverse().toArray(),
-      ]);
-
-      setMeasurements(measurementsData);
-
-      const photosWithUrls = photosData.map((photo) => ({
-        ...photo,
-        url: URL.createObjectURL(photo.imageBlob),
-      }));
-      setPhotos(photosWithUrls);
-
-      cleanupRef.current = () => {
-        photosWithUrls.forEach((p) => URL.revokeObjectURL(p.url));
-      };
-    } catch (error) {
-      console.error("Failed to load body data:", error);
-    }
-  }
 
   // Load data
   useEffect(() => {
+    let cleanup: (() => void) | undefined;
+
+    async function loadData() {
+      try {
+        const [measurementsData, photosData] = await Promise.all([
+          db.bodyMeasurements.orderBy("date").reverse().toArray(),
+          db.progressPhotos.orderBy("date").reverse().toArray(),
+        ]);
+
+        setMeasurements(measurementsData);
+
+        const photosWithUrls = photosData.map((photo) => ({
+          ...photo,
+          url: photo.imageUrl
+            ? photo.imageUrl
+            : photo.imageBlob
+              ? URL.createObjectURL(photo.imageBlob)
+              : "",
+        }));
+        setPhotos(photosWithUrls);
+
+        cleanup = () => {
+          photosWithUrls.forEach((p) => {
+            if (!p.imageUrl) URL.revokeObjectURL(p.url);
+          });
+        };
+      } catch (error) {
+        console.error("Failed to load body data:", error);
+      }
+    }
+
     loadData();
+
+    // Return cleanup that revokes all object URLs on unmount
     return () => {
-      cleanupRef.current?.();
+      if (cleanup) cleanup();
     };
   }, []);
 
@@ -105,21 +117,46 @@ export default function BodyPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Create thumbnail
-    const imageBlob = file;
+    const currentUser = useAuthStore.getState().user;
+    const photoId = uid();
+    const createdAt = new Date().toISOString();
 
+    // Firebase Storage path — only when configured AND signed in.
+    if (storage && currentUser?.uid) {
+      try {
+        const timestamp = Date.now();
+        const storageRef = ref(storage, `progress/${currentUser.uid}/${timestamp}.jpg`);
+        const snapshot = await uploadBytesResumable(storageRef, file);
+        const downloadUrl = await getDownloadURL(snapshot.ref);
+
+        const photo: ProgressPhoto = {
+          id: photoId,
+          date: createdAt,
+          type: "front",
+          imageUrl: downloadUrl,
+          createdAt,
+        };
+        await db.progressPhotos.add(photo);
+        loadData();
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      } catch (err) {
+        console.warn("Firebase Storage upload failed, falling back to local blob:", err);
+      }
+    }
+
+    // Offline / unconfigured / upload-failed path: store the raw Blob in
+    // IndexedDB. The load logic turns imageBlob into an object URL for display.
     const photo: ProgressPhoto = {
-      id: uid(),
-      date: new Date().toISOString(),
+      id: photoId,
+      date: createdAt,
       type: "front",
-      imageBlob,
-      createdAt: new Date().toISOString(),
+      imageUrl: "",
+      imageBlob: file,
+      createdAt,
     };
-
     await db.progressPhotos.add(photo);
     loadData();
-
-    // Reset input
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 

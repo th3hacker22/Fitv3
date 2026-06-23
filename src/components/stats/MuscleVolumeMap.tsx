@@ -121,11 +121,7 @@ export default function MuscleVolumeMap({ sessions, exercises }: MuscleVolumeMap
       }
     }
 
-    // Compute max while iterating (avoids spreading large iterables)
-    let max = 1;
-    for (const vol of volumeMap.values()) {
-      if (vol > max) max = vol;
-    }
+    const max = Math.max(...volumeMap.values(), 1);
 
     // Build heatmap intensity (0-1)
     const heatmapIntensity: Record<string, number> = {};
@@ -134,15 +130,11 @@ export default function MuscleVolumeMap({ sessions, exercises }: MuscleVolumeMap
     }
 
     // Find imbalanced muscle groups (< 30% of max group volume)
-    let maxGroupVolume = 1;
-    for (const vol of groupVolumeMap.values()) {
-      if (vol > maxGroupVolume) maxGroupVolume = vol;
-    }
-
     const groupVolumes = Array.from(groupVolumeMap.entries())
-      .map(([name, vol]) => ({ name, volume: vol, percent: (vol / maxGroupVolume) * 100 }))
+      .map(([name, vol]) => ({ name, volume: vol, percent: (vol / Math.max(...groupVolumeMap.values(), 1)) * 100 }))
       .sort((a, b) => b.volume - a.volume);
 
+    const maxGroupVol = Math.max(...groupVolumeMap.values(), 1);
     let imbalance: string | null = null;
     for (const g of groupVolumes) {
       if (g.percent < 30 && g.volume > 0) {
@@ -150,11 +142,12 @@ export default function MuscleVolumeMap({ sessions, exercises }: MuscleVolumeMap
         break;
       }
     }
-    // Also check if any major group is completely missing (report first found)
+    // Also check if any major group is completely missing
     const majorGroups = ["Chest", "Back", "Legs", "Shoulders"];
     for (const mg of majorGroups) {
       if (!groupVolumeMap.has(mg) || groupVolumeMap.get(mg) === 0) {
-        if (!imbalance) imbalance = mg;
+        imbalance = mg;
+        break;
       }
     }
 
@@ -245,7 +238,7 @@ export default function MuscleVolumeMap({ sessions, exercises }: MuscleVolumeMap
       </div>
 
       {/* AnatomyMap with volume heatmap */}
-      <div className="rounded-2xl bg-[#050505] p-2 min-h-[300px]">
+      <div className="rounded-2xl bg-bg-elevated/30 border border-border/50 p-2 min-h-[300px]">
         <AnatomyMap
           readOnly
           highlightedMuscles={highlightedMuscles}

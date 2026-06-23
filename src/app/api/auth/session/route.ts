@@ -1,35 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
-import { signJwt } from "@/lib/jwt";
+import { getAdminAuth } from "@/lib/firebaseAdmin";
 import { prisma } from "@/lib/db";
+import { parseRequestBody } from "@/lib/apiSchemas";
+import { sessionPostSchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// 7 days in milliseconds
+const SESSION_COOKIE_MAX_AGE_MS = 60 * 60 * 24 * 7 * 1000;
+
 export async function POST(req: NextRequest) {
   try {
-    const { uid } = await req.json();
-    if (!uid) {
-      return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+    const parsed = await parseRequestBody(req, sessionPostSchema);
+    if (!parsed.success) return parsed.response;
+    const { idToken } = parsed.data;
+
+    const adminAuth = getAdminAuth();
+
+    // 1. Verify the Firebase ID token (1-hour TTL) first
+    const decoded = await adminAuth.verifyIdToken(idToken);
+    const { uid, email, name, picture, email_verified } = decoded;
+    if (!email_verified) {
+      return NextResponse.json({ error: "Email not verified" }, { status: 403 });
     }
-    // Auto-create PublicProfile on first login (supports guest users)
-    await prisma.publicProfile.upsert({
-      where: { uid },
-      update: {},
-      create: {
-        uid,
-        displayName: uid.startsWith("local-guest-") ? "Guest" : uid.replace(/^local-user-/, ""),
-      },
+
+    // 2. Mint a long-lived session cookie (7 days) from the ID token
+    const sessionCookie = await adminAuth.createSessionCookie(idToken, {
+      expiresIn: SESSION_COOKIE_MAX_AGE_MS,
     });
 
-    const token = await signJwt(uid);
+    // 3. Upsert the user's public profile
+    const displayName = name || (email ? email.split("@")[0] : "Athlete");
+    const photoURL = picture || null;
 
+    await prisma.publicProfile.upsert({
+      where: { uid },
+      update: { displayName, photoURL },
+      create: { uid, displayName, photoURL },
+    });
+
+    // 4. Set the SESSION COOKIE (not the raw ID token) in the HTTP-only cookie
     const response = NextResponse.json({ success: true });
-    response.cookies.set("pulse_session", token, {
+    response.cookies.set("pulse_session", sessionCookie, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days (matches JWT expiry)
+      maxAge: 60 * 60 * 24 * 7, // 7 days in seconds (for cookie maxAge)
     });
     return response;
   } catch (error) {

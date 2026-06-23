@@ -1,32 +1,45 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Timer } from "lucide-react";
 import { useWorkoutStore } from "@/store/useWorkoutStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { useGeneratorStore } from "@/store/useGeneratorStore";
 import { playTimerCompleteSound } from "@/utils/audio";
-import { sendNotification } from "@/utils/notifications";
+import { sendNotification } from "@/services/notificationService";
 import { suggestRestDuration, type SmartRestRecommendation } from "@/services/smartRest";
 import { voiceCoach } from "@/services/voiceCoach";
 import { cn } from "@/utils/cn";
 
 const CIRCUMFERENCE = 2 * Math.PI * 24; // r=24
 
+/**
+ * Compute remaining seconds from a timestamp-based end time.
+ * Pure function — also used by the tests.
+ * @returns integer seconds remaining (≥ 0).
+ */
+export function computeRemainingSeconds(endTs: number | undefined, now: number = Date.now()): number {
+  if (endTs == null) return 0;
+  return Math.max(0, Math.ceil((endTs - now) / 1000));
+}
+
 export default function RestTimer() {
   const restTimerActive = useWorkoutStore((s) => s.restTimerActive);
-  const dismissRestTimer = useWorkoutStore((s) => s.dismissRestTimer);
+  const restTimerEndTs = useWorkoutStore((s) => s.restTimerEndTs);
+  const restTimerTotalDuration = useWorkoutStore((s) => s.restTimerTotalDuration);
   const restTimerExerciseRole = useWorkoutStore((s) => s.restTimerExerciseRole);
   const restTimerLastRPE = useWorkoutStore((s) => s.restTimerLastRPE);
+  const dismissRestTimer = useWorkoutStore((s) => s.dismissRestTimer);
+  const adjustRestTimer = useWorkoutStore((s) => s.adjustRestTimer);
   const restDuration = useSettingsStore((s) => s.restDuration);
   const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);
-  // Read the user's primary goal to pass to suggestRestDuration.
-  // Falls back to "Hypertrophy" if the generator profile hasn't been filled yet.
+  const soundEnabled = useSettingsStore((s) => s.soundEnabled);
   const goal = useGeneratorStore((s) => s.goal) || "Hypertrophy";
 
-  // Compute the smart-rest recommendation. Memoized on the activation inputs so
-  // it stays stable for the lifetime of one rest period (the suggested duration
-  // won't drift as the timer counts down).
+  // The recommendation is recomputed for display purposes (reason text +
+  // presets). The actual countdown duration comes from the store's
+  // restTimerEndTs — not from recommendation.seconds — so the timer is
+  // timestamp-based and survives reloads.
   const recommendation: SmartRestRecommendation = useMemo(
     () =>
       suggestRestDuration({
@@ -38,57 +51,124 @@ export default function RestTimer() {
     [restTimerExerciseRole, restTimerLastRPE, goal, restDuration]
   );
 
-  const suggestedSeconds = recommendation.seconds;
-  const [seconds, setSeconds] = useState(suggestedSeconds);
-  const [prevActive, setPrevActive] = useState(restTimerActive);
-  const [prevSuggested, setPrevSuggested] = useState(suggestedSeconds);
+  // ── Timestamp-based remaining seconds ──
+  // The source of truth is restTimerEndTs (persisted). The displayed value
+  // is recomputed every second AND on visibilitychange / focus so it's
+  // always accurate even after the tab was backgrounded or reloaded.
+  const [seconds, setSeconds] = useState(() =>
+    computeRemainingSeconds(restTimerEndTs)
+  );
 
-  if (restTimerActive !== prevActive || (restTimerActive && suggestedSeconds !== prevSuggested)) {
-    setPrevActive(restTimerActive);
-    setPrevSuggested(suggestedSeconds);
-    if (restTimerActive) {
-      setSeconds(suggestedSeconds);
-    }
-  }
+  // Track whether the completion side effects (sound, voice, notification,
+  // dismiss) have already fired for the current rest period. This prevents
+  // double-firing in React StrictMode (which double-invokes effects) and
+  // also prevents re-firing if the interval ticks past 0 multiple times
+  // before the dismiss takes effect.
+  const completedRef = useRef(false);
+  const fifteenFiredRef = useRef(false);
 
-  // Countdown — depend ONLY on restTimerActive so the interval is created once
-  // per activation, not recreated every second (which caused timing drift).
-  // Side effects (sound, notification, dismiss) moved to a separate effect
-  // to keep the setSeconds updater pure (StrictMode double-fires updaters).
+  // ── Countdown interval (recomputes from timestamp every second) ──
+  // Depend ONLY on restTimerActive so the interval is created once per
+  // activation, not recreated every second (which caused timing drift).
   useEffect(() => {
-    if (!restTimerActive) return;
+    if (!restTimerActive || restTimerEndTs == null) return;
+
+    // Sync immediately on activation / mount.
+    completedRef.current = false;
+    fifteenFiredRef.current = false;
+    setSeconds(computeRemainingSeconds(restTimerEndTs));
 
     const interval = setInterval(() => {
-      setSeconds((prev: number) => (prev > 0 ? prev - 1 : 0));
+      setSeconds(computeRemainingSeconds(restTimerEndTs));
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [restTimerActive]);
+  }, [restTimerActive, restTimerEndTs]);
 
-  // Fire completion side effects when the timer reaches 0.
+  // ── Resync on visibility change / focus ──
+  // When the user returns to the tab after switching away, recompute the
+  // remaining seconds immediately (the 1s interval may not have fired
+  // while the tab was throttled in the background). This also covers the
+  // case where the rest period ended entirely while the tab was hidden —
+  // the completion effect below will fire and show the notification.
   useEffect(() => {
-    if (restTimerActive && seconds === 0) {
-      playTimerCompleteSound();
-      voiceCoach.speak("rest_complete");
-      if (notificationsEnabled) {
-        sendNotification("Rest complete", {
-          body: "Time for your next set. Let's go!",
-        });
-      }
-      dismissRestTimer();
-    }
-  }, [restTimerActive, seconds, notificationsEnabled, dismissRestTimer]);
+    if (!restTimerActive || restTimerEndTs == null) return;
 
-  // 15-second warning — only fires when the rest period was long enough to
-  // justify a heads-up (avoids the warning overlapping the final countdown
-  // of a short 30s rest).
+    const resync = () => {
+      setSeconds(computeRemainingSeconds(restTimerEndTs));
+    };
+
+    document.addEventListener("visibilitychange", resync);
+    window.addEventListener("focus", resync);
+    return () => {
+      document.removeEventListener("visibilitychange", resync);
+      window.removeEventListener("focus", resync);
+    };
+  }, [restTimerActive, restTimerEndTs]);
+
+  // ── Fire completion side effects when the timer reaches 0 ──
+  // StrictMode-safe via completedRef: the side effects fire exactly once
+  // per rest period, even if the effect is double-invoked.
   useEffect(() => {
-    if (restTimerActive && seconds === 15 && suggestedSeconds > 30) {
-      voiceCoach.speak("rest_15s_left");
-    }
-  }, [restTimerActive, seconds, suggestedSeconds]);
+    if (!restTimerActive || restTimerEndTs == null) return;
+    if (seconds > 0) return;
+    if (completedRef.current) return;
+    completedRef.current = true;
 
-  const progress = Math.min(1, seconds / suggestedSeconds);
+    if (soundEnabled) playTimerCompleteSound();
+    voiceCoach.speak("rest_complete");
+    if (notificationsEnabled) {
+      sendNotification("Rest complete", {
+        body: "Time for your next set. Let's go!",
+      });
+    }
+    dismissRestTimer();
+  }, [restTimerActive, restTimerEndTs, seconds, notificationsEnabled, soundEnabled, dismissRestTimer]);
+
+  // ── 15-second warning ──
+  // Only fires when the rest period was long enough to justify a heads-up
+  // (avoids the warning overlapping the final countdown of a short 30s rest).
+  // StrictMode-safe via fifteenFiredRef.
+  useEffect(() => {
+    if (!restTimerActive || restTimerEndTs == null) return;
+    if (seconds !== 15) return;
+    if (fifteenFiredRef.current) return;
+    const total = restTimerTotalDuration ?? 0;
+    if (total <= 30) return;
+    fifteenFiredRef.current = true;
+    voiceCoach.speak("rest_15s_left");
+  }, [restTimerActive, restTimerEndTs, restTimerTotalDuration, seconds]);
+
+  // ── Background notification via setTimeout ──
+  // When the tab is hidden, the 1s interval may be throttled. To deliver
+  // the "rest complete" notification as close to on-time as possible even
+  // in the background, schedule a one-shot setTimeout for the exact
+  // remaining duration. This fires (possibly slightly late) and triggers
+  // the notification. The visibilitychange handler + the completion effect
+  // above serve as a fallback for when the setTimeout is further delayed.
+  useEffect(() => {
+    if (!restTimerActive || restTimerEndTs == null || !notificationsEnabled) return;
+
+    const remainingMs = restTimerEndTs - Date.now();
+    if (remainingMs <= 0) return;
+
+    const timeoutId = window.setTimeout(() => {
+      // Only fire if the timer hasn't already been dismissed/completed.
+      // The completion effect handles the full side-effect chain; here we
+      // just nudge the state so that effect runs even if the interval is
+      // throttled.
+      setSeconds(computeRemainingSeconds(restTimerEndTs));
+    }, remainingMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [restTimerActive, restTimerEndTs, notificationsEnabled]);
+
+  // Total duration for the progress ring denominator. Falls back to the
+  // recommendation's suggested seconds if the store value is missing
+  // (e.g., legacy persisted state from before this field existed).
+  const totalDuration = restTimerTotalDuration ?? recommendation.seconds;
+
+  const progress = totalDuration > 0 ? Math.min(1, seconds / totalDuration) : 0;
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   const formatTime = `${mins}:${secs.toString().padStart(2, "0")}`;
@@ -97,9 +177,17 @@ export default function RestTimer() {
     dismissRestTimer();
   }, [dismissRestTimer]);
 
-  const handlePreset = useCallback((delta: number) => {
-    setSeconds((prev: number) => Math.max(0, prev + delta));
-  }, []);
+  const handlePreset = useCallback(
+    (delta: number) => {
+      // Timestamp-based: shift restTimerEndTs by ±delta seconds. The
+      // countdown picks up the new end time on the next interval tick
+      // (or immediately via the resync effect).
+      adjustRestTimer(delta);
+      // Immediately recompute so the UI updates without waiting 1s.
+      setSeconds(computeRemainingSeconds(useWorkoutStore.getState().restTimerEndTs));
+    },
+    [adjustRestTimer]
+  );
 
   // "Ready!" pulse — final 5 seconds of the rest period.
   const isReady = seconds > 0 && seconds <= 5;

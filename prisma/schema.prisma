@@ -46,6 +46,7 @@ model FeedPost {
   commentCount  Int      @default(0)
   createdAt     DateTime @default(now())
   comments      Comment[]
+  kudos         Kudos[]
 }
 
 model Comment {
@@ -108,4 +109,15 @@ model ExerciseFeedback {
   timestamp     BigInt
   sessionId     String?
   note          String?
+}
+
+// Kudos — one per (post, user) to prevent spam.
+model Kudos {
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post      FeedPost  @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
 }

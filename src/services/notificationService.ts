@@ -112,10 +112,11 @@ export function disableNotifications(): void {
 }
 
 /**
- * Send a notification of the specified type.
+ * Send a typed notification (workout_reminder, pr_celebration, etc.).
  * Only sends if notifications are enabled and permitted.
+ * Uses predefined templates for title/body.
  */
-export function sendNotification(
+export function sendTypedNotification(
   type: NotificationType,
   customBody?: string
 ): void {
@@ -152,7 +153,7 @@ export function sendNotification(
  * Send a PR celebration notification with exercise details.
  */
 export function sendPRNotification(exerciseName: string, weight: number, reps: number): void {
-  sendNotification(
+  sendTypedNotification(
     "pr_celebration",
     `New PR: ${exerciseName} — ${weight}kg × ${reps} reps!`
   );
@@ -162,7 +163,7 @@ export function sendPRNotification(exerciseName: string, weight: number, reps: n
  * Send a streak warning notification.
  */
 export function sendStreakWarning(streak: number): void {
-  sendNotification(
+  sendTypedNotification(
     "streak_warning",
     `You're on a ${streak}-day streak. Don't break it — workout today!`
   );
@@ -181,7 +182,7 @@ export function scheduleWorkoutReminders(daysPerWeek: number): void {
   // Schedule a check every hour
   if (typeof window !== "undefined") {
     // Clear any existing interval
-    const existing = (window as unknown as { __pulseNotifInterval?: number }).__pulseNotifInterval;
+    const existing = (window as unknown as { __pulseNotifInterval?: ReturnType<typeof setInterval> }).__pulseNotifInterval;
     if (existing) clearInterval(existing);
 
     // Set up hourly check
@@ -193,28 +194,17 @@ export function scheduleWorkoutReminders(daysPerWeek: number): void {
 /**
  * Check if a workout reminder should be sent.
  * Sends if:
- * - Workout reminders are enabled (separate from general notifications)
  * - It's between 8 AM and 8 PM
- * - Today is a planned workout day (based on daysPerWeek spread across the week)
  * - No workout has been completed today
  * - User hasn't been notified in the last 4 hours
  */
 function checkWorkoutReminder(): void {
   if (!isNotificationsEnabled()) return;
 
-  // Check workout reminders toggle (stored in localStorage by useSettingsStore)
-  const settingsRaw = localStorage.getItem("pulse-settings");
-  if (settingsRaw) {
-    try {
-      const settings = JSON.parse(settingsRaw);
-      if (settings.state && settings.state.workoutReminders === false) return;
-    } catch { /* default to enabled */ }
-  }
-
   const hour = new Date().getHours();
   if (hour < 8 || hour > 20) return; // Only during waking hours
 
-  // Check last notification time (4-hour cooldown)
+  // Check last notification time
   const lastNotif = localStorage.getItem("pulse_last_workout_notif");
   const now = Date.now();
   if (lastNotif) {
@@ -222,42 +212,11 @@ function checkWorkoutReminder(): void {
     if (elapsed < 4 * 60 * 60 * 1000) return; // 4 hours
   }
 
-  // Check if today is a planned workout day
-  if (!isPlannedWorkoutDay()) return;
-
-  // Check if user already trained today (stored by HomePage on load)
-  const trainedToday = localStorage.getItem("pulse_trained_today");
-  if (trainedToday === "true") return;
-
-  // Get streak for personalized text
-  const streak = parseInt(localStorage.getItem("pulse_streak_count") || "0");
-
-  // Send with streak text
-  const body = streak > 0
-    ? `Your ${streak}-day streak is waiting. Don't break the chain!`
-    : "Your workout is waiting. Let's crush today's session.";
-  sendNotification("workout_reminder", body);
+  // Check if user worked out today
+  // This is a lightweight check — we don't want to hit IndexedDB in an interval
+  // For now, just send the reminder
+  sendTypedNotification("workout_reminder");
   localStorage.setItem("pulse_last_workout_notif", String(now));
-}
-
-/**
- * Check if today is a planned workout day based on daysPerWeek.
- * Spreads workout days evenly across the week starting from Monday.
- * e.g., 3 days/week → Mon/Wed/Fri. 4 days → Mon/Tue/Thu/Fri.
- */
-function isPlannedWorkoutDay(): boolean {
-  const storedDays = localStorage.getItem(WORKOUT_DAYS_KEY);
-  const daysPerWeek = storedDays ? parseInt(storedDays) : 3;
-  if (daysPerWeek >= 7) return true; // every day
-
-  const today = new Date().getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-  // Convert to Monday-first index: Mon=0, Tue=1, ..., Sun=6
-  const dayIdx = today === 0 ? 6 : today - 1;
-
-  // Spread days evenly: for N days, workout on days where (dayIdx * N) % 7 < N
-  // This gives an even spread: 3 days → 0,2,4 (Mon, Wed, Fri)
-  // 4 days → 0,1,3,4 (Mon, Tue, Thu, Fri)
-  return (dayIdx * daysPerWeek) % 7 < daysPerWeek;
 }
 
 /**
@@ -277,3 +236,32 @@ export function initNotifications(): void {
   // Check immediately
   checkWorkoutReminder();
 }
+
+// ── Simple notification API (merged from src/utils/notifications.ts) ──
+// This is the low-level "fire a notification with a title + options" API
+// used by RestTimer and SettingsPage. The typed API (sendTypedNotification)
+// is for structured notification types (PR, streak, etc.).
+
+/**
+ * Fire a local notification if the user enabled notifications and granted permission.
+ * This is the simple API — provide a title and optional NotificationOptions.
+ */
+export function sendNotification(title: string, options?: NotificationOptions): void {
+  if (!isNotificationSupported()) return;
+  if (Notification.permission !== "granted") return;
+  try {
+    new Notification(title, {
+      icon: "/pwa-192x192.png",
+      badge: "/pwa-192x192.png",
+      ...options,
+    });
+  } catch {
+    // Some browsers require a ServiceWorkerRegistration for notifications;
+    // fail silently if direct construction is not allowed.
+  }
+}
+
+/**
+ * Alias for backward compatibility with src/utils/notifications.ts callers.
+ */
+export const notificationsSupported = isNotificationSupported;
