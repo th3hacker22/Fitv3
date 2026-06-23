@@ -1,0 +1,925 @@
+     1→     1→# Pulse — Session Worklog
+     2→     2→
+     3→     3→---
+     4→     4→Task ID: review-security-bugs
+     5→     5→Agent: Security & Bug Reviewer
+     6→     6→Task: Security + bug review of session code (A1-B2)
+     7→     7→
+     8→     8→Work Log:
+     9→     9→- Reviewed src/config/setTypes.ts (A1)
+    10→    10→- Reviewed src/store/useWorkoutStore.ts (A1+A2)
+    11→    11→- Reviewed src/db/analytics.ts (A1+B2)
+    12→    12→- Reviewed src/components/workout/RestTimer.tsx (A2)
+    13→    13→- Reviewed src/services/recoveryTracker.ts (A3)
+    14→    14→- Reviewed src/services/mediaCache.ts (B1)
+    15→    15→- Reviewed src/components/exercise/ExerciseVideoPlayer.tsx (B1)
+    16→    16→- Reviewed src/pages/ExerciseDetailPage.tsx (B1)
+    17→    17→- Reviewed src/components/workout/ExerciseWorkoutCard.tsx (B1)
+    18→    18→- Reviewed src/pages/CalendarPage.tsx (B2)
+    19→    19→- Reviewed src/components/calendar/CalendarGrid.tsx (B2)
+    20→    20→- Reviewed src/components/calendar/DaySessionsDrawer.tsx (B2)
+    21→    21→- Cross-checked src/services/smartRest.ts, src/services/notificationService.ts, src/db/schema.ts, src/pages/WorkoutSessionPage.tsx for context
+    22→    22→
+    23→    23→Stage Summary:
+    24→    24→- 🔴 Critical: 0
+    25→    25→- 🟠 High: 1 (blob URL leak in ExerciseVideoPlayer)
+    26→    26→- 🟡 Medium: 7 (volume filter inconsistency ×3, dead prefetch state, race conditions ×2, freeze-session drawer leak)
+    27→    27→- 🟢 Low: 4 (week-key heuristic, negative hoursLeft, malformed dateKey, redundant completed checks)
+    28→    28→
+    29→    29→---
+    30→    30→
+    31→    31→## Detailed Findings
+    32→    32→
+    33→    33→### 🟠 HIGH — ExerciseVideoPlayer.tsx:164-167 — Memory leak of object URL on rapid URL change
+    34→    34→
+    35→    35→**Category:** leak
+    36→    36→
+    37→    37→**File:** `src/components/exercise/ExerciseVideoPlayer.tsx` lines 151-173
+    38→    38→
+    39→    39→**Description:**
+    40→    40→The Cache API effect creates an object URL via `URL.createObjectURL(blob)` inside an async IIFE. If the user navigates away (or the `activeUrl` prop changes) while the `responseToObjectUrl` promise is in flight, the cleanup sets `cancelled = true`. The async function then returns early AFTER the URL has already been created:
+    41→    41→
+    42→    42→```typescript
+    43→    43→const objUrl = await responseToObjectUrl(response);
+    44→    44→if (cancelled) return;   // ← objUrl is leaked: never set to state, never revoked
+    45→    45→if (objUrl) setBlobUrl(objUrl);
+    46→    46→```
+    47→    47→
+    48→    48→When `cancelled` is true on this branch, `objUrl` was created (holding a reference to a Blob in memory) but is never stored in React state, so the separate `useEffect` cleanup at line 176-180 (which only revokes `blobUrl` from state) never sees it. The blob URL leaks until the document is unloaded.
+    49→    49→
+    50→    50→In a long workout-session page with many compact cards (each hosting its own player), rapid scrolling can trigger many such leaks.
+    51→    51→
+    52→    52→**Suggested fix:**
+    53→    53→```typescript
+    54→    54→const objUrl = await responseToObjectUrl(response);
+    55→    55→if (cancelled) {
+    56→    56→  if (objUrl) URL.revokeObjectURL(objUrl);  // ← revoke orphaned URL
+    57→    57→  return;
+    58→    58→}
+    59→    59→if (objUrl) setBlobUrl(objUrl);
+    60→    60→setIsLoadingFromCache(false);
+    61→    61→```
+    62→    62→
+    63→    63→---
+    64→    64→
+    65→    65→### 🟡 MEDIUM — useWorkoutStore.ts:630-633 — `totalVolume` ignores `countsInVolume(setType)`
+    66→    66→
+    67→    67→**Category:** data
+    68→    68→
+    69→    69→**File:** `src/store/useWorkoutStore.ts` lines 630-633 (inside `finishWorkout`)
+    70→    70→
+    71→    71→**Description:**
+    72→    72→The total volume passed to the social feed (`publishSession`) and to challenges (`syncWorkoutVolume`) sums ALL completed sets regardless of set type:
+    73→    73→
+    74→    74→```typescript
+    75→    75→const totalVolume = session.exercises.reduce(
+    76→    76→  (sum, ex) => sum + ex.sets.reduce((sSum, set) => sSum + set.weight * set.reps, 0),
+    77→    77→  0
+    78→    78→);
+    79→    79→```
+    80→    80→
+    81→    81→This is inconsistent with `getTotalStats`, `getMuscleGroupStats`, `getMonthActivitySummary`, and `calculateWeeklyTonnageRaw` in `analytics.ts`, all of which now honor `countsInVolume(set.setType)` (excluding warmup / negative sets). A user who logs many warmup sets will see inflated volume in their shared feed post and inflated progress toward challenges, while their Stats page shows a smaller, filtered volume.
+    82→    82→
+    83→    83→**Suggested fix:**
+    84→    84→```typescript
+    85→    85→import { countsInVolume } from "@/config/setTypes";
+    86→    86→// ...
+    87→    87→const totalVolume = session.exercises.reduce(
+    88→    88→  (sum, ex) =>
+    89→    89→    sum +
+    90→    90→    ex.sets.reduce(
+    91→    91→      (sSum, set) => sSum + (countsInVolume(set.setType) ? set.weight * set.reps : 0),
+    92→    92→      0
+    93→    93→    ),
+    94→    94→  0
+    95→    95→);
+    96→    96→```
+    97→    97→
+    98→    98→---
+    99→    99→
+   100→   100→### 🟡 MEDIUM — DaySessionsDrawer.tsx:47-56 — Volume calc ignores `countsInVolume`
+   101→   101→
+   102→   102→**Category:** data
+   103→   103→
+   104→   104→**File:** `src/components/calendar/DaySessionsDrawer.tsx` lines 47-56
+   105→   105→
+   106→   106→**Description:**
+   107→   107→`sessionVolume` filters by `set.completed` but not by `countsInVolume(set.setType)`:
+   108→   108→
+   109→   109→```typescript
+   110→   110→function sessionVolume(session: WorkoutSession): number {
+   111→   111→  return session.exercises.reduce(
+   112→   112→    (exAcc, ex) =>
+   113→   113→      exAcc +
+   114→   114→      ex.sets
+   115→   115→        .filter((set) => set.completed)
+   116→   116→        .reduce((setAcc, set) => setAcc + set.weight * set.reps, 0),
+   117→   117→    0
+   118→   118→  );
+   119→   119→}
+   120→   120→```
+   121→   121→
+   122→   122→This produces a number that can disagree with the grid shading shown for the same day, because `getMonthActivitySummary` (which drives the cell color) DOES honor `countsInVolume`. A user tapping an active day may see a drawer volume number higher than the intensity bucket implied.
+   123→   123→
+   124→   124→**Suggested fix:**
+   125→   125→```typescript
+   126→   126→import { countsInVolume } from "@/config/setTypes";
+   127→   127→// ...
+   128→   128→.filter((set) => set.completed && countsInVolume(set.setType))
+   129→   129→```
+   130→   130→
+   131→   131→(Same one-line fix applies to `ExerciseDetailPage.tsx` line 76 — `totalVolume += s.weight * s.reps` doesn't filter by `countsInVolume` either, though for `ExerciseDetailPage` the impact is lower because the per-session volume series is mainly informational.)
+   132→   132→
+   133→   133→---
+   134→   134→
+   135→   135→### 🟡 MEDIUM — CalendarPage.tsx:46 + 72-91 — Prefetched `nextMonthPrefetch` state is never consumed
+   136→   136→
+   137→   137→**Category:** bug / dead-code
+   138→   138→
+   139→   139→**File:** `src/pages/CalendarPage.tsx` lines 46, 72-91
+   140→   140→
+   141→   141→**Description:**
+   142→   142→The component declares `nextMonthPrefetch` and fetches next month's sessions in a `useEffect`:
+   143→   143→
+   144→   144→```typescript
+   145→   145→const [nextMonthPrefetch, setNextMonthPrefetch] = useState<WorkoutSession[] | null>(null);
+   146→   146→// ...
+   147→   147→useEffect(() => {
+   148→   148→  // ...
+   149→   149→  (async () => {
+   150→   150→    const sessions = await getSessionsByMonth(nextYear, nextMonth);
+   151→   151→    if (!cancelled) {
+   152→   152→      setNextMonthPrefetch(sessions);
+   153→   153→      setIsPrefetching(false);
+   154→   154→    }
+   155→   155→  })();
+   156→   156→  return () => { cancelled = true; };
+   157→   157→}, [year, month]);
+   158→   158→```
+   159→   159→
+   160→   160→But `nextMonthPrefetch` is **never read anywhere in the file** — `handleNextMonth` only bumps `year`/`month`, which triggers the regular load effect to call `getMonthActivitySummary` again. The prefetched sessions are fetched and discarded. The doc comment ("The prefetched sessions are reused when the user navigates forward — instant render") describes intended behavior that was never wired up.
+   161→   161→
+   162→   162→**Suggested fix:** Either:
+   163→   163→- Pass `nextMonthPrefetch ?? undefined` as the third arg (`preloadedSessions`) to `getMonthActivitySummary` in the load effect when navigating forward, or
+   164→   164→- Delete the prefetch effect + state if the optimization isn't worth the extra Dexie scan.
+   165→   165→
+   166→   166→---
+   167→   167→
+   168→   168→### 🟡 MEDIUM — CalendarPage.tsx:116-132 — `handleDayClick` has a race condition + re-queries the whole month
+   169→   169→
+   170→   170→**Category:** bug / race
+   171→   171→
+   172→   172→**File:** `src/pages/CalendarPage.tsx` lines 116-132
+   173→   173→
+   174→   174→**Description:**
+   175→   175→```typescript
+   176→   176→const handleDayClick = useCallback(async (dateKey: string) => {
+   177→   177→  setSelectedDateKey(dateKey);
+   178→   178→  setSelectedDaySessions([]);
+   179→   179→  const monthSessions = await getSessionsByMonth(year, month);
+   180→   180→  const daySessions = monthSessions.filter((s) => { ... });
+   181→   181→  setSelectedDaySessions(daySessions);
+   182→   182→}, [year, month]);
+   183→   183→```
+   184→   184→
+   185→   185→Two issues:
+   186→   186→
+   187→   187→1. **Race:** If the user taps day A, then day B before A's `getSessionsByMonth` resolves, A's result arrives second and overwrites `selectedDaySessions` — but `selectedDateKey` was already updated to B by the second tap. The drawer for B briefly shows A's sessions.
+   188→   188→
+   189→   189→2. **Wasted work:** Each tap re-runs a full-table Dexie scan via `getCompletedSessions().filter(...)` even though `getMonthActivitySummary` already did the same scan moments earlier. The result isn't cached anywhere.
+   190→   190→
+   191→   191→**Suggested fix:** Track the latest clicked dateKey in a ref and ignore stale results:
+   192→   192→
+   193→   193→```typescript
+   194→   194→const lastClickRef = useRef<string | null>(null);
+   195→   195→
+   196→   196→const handleDayClick = useCallback(async (dateKey: string) => {
+   197→   197→  lastClickRef.current = dateKey;
+   198→   198→  setSelectedDateKey(dateKey);
+   199→   199→  setSelectedDaySessions([]);
+   200→   200→  const monthSessions = await getSessionsByMonth(year, month);
+   201→   201→  if (lastClickRef.current !== dateKey) return;  // stale
+   202→   202→  const daySessions = monthSessions.filter((s) =>
+   203→   203→    localDateKey(new Date(s.date)) === dateKey
+   204→   204→  );
+   205→   205→  setSelectedDaySessions(daySessions);
+   206→   206→}, [year, month]);
+   207→   207→```
+   208→   208→
+   209→   209→(Could also cache monthSessions at the page level to avoid the rescan.)
+   210→   210→
+   211→   211→---
+   212→   212→
+   213→   213→### 🟡 MEDIUM — CalendarPage.tsx:122 + analytics.ts:315-331 — `getSessionsByMonth` returns freeze sessions, drawer shows them
+   214→   214→
+   215→   215→**Category:** data
+   216→   216→
+   217→   217→**Files:** `src/db/analytics.ts` line 315-331, `src/pages/CalendarPage.tsx` line 122
+   218→   218→
+   219→   219→**Description:**
+   220→   220→`getSessionsByMonth` returns ALL completed sessions including `isFreeze: true` ones. `getMonthActivitySummary` then explicitly skips freeze sessions (`if (session.isFreeze) continue;`), so they don't shade the day cell. But `handleDayClick` calls `getSessionsByMonth` and passes the raw list to `DaySessionsDrawer`, which renders every session — including freeze sessions. The grid would show "no activity today" while the drawer lists a freeze session. Confusing UX and inconsistent with the streak/volume logic that excludes freeze sessions everywhere else.
+   221→   221→
+   222→   222→**Suggested fix:** Filter freeze sessions out before passing to the drawer, or filter inside `getSessionsByMonth`:
+   223→   223→
+   224→   224→```typescript
+   225→   225→// In handleDayClick:
+   226→   226→const daySessions = monthSessions.filter(
+   227→   227→  (s) => localDateKey(new Date(s.date)) === dateKey && !s.isFreeze
+   228→   228→);
+   229→   229→```
+   230→   230→
+   231→   231→---
+   232→   232→
+   233→   233→### 🟡 MEDIUM — ExerciseDetailPage.tsx:59-95 — `loadProgress` effect has no cancellation guard
+   234→   234→
+   235→   235→**Category:** race / error-handling
+   236→   236→
+   237→   237→**File:** `src/pages/ExerciseDetailPage.tsx` lines 59-95
+   238→   238→
+   239→   239→**Description:**
+   240→   240→```typescript
+   241→   241→useEffect(() => {
+   242→   242→  async function loadProgress() {
+   243→   243→    // ... await db.workoutSessions.filter(...).toArray();
+   244→   244→    setProgressData(data);
+   245→   245→  }
+   246→   246→  loadProgress();
+   247→   247→}, [exerciseId]);
+   248→   248→```
+   249→   249→
+   250→   250→If the user navigates between exercise detail pages quickly (or `exerciseId` changes for any reason), multiple `loadProgress` invocations can be in flight. The older one resolves later and overwrites the newer page's `progressData` with stale data for the previous exercise. No `cancelled` flag, no cleanup function.
+   251→   251→
+   252→   252→Same pattern exists in `CalendarPage`'s load effect (lines 54-67) — that one DOES have a `cancelled` flag and proper cleanup, so the issue is isolated to `ExerciseDetailPage`.
+   253→   253→
+   254→   254→**Suggested fix:**
+   255→   255→```typescript
+   256→   256→useEffect(() => {
+   257→   257→  let cancelled = false;
+   258→   258→  async function loadProgress() {
+   259→   259→    if (!exerciseId) return;
+   260→   260→    const sessions = await db.workoutSessions.filter(...).toArray();
+   261→   261→    if (cancelled) return;
+   262→   262→    // ... build data
+   263→   263→    setProgressData(data);
+   264→   264→  }
+   265→   265→  loadProgress();
+   266→   266→  return () => { cancelled = true; };
+   267→   267→}, [exerciseId]);
+   268→   268→```
+   269→   269→
+   270→   270→---
+   271→   271→
+   272→   272→### 🟢 LOW — analytics.ts:21-26 — `getWeekKey` uses a non-standard week-number heuristic
+   273→   273→
+   274→   274→**Category:** data
+   275→   275→
+   276→   276→**File:** `src/db/analytics.ts` lines 21-26
+   277→   277→
+   278→   278→**Description:**
+   279→   279→```typescript
+   280→   280→const weekNum = Math.ceil((days + startOfYear.getDay() + 1) / 7);
+   281→   281→```
+   282→   282→
+   283→   283→This is a simplified formula, not ISO 8601. It can produce week numbers > 52 (or even > 53 in some years) and doesn't align week 1 with the first Thursday. Because the key is `${year}-W${weekNum}`, the same week can theoretically get two different keys depending on which date you query from (e.g., a Sunday vs. a Tuesday might land in different computed weeks near year boundaries). Sessions in early January could be bucketed into the previous year's last week or vice versa.
+   284→   284→
+   285→   285→This appears to be pre-existing (not introduced by A1), but since A1 added the `countsInVolume` filter on the same code path, it's worth flagging.
+   286→   286→
+   287→   287→**Suggested fix:** Use a small ISO-week helper:
+   288→   288→```typescript
+   289→   289→function getWeekKey(date: Date): string {
+   290→   290→  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+   291→   291→  const dayNum = (d.getUTCDay() + 6) % 7;
+   292→   292→  d.setUTCDate(d.getUTCDate() - dayNum + 3);
+   293→   293→  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+   294→   294→  const weekNum = 1 + Math.round(((d.getTime() - firstThursday.getTime()) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+   295→   295→  return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+   296→   296→}
+   297→   297→```
+   298→   298→
+   299→   299→---
+   300→   300→
+   301→   301→### 🟢 LOW — recoveryTracker.ts:389-394 — `hoursLeft` can be negative or NaN with future-dated / malformed sessions
+   302→   302→
+   303→   303→**Category:** data / edge-case
+   304→   304→
+   305→   305→**File:** `src/services/recoveryTracker.ts` lines 378-398
+   306→   306→
+   307→   307→**Description:**
+   308→   308→```typescript
+   309→   309→const hoursSince = (now - datum.lastTrained) / (1000 * 60 * 60);
+   310→   310→const recoveryPercent = Math.min(100, Math.round((hoursSince / recoveryHours) * 100));
+   311→   311→// ...
+   312→   312→const hoursLeft = Math.ceil(recoveryHours - hoursSince);
+   313→   313→label = `Just trained · ${hoursLeft}h left`;
+   314→   314→```
+   315→   315→
+   316→   316→If a session has a future `date` (clock skew, manual edit, sync from another device), `hoursSince` is negative, `recoveryPercent` is negative, and `hoursLeft = ceil(recoveryHours - negative) = large positive`. The label would say "Just trained · 96h left" for a session dated 2 days in the future.
+   317→   317→
+   318→   318→If `session.date` is malformed and `new Date(session.date).getTime()` returns `NaN`, then `hoursSince = NaN`, `recoveryPercent = NaN`. The `if (recoveryPercent < 33)` check is false for NaN, `< 67` is also false, so status falls through to `"recovered"` with `recoveryPercent: NaN`. Bizarre but doesn't crash.
+   319→   319→
+   320→   320→**Suggested fix:**
+   321→   321→```typescript
+   322→   322→const hoursSince = (now - datum.lastTrained) / (1000 * 60 * 60);
+   323→   323→if (!isFinite(hoursSince) || hoursSince < 0) {
+   324→   324→  // Treat future-dated / malformed sessions as "just trained"
+   325→   325→  result.set(muscleId, { ...justTrainedEntry });
+   326→   326→  continue;
+   327→   327→}
+   328→   328→```
+   329→   329→
+   330→   330→---
+   331→   331→
+   332→   332→### 🟢 LOW — DaySessionsDrawer.tsx:84-90 — `dateKey.split("-").map(Number)` doesn't validate shape
+   333→   333→
+   334→   334→**Category:** error-handling
+   335→   335→
+   336→   336→**File:** `src/components/calendar/DaySessionsDrawer.tsx` lines 82-91
+   337→   337→
+   338→   338→**Description:**
+   339→   339→```typescript
+   340→   340→const [y, m, d] = dateKey.split("-").map(Number);
+   341→   341→return new Date(y, m - 1, d).toLocaleDateString(...);
+   342→   342→```
+   343→   343→
+   344→   344→If `dateKey` is malformed (e.g., empty string, missing parts, non-numeric), `y/m/d` will be `undefined` or `NaN`, and `new Date(undefined, NaN, undefined)` produces an Invalid Date. `toLocaleDateString(...)` then returns the string `"Invalid Date"`, which is rendered in the drawer header. Not a crash, but unprofessional UX.
+   345→   345→
+   346→   346→In practice, `dateKey` always comes from `formatDateKey` in `CalendarGrid.tsx`, which always produces a well-formed `YYYY-MM-DD` string, so this is purely defensive.
+   347→   347→
+   348→   348→**Suggested fix:**
+   349→   349→```typescript
+   350→   350→const parts = dateKey.split("-").map(Number);
+   351→   351→if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
+   352→   352→  return dateKey;
+   353→   353→}
+   354→   354→const [y, m, d] = parts;
+   355→   355→return new Date(y, m - 1, d).toLocaleDateString(...);
+   356→   356→```
+   357→   357→
+   358→   358→---
+   359→   359→
+   360→   360→### 🟢 LOW — analytics.ts — redundant `s.completed` checks in volume reductions
+   361→   361→
+   362→   362→**Category:** data (cosmetic / defensive)
+   363→   363→
+   364→   364→**Files:** `src/db/analytics.ts` lines 62, 238-239, 267, 361
+   365→   365→
+   366→   366→**Description:**
+   367→   367→Several volume reductions filter by `s.completed`, but `finishWorkout` in `useWorkoutStore.ts` (lines 547-548) already filters to only completed sets before persisting to Dexie:
+   368→   368→
+   369→   369→```typescript
+   370→   370→sets: e.sets.filter((s) => s.completed).map((s) => ({ ... }))
+   371→   371→```
+   372→   372→
+   373→   373→So `s.completed === true` is always true for every set in stored sessions. The extra filter is harmless but adds noise and obscures the intent. The `countsInVolume(s.setType)` filter is the meaningful one.
+   374→   374→
+   375→   375→This is not a bug — it's defensive coding. No fix required, just noted for clarity.
+   376→   376→
+   377→   377→---
+   378→   378→
+   379→   379→## Files Reviewed As Clean
+   380→   380→
+   381→   381→### `src/config/setTypes.ts` (A1) — ✅ Clean
+   382→   382→Pure declarative configuration. `normalizeSetType` correctly handles unknown / undefined / non-string input with a safe `SetType` fallback. `nextSetType` uses `findIndex` with a `-1` guard. No injection surface, no XSS (labels are constants), no prototype pollution (uses `Map.has` not `in`). All exports are pure functions.
+   383→   383→
+   384→   384→### `src/components/workout/RestTimer.tsx` (A2) — ✅ Clean
+   385→   385→- All `setInterval`, `setTimeout`, `visibilitychange`, and `focus` listeners are properly cleaned up in effect returns.
+   386→   386→- `completedRef` / `fifteenFiredRef` are correctly reset on each new activation (the effect depends on `[restTimerActive, restTimerEndTs]`).
+   387→   387→- Timestamp-based countdown (`restTimerEndTs - Date.now()`) survives reloads and tab throttling — the `visibilitychange` resync covers the throttled-interval case.
+   388→   388→- StrictMode-safe via the ref guards.
+   389→   389→- No XSS surface (no user input rendered).
+   390→   390→
+   391→   391→### `src/services/mediaCache.ts` (B1) — ✅ Clean (with one caveat noted below)
+   392→   392→- All Cache API access is wrapped in `isCacheApiSupported()` + try/catch. Failures degrade gracefully to `null`/`false`.
+   393→   393→- `putCachedMedia` correctly clones the Response before storing (`response.clone()`) so the caller can still consume the original.
+   394→   394→- `responseToObjectUrl` checks `blob.size === 0` to avoid creating a useless object URL.
+   395→   395→- Caveat (not elevated to a finding): the cache key is the raw URL. If a caller ever passes a URL with embedded auth tokens (`?token=...`), those tokens persist in the Cache API. For the current exercise-media use case (public GitHub raw URLs / CDN URLs) this is fine, but if the wrapper is later reused for authenticated media, the key should hash or strip query params.
+   396→   396→
+   397→   397→### `src/components/calendar/CalendarGrid.tsx` (B2) — ✅ Clean
+   398→   398→- `buildMonthGrid` correctly handles year rollover via `new Date(year, month + 1, 0)` (last day of current month) and the 42-cell invariant for stable grid height.
+   399→   399→- `formatDateKey` zero-pads month and day correctly.
+   400→   400→- `volumeToIntensity` boundary conditions are correct (`<= 0` → 0, `< 1500` → 1, `< 4000` → 2, else 3).
+   401→   401→- Disabled-day buttons correctly suppress click handlers and have `aria-disabled`.
+   402→   402→- No XSS surface.
+   403→   403→
+   404→   404→### `src/components/exercise/ExerciseVideoPlayer.tsx` (B1) — Mostly clean, one leak (see High above)
+   405→   405→- `IntersectionObserver` is properly disconnected in the effect cleanup.
+   406→   406→- `video.play().catch(() => {})` silently handles autoplay rejection.
+   407→   407→- `autoPlay` is paired with `muted` (browser requirement).
+   408→   408→- `onError` handlers correctly flip `hasError` to show the placeholder.
+   409→   409→- No XSS (all `src` values are URLs, rendered via React's escaped attribute system).
+   410→   410→
+   411→   411→### `src/components/workout/ExerciseWorkoutCard.tsx` (B1) — ✅ Clean (security-wise)
+   412→   412→- All user input (`exercise.notes`) is rendered via React's escaped `textarea value` — no XSS.
+   413→   413→- `Number(exercise.sets[0]?.weight) || 0` correctly handles empty / non-numeric strings.
+   414→   414→- `exerciseIndex - 1` underflow is safe via optional chaining.
+   415→   415→- Skip flow correctly uses `await` after synchronous state updates.
+   416→   416→- Minor performance note (not a bug): subscribing to `activeWorkout` at the bottom of a `memo`'d component defeats memoization — all cards re-render on any workout state change. Not a security issue.
+   417→   417→
+   418→   418→---
+   419→   419→
+   420→   420→## Security Summary (all clear)
+   421→   421→
+   422→   422→- **XSS:** No `dangerouslySetInnerHTML`, no `innerHTML`, no unescaped user input rendered as HTML. All user-controlled strings (exercise names, notes, session names) flow through React's default escaping.
+   423→   423→- **Injection:** No `eval`, no `Function()`, no SQL `$queryRaw`. All Dexie queries use the typed Collection API (`.filter()`, `.where()`, `.toArray()`).
+   424→   424→- **Prototype pollution:** No `Object.assign` onto prototypes, no `JSON.parse` of untrusted input into object literals that are then spread. `normalizeSetType` uses `Map.has` (safe) rather than the `in` operator.
+   425→   425→- **URL handling:** Media URLs are passed directly to `<img src>` / `<video src>` / `fetch()` — browser-native URL parsing handles scheme validation. No `javascript:` URLs can sneak through because `fetch` rejects non-http(s) schemes.
+   426→   426→- **Credential leaks:** No credentials in URLs, no tokens in localStorage keys (notification service uses a boolean flag, not a token). The one caveat: `mediaCache` keys on raw URL — fine for public media, would need review if extended to authenticated media.
+   427→   427→- **CORS:** `fetchMediaWithCache` uses `mode: "cors"` explicitly — correct for cross-origin media. No `*` wildcards in any CORS config touched by these files.
+   428→   428→
+   429→   429→---
+   430→   430→
+   431→   431→## Recommended Action Priority
+   432→   432→
+   433→   433→1. **Fix the blob URL leak in `ExerciseVideoPlayer.tsx`** — one-line addition, prevents memory growth on long workout-session pages. (🟠 High)
+   434→   434→2. **Add `countsInVolume` filter to `finishWorkout`'s `totalVolume`** — affects social feed posts and challenge progress. (🟡 Medium)
+   435→   435→3. **Add `countsInVolume` filter to `DaySessionsDrawer.sessionVolume`** — affects calendar drawer volume display. (🟡 Medium)
+   436→   436→4. **Filter freeze sessions out of `handleDayClick`'s result** — affects calendar drawer correctness. (🟡 Medium)
+   437→   437→5. **Add cancellation guard to `ExerciseDetailPage.loadProgress`** — prevents stale data on rapid navigation. (🟡 Medium)
+   438→   438→6. **Add stale-result guard to `CalendarPage.handleDayClick`** — prevents drawer showing wrong day's sessions. (🟡 Medium)
+   439→   439→7. **Either wire up or delete `nextMonthPrefetch` in `CalendarPage`** — dead state, wasted Dexie scans. (🟡 Medium)
+   440→   440→8. (Optional) Fix `getWeekKey` to use ISO 8601. (🟢 Low)
+   441→   441→9. (Optional) Guard against negative/NaN `hoursSince` in `recoveryTracker`. (🟢 Low)
+   442→   442→10. (Optional) Validate `dateKey` shape in `DaySessionsDrawer.formattedDate`. (🟢 Low)
+   443→   443→
+   444→   444→No 🔴 Critical issues found. The codebase shows strong defensive-coding discipline (try/catch around all async ops, StrictMode-safe refs, proper cleanup in effects) with a few consistency gaps in the newly added `countsInVolume` filter usage.
+   445→   445→---
+   446→   446→Task ID: review-tests-types
+   447→   447→Agent: Test Coverage & Type Safety Reviewer
+   448→   448→Task: Test + type review of session code (A1-B2)
+   449→   449→
+   450→   450→Work Log:
+   451→   451→- Reviewed src/config/setTypes.ts + src/config/__tests__/setTypes.test.ts (A1)
+   452→   452→- Reviewed src/store/useWorkoutStore.ts (cycleSetType, adjustRestTimer, finishWorkout PR detection) + src/store/__tests__/restTimer.test.ts + src/store/__tests__/useWorkoutStore.test.ts (A2)
+   453→   453→- Reviewed src/components/workout/RestTimer.tsx (computeRemainingSeconds)
+   454→   454→- Reviewed src/services/recoveryTracker.ts (computeLoadFactor, calculateMuscleRecovery, getRecoverySummary, getRecoveryColor) + src/services/__tests__/recoveryTracker.test.ts (A3)
+   455→   455→- Reviewed src/services/mediaCache.ts + src/services/__tests__/mediaCache.test.ts (B1)
+   456→   456→- Reviewed src/components/exercise/ExerciseVideoPlayer.tsx (detectMediaKind, getPlaceholderInitial, getPlaceholderGradient) + src/components/exercise/__tests__/ExerciseVideoPlayer.test.ts (B1)
+   457→   457→- Reviewed src/components/calendar/CalendarGrid.tsx (buildMonthGrid, formatDateKey, volumeToIntensity) + src/components/calendar/__tests__/CalendarGrid.test.ts (B2)
+   458→   458→- Reviewed src/db/analytics.ts (getSessionsByMonth, getMonthActivitySummary, getWorkoutStreak, getTotalStats, getPersonalRecords, getMuscleGroupStats) + src/db/__tests__/analytics.test.ts (A1+B2 additions)
+   459→   459→- Reviewed src/db/schema.ts (WorkoutSession, ExerciseSetData types) for type-safety context
+   460→   460→
+   461→   461→Stage Summary:
+   462→   462→
+   463→   463→═══════════════════════════════════════════════════════════════════════════
+   464→   464→COVERAGE MATRIX
+   465→   465→═══════════════════════════════════════════════════════════════════════════
+   466→   466→
+   467→   467→Source file: src/config/setTypes.ts
+   468→   468→| Function / Export          | Tested? | Notes                                        |
+   469→   469→|----------------------------|---------|----------------------------------------------|
+   470→   470→| SET_TYPES (catalog)        | ✅      | 11-count, unique ids/badges, field presence  |
+   471→   471→| SET_TYPE_MAP               | ✅      | size=11, lookup matches entries              |
+   472→   472→| normalizeSetType           | ✅      | valid/undefined/null/unknown/non-string      |
+   473→   473→| getSetTypeMeta             | ✅      | valid + fallback                             |
+   474→   474→| nextSetType                | ✅      | cycle, wrap, unknown, full-cycle             |
+   475→   475→| countsInVolume             | ✅      | all 11 types + default                       |
+   476→   476→| countsForPR                | ✅      | all 11 types + default                       |
+   477→   477→
+   478→   478→Source file: src/store/useWorkoutStore.ts
+   479→   479→| Function / Export               | Tested? | Notes                                              |
+   480→   480→|---------------------------------|---------|----------------------------------------------------|
+   481→   481→| cycleSetType                    | ❌      | **UNTESTED — no tests anywhere**                   |
+   482→   482→| adjustRestTimer                 | ✅      | 5 tests (+/-, no-op, floor, +60)                   |
+   483→   483→| dismissRestTimer                | ✅      | 1 test (clears all fields)                         |
+   484→   484→| toggleSetComplete (timer path)  | ⚠️      | 2 tests; doesn't verify computed duration          |
+   485→   485→| finishWorkout (save + share)    | ✅      | 3 tests in useWorkoutStore.test.ts                 |
+   486→   486→| finishWorkout (PR detection)    | ❌      | **UNTESTED — new countsForPR logic unverified**    |
+   487→   487→| inferExerciseRole (private)     | ❌      | Not exported; only indirect via toggleSetComplete  |
+   488→   488→
+   489→   489→Source file: src/components/workout/RestTimer.tsx
+   490→   490→| Function / Export              | Tested? | Notes                                              |
+   491→   491→|--------------------------------|---------|----------------------------------------------------|
+   492→   492→| computeRemainingSeconds        | ✅      | 6 tests (undefined, future, past, =, ceil, 0.1s)   |
+   493→   493→| RestTimer component (render)   | ❌      | No render tests (StrictMode refs unverified)       |
+   494→   494→
+   495→   495→Source file: src/services/recoveryTracker.ts
+   496→   496→| Function / Export              | Tested? | Notes                                              |
+   497→   497→|--------------------------------|---------|----------------------------------------------------|
+   498→   498→| computeLoadFactor              | ✅      | 12 tests (baseline, NaN, RPE bumps, volume, clamp) |
+   499→   499→| calculateMuscleRecovery        | ✅      | 7+ tests (no history, light/heavy, RPE, bands)     |
+   500→   500→| getRecoverySummary             | ✅      | 1 test (counts all 4 statuses)                     |
+   501→   501→| getRecoveryColor               | ✅      | 4 tests (3 statuses + undefined + never-trained)   |
+   502→   502→| aggregateMuscleData (private)  | ❌      | Not exported; only indirect coverage               |
+   503→   503→
+   504→   504→Source file: src/services/mediaCache.ts
+   505→   505→| Function / Export       | Tested? | Notes                                                |
+   506→   506→|-------------------------|---------|------------------------------------------------------|
+   507→   507→| isCacheApiSupported     | ✅      | 4 tests (SSR, undefined, supported, throwing getter) |
+   508→   508→| getCachedMedia          | ✅      | 4 tests (hit, miss, unsupported, open-throws)        |
+   509→   509→| putCachedMedia          | ⚠️      | 3 tests; clone check is shallow (not content-equal)  |
+   510→   510→| fetchMediaWithCache     | ✅      | 5 tests (hit, miss+store, fail, non-ok, unsupported) |
+   511→   511→| responseToObjectUrl     | ⚠️      | 3 tests; missing blob()-throws branch                |
+   512→   512→
+   513→   513→Source file: src/components/exercise/ExerciseVideoPlayer.tsx
+   514→   514→| Function / Export            | Tested? | Notes                                              |
+   515→   515→|------------------------------|---------|----------------------------------------------------|
+   516→   516→| detectMediaKind              | ✅      | 10 tests (gif/video/image/query/case/no-ext)       |
+   517→   517→| getPlaceholderInitial        | ✅      | 5 tests (upper, trim, empty, ws, arabic)           |
+   518→   518→| getPlaceholderGradient       | ✅      | 4 tests (returns, deterministic, empty, distribute) |
+   519→   519→| ExerciseVideoPlayer render   | ❌      | No render/integration tests                        |
+   520→   520→
+   521→   521→Source file: src/components/calendar/CalendarGrid.tsx
+   522→   522→| Function / Export         | Tested? | Notes                                              |
+   523→   523→|---------------------------|---------|----------------------------------------------------|
+   524→   524→| buildMonthGrid            | ✅      | 11 tests (42 cells, weekday, leap, rollover)       |
+   525→   525→| formatDateKey             | ✅      | 3 tests (padding, wrapping, single-digit)          |
+   526→   526→| volumeToIntensity         | ⚠️      | 6 tests; missing NaN/Infinity edge cases           |
+   527→   527→| CalendarGrid render       | ❌      | No render/click tests                              |
+   528→   528→
+   529→   529→Source file: src/db/analytics.ts
+   530→   530→| Function / Export           | Tested? | Notes                                                  |
+   531→   531→|-----------------------------|---------|--------------------------------------------------------|
+   532→   532→| getWorkoutStreak            | ✅      | 4 tests (empty, today, incomplete, freeze)             |
+   533→   533→| getTotalStats               | ✅      | 3 tests (sums, warmup-excl, negative-excl, all-types)  |
+   534→   534→| getPersonalRecords          | ✅      | 5 tests (warmup-excl, non-PR-excl, PR-eligible, none)  |
+   535→   535→| getWeeklyVolume             | ✅      | 2 tests (buckets, warmup-excl)                         |
+   536→   536→| getWeeklyTonnage            | ✅      | 1 test (buckets)                                       |
+   537→   537→| getMuscleGroupStats         | ✅      | 2 tests (groups, empty-exercises)                      |
+   538→   538→| getExerciseProgress         | ❌      | Untested (out of session scope)                        |
+   539→   539→| getEstimated1RM             | ❌      | Untested (out of session scope)                        |
+   540→   540→| getSessionsByMonth          | ⚠️      | 5 tests; **timezone-flaky** (hardcoded UTC)            |
+   541→   541→| getMonthActivitySummary     | ⚠️      | 7 tests; **timezone-flaky**; missing duration assert   |
+   542→   542→
+   543→   543→═══════════════════════════════════════════════════════════════════════════
+   544→   544→ISSUES (sorted by severity)
+   545→   545→═══════════════════════════════════════════════════════════════════════════
+   546→   546→
+   547→   547→🔴 CRITICAL
+   548→   548→────────────
+   549→   549→
+   550→   550→1. cycleSetType is completely untested
+   551→   551→   File: src/store/useWorkoutStore.ts:403-421
+   552→   552→   Category: coverage-gap
+   553→   553→   Description: The new A1 cycleSetType store action (which calls nextSetType
+   554→   554→     from setTypes.ts) has zero tests across restTimer.test.ts and
+   555→   555→     useWorkoutStore.test.ts. The SetRow UI relies on this for tap-to-cycle.
+   556→   556→     Untested branches: (a) happy-path cycle, (b) no active workout early
+   557→   557→     return, (c) invalid exerciseIndex early return, (d) unknown setId
+   558→   558→     (no-op), (e) sets without setType default to "normal" then cycle to
+   559→   559→     "warmup".
+   560→   560→   Suggested fix: Add a describe block to useWorkoutStore.test.ts:
+   561→   561→     describe("cycleSetType", () => {
+   562→   562→       it("cycles setType from normal → warmup → top_set ...", async () => {
+   563→   563→         await useWorkoutStore.getState().startWorkout(["1"]);
+   564→   564→         const setId = useWorkoutStore.getState().activeWorkout!.exercises[0].sets[0].id;
+   565→   565→         useWorkoutStore.getState().cycleSetType(0, setId);
+   566→   566→         expect(useWorkoutStore.getState().activeWorkout!.exercises[0].sets[0].setType).toBe("warmup");
+   567→   567→         useWorkoutStore.getState().cycleSetType(0, setId);
+   568→   568→         expect(useWorkoutStore.getState().activeWorkout!.exercises[0].sets[0].setType).toBe("top_set");
+   569→   569→       });
+   570→   570→       it("is a no-op when no workout is active", () => {
+   571→   571→         useWorkoutStore.getState().cycleSetType(0, "fake");
+   572→   572→         expect(useWorkoutStore.getState().activeWorkout).toBeNull();
+   573→   573→       });
+   574→   574→       it("is a no-op for an out-of-range exerciseIndex", async () => { ... });
+   575→   575→       it("is a no-op for an unknown setId", async () => { ... });
+   576→   576→       it("treats a set without setType as 'normal' before cycling", async () => { ... });
+   577→   577→     });
+   578→   578→
+   579→   579→2. finishWorkout PR detection logic (A1) is untested
+   580→   580→   File: src/store/useWorkoutStore.ts:582-618
+   581→   581→   Category: coverage-gap
+   582→   582→   Description: The new PR-detection block uses countsForPR(s.setType) to
+   583→   583→     filter PR-eligible sets, compares sessionMax1RM against priorBests, and
+   584→   584→     fires haptic + voice + notification + toast on a new PR. None of this
+   585→   585→     is verified. The existing useWorkoutStore.test.ts finishWorkout tests
+   586→   586→     only check DB save + social share, not PR side effects. With the mock
+   587→   587→     `getPersonalRecords: vi.fn().mockResolvedValue([])`, priorBests is
+   588→   588→     always empty so EVERY working set looks like a "new PR" — but no test
+   589→   589→     asserts newPrCount, the toast message, or the haptic pattern.
+   590→   590→   Suggested fix: Add tests that:
+   591→   591→     - pre-populate getPersonalRecords mock to return a prior best, then
+   592→   592→       verify no PR toast when sessionMax1RM <= prior.
+   593→   593→     - verify countsForPR filtering (warmup-only sessions produce no PR).
+   594→   594→     - assert addToast is called with /New PR!/ on a real PR.
+   595→   595→     - assert navigator.vibrate pattern [30,40,30,40,60] fires on PR.
+   596→   596→     - assert voiceCoach.speak("new_pr") fires on PR.
+   597→   597→
+   598→   598→🟠 HIGH
+   599→   599→────────
+   600→   600→
+   601→   601→3. analytics.test.ts is timezone-flaky (hardcoded UTC timestamps)
+   602→   602→   File: src/db/__tests__/analytics.test.ts:411-466, 446-458, 482-518
+   603→   603→   Category: test-quality (flaky)
+   604→   604→   Description: getSessionsByMonth and getMonthActivitySummary use
+   605→   605→     LOCAL-timezone Date comparisons (new Date(year, month, 1) is local),
+   606→   606→     but the tests hardcode UTC ISO strings like "2026-01-31T23:59:00.000Z".
+   607→   607→     In UTC+1 (Western Europe), that timestamp is Feb 1 00:59 local → the
+   608→   608→     "jan31" session is NOT in January → expect(ids).toEqual(["jan15","jan31"])
+   609→   609→     fails. In UTC+12, "2026-12-31T12:00:00.000Z" is Jan 1 2027 local →
+   610→   610→     the year-rollover test fails. The "aggregates multiple sessions on the
+   611→   611→     same day" test (08:00 UTC + 18:00 UTC) splits into 2 days in UTC+10.
+   612→   612→     Tests pass in UTC/CI but break for devs in non-UTC zones.
+   613→   613→   Suggested fix: Either (a) use noon-local ISO strings via a helper:
+   614→   614→       function localISO(year, month, day, hour=12) {
+   615→   615→         return new Date(year, month, day, hour, 0, 0, 0).toISOString();
+   616→   616→       }
+   617→   617→     Or (b) pass preloadedSessions with already-local Date objects and
+   618→   618→     assert against local date keys. Noon local is safe for any UTC offset
+   619→   619→     ≤ ±12h.
+   620→   620→
+   621→   621→4. volumeToIntensity mishandles NaN (returns 3 "heavy" instead of 0)
+   622→   622→   File: src/components/calendar/CalendarGrid.tsx:121-126
+   623→   623→   Category: edge-case
+   624→   624→   Description: volumeToIntensity(NaN): NaN <= 0 is false, NaN < 1500 is
+   625→   625→     false, NaN < 4000 is false → returns 3 (heavy). A NaN volume (e.g.
+   626→   626→     from a session with NaN weight or reps) would render as the most-
+   627→   627→     intense color. Also affects Infinity (returns 3, probably fine but
+   628→   628→     undocumented). The test file has no NaN/Infinity tests.
+   629→   629→   Suggested fix:
+   630→   630→     export function volumeToIntensity(volume: number): 0 | 1 | 2 | 3 {
+   631→   631→       if (!Number.isFinite(volume) || volume <= 0) return 0;
+   632→   632→       if (volume < 1500) return 1;
+   633→   633→       if (volume < 4000) return 2;
+   634→   634→       return 3;
+   635→   635→     }
+   636→   636→   And add tests:
+   637→   637→     expect(volumeToIntensity(NaN)).toBe(0);
+   638→   638→     expect(volumeToIntensity(Infinity)).toBe(3); // or 0, your call
+   639→   639→
+   640→   640→5. ExerciseVideoPlayer component has no render/integration tests
+   641→   641→   File: src/components/exercise/__tests__/ExerciseVideoPlayer.test.ts
+   642→   642→   Category: coverage-gap
+   643→   643→   Description: Only the 3 pure helpers are tested. The component itself
+   644→   644→     (placeholder rendering, <img> vs <video> selection, speed control
+   645→   645→     visibility, image/animation toggle, IntersectionObserver play/pause,
+   646→   646→     cache blob-URL substitution, onError → placeholder fallback) is
+   647→   647→     completely untested. The dynamic import("@/services/mediaCache")
+   648→   648→     inside useEffect is also unverified.
+   649→   649→   Suggested fix: Add @testing-library/react tests:
+   650→   650→     - renders placeholder when no URLs provided
+   651→   651→     - renders <img> for .gif, <video> for .mp4
+   652→   652→     - shows speed control only for video + detail variant
+   653→   653→     - toggle button switches mode (assert src changes)
+   654→   654→     - onError handler shows placeholder
+   655→   655→     - compact variant hides speed control + shows smaller toggle
+   656→   656→
+   657→   657→6. CalendarGrid component has no render/click tests
+   658→   658→   File: src/components/calendar/__tests__/CalendarGrid.test.ts
+   659→   659→   Category: coverage-gap
+   660→   660→   Description: Pure helpers tested well, but the component's render
+   661→   661→     (weekday labels, month name, prev/next buttons, today ring, intensity
+   662→   662→     class application, session-count badge, disabled-day aria, click →
+   663→   663→     onDayClick only for active days) is untested. The `motion.button`
+   664→   664→     disabled state and the `whileTap` interaction are also unverified.
+   665→   665→   Suggested fix: Add render tests with a small activity Map fixture.
+   666→   666→
+   667→   667→7. mediaCache.test.ts uses @ts-expect-error for global.window mutation
+   668→   668→   File: src/services/__tests__/mediaCache.test.ts:27, 38, 46, 49
+   669→   669→   Category: type-safety
+   670→   670→   Description: Four `@ts-expect-error` directives suppress TS errors
+   671→   671→     when assigning/deleting global.window. If lib.dom.d.ts types change
+   672→   672→     (or strictness increases), these directives could silently become
+   673→   673→     unused (TS error "Unused @ts-expect-error directive") and break the
+   674→   674→     build, OR the suppression could hide a real type regression.
+   675→   675→   Suggested fix: Use a typed helper:
+   676→   676→     function setGlobalWindow(w: Window | undefined): void {
+   677→   677→       (globalThis as { window?: Window }).window = w;
+   678→   678→     }
+   679→   679→     function clearGlobalWindow(): void {
+   680→   680→       delete (globalThis as { window?: Window }).window;
+   681→   681→     }
+   682→   682→   Same applies to the `(global as { caches?: unknown }).caches = ...`
+   683→   683→   pattern repeated 15+ times — extract a `setGlobalCaches(c)` helper.
+   684→   684→
+   685→   685→🟡 MEDIUM
+   686→   686→──────────
+   687→   687→
+   688→   688→8. normalizeSetType uses `value as SetType` cast (twice) in a way that
+   689→   689→   strict no-unsafe-assertion lint rules would flag
+   690→   690→   File: src/config/setTypes.ts:190-191
+   691→   691→   Category: type-safety
+   692→   692→   Description: `SET_TYPE_MAP.has(value as SetType)` — the cast is
+   693→   693→     technically safe because of the `typeof value === "string"` guard,
+   694→   694→     but a future refactor could remove the guard and the cast would
+   695→   695→     silently allow unsafe input. The return `value as SetType` is the
+   696→   696→     same pattern.
+   697→   697→   Suggested fix: Extract a type guard:
+   698→   698→     function isSetType(v: string): v is SetType {
+   699→   699→       return (SET_TYPE_MAP as Map<string, SetTypeMeta>).has(v);
+   700→   700→     }
+   701→   701→     export function normalizeSetType(value: unknown): SetType {
+   702→   702→       return typeof value === "string" && isSetType(value) ? value : "normal";
+   703→   703→     }
+   704→   704→
+   705→   705→9. responseToObjectUrl missing blob()-throws test branch
+   706→   706→   File: src/services/__tests__/mediaCache.test.ts:205-222
+   707→   707→   Category: coverage-gap
+   708→   708→   Description: The source has a try/catch around `await response.blob()`
+   709→   709→     that returns null on error (e.g. body already consumed/locked). No
+   710→   710→     test exercises this branch.
+   711→   711→   Suggested fix:
+   712→   712→     it("returns null when response.blob() throws", async () => {
+   713→   713→       const response = { blob: () => Promise.reject(new Error("locked")) } as unknown as Response;
+   714→   714→       expect(await responseToObjectUrl(response)).toBeNull();
+   715→   715→     });
+   716→   716→
+   717→   717→10. recoveryTracker — most-recent-session-wins behavior untested
+   718→   718→    File: src/services/__tests__/recoveryTracker.test.ts
+   719→   719→    Category: coverage-gap
+   720→   720→    Description: aggregateMuscleData sorts sessions chronologically and
+   721→   721→      overwrites per-muscle entries, so the most recent session's volume
+   722→   722→      + RPE win. No test verifies this explicitly — a regression that
+   723→   723→      accidentally kept the OLDEST session's data would pass the current
+   724→   724→      suite.
+   725→   725→    Suggested fix:
+   726→   726→      it("uses data from the most recent session when a muscle was trained multiple times", () => {
+   727→   727→        const old = makeBenchSession(100, 10, 3, 7, hoursAgo(72)); // 3000 vol
+   728→   728→        const recent = makeBenchSession(100, 5, 3, 9, hoursAgo(24)); // 1500 vol
+   729→   729→        const rec = calculateMuscleRecovery([old, recent], allExercises);
+   730→   730→        const chest = rec.get("upper-chest") ?? rec.get("mid-lower-chest");
+   731→   731→        expect(chest!.lastSessionVolume).toBe(1500);
+   732→   732→        expect(chest!.lastSessionAvgRPE).toBe(9);
+   733→   733→      });
+   734→   734→
+   735→   735→11. recoveryTracker — unknown muscle ID (DEFAULT_RECOVERY_HOURS) untested
+   736→   736→    File: src/services/recoveryTracker.ts:352
+   737→   737→    Category: coverage-gap
+   738→   738→    Description: `RECOVERY_HOURS[muscleId] || DEFAULT_RECOVERY_HOURS`
+   739→   739→      falls back to 36h for muscles not in the table. No test verifies
+   740→   740→      the fallback (e.g. a custom exercise targeting "fake-muscle").
+   741→   741→
+   742→   742→12. recoveryTracker — invalid session.date not handled
+   743→   743→    File: src/services/recoveryTracker.ts:202
+   744→   744→    Category: edge-case
+   745→   745→    Description: `new Date(session.date).getTime()` returns NaN for
+   746→   746→      invalid dates, which propagates to NaN hoursSince and NaN
+   747→   747→      recoveryPercent. The function silently produces garbage status
+   748→   748→      objects. No test documents this behavior.
+   749→   749→    Suggested fix: Either filter invalid dates in aggregateMuscleData,
+   750→   750→      or add a test asserting the current (NaN-propagation) behavior so
+   751→   751→      it's documented.
+   752→   752→
+   753→   753→13. computeRemainingSeconds — NaN `now` not handled
+   754→   754→    File: src/components/workout/RestTimer.tsx:21-24
+   755→   755→    Category: edge-case
+   756→   756→    Description: computeRemainingSeconds(endTs, NaN) → Math.ceil(NaN) =
+   757→   757→      NaN → Math.max(0, NaN) = NaN (NOT 0, because Math.max with NaN
+   758→   758→      returns NaN). The function claims to return "integer seconds ≥ 0"
+   759→   759→      but NaN violates that contract.
+   760→   760→    Suggested fix:
+   761→   761→      export function computeRemainingSeconds(endTs: number | undefined, now: number = Date.now()): number {
+   762→   762→        if (endTs == null || !Number.isFinite(now)) return 0;
+   763→   763→        return Math.max(0, Math.ceil((endTs - now) / 1000));
+   764→   764→      }
+   765→   765→    Add test: expect(computeRemainingSeconds(1000000, NaN)).toBe(0);
+   766→   766→
+   767→   767→14. restTimer.test.ts adjustRestTimer no-op test doesn't assert restTimerActive
+   768→   768→    File: src/store/__tests__/restTimer.test.ts:197-201
+   769→   769→    Category: test-quality
+   770→   770→    Description: The no-op test only checks restTimerEndTs and
+   771→   771→      restTimerTotalDuration stay undefined. If the implementation
+   772→   772→      accidentally set restTimerActive=true, the test would still pass.
+   773→   773→    Suggested fix: Add `expect(useWorkoutStore.getState().restTimerActive).toBe(false);`
+   774→   774→
+   775→   775→15. toggleSetComplete test doesn't verify computed duration matches
+   776→   776→    suggestRestDuration
+   777→   777→    File: src/store/__tests__/restTimer.test.ts:235-255
+   778→   778→    Category: test-quality (false confidence)
+   779→   779→    Description: The test asserts restTimerTotalDuration > 0 and
+   780→   780→      restTimerEndTs is within a [before, after] window, but doesn't
+   781→   781→      verify the actual duration equals what suggestRestDuration
+   782→   782→      returns for the inferred role + RPE + goal. A regression that
+   783→   783→      hardcoded duration=60 would pass.
+   784→   784→    Suggested fix: Import suggestRestDuration, compute the expected
+   785→   785→      duration for the test's exercise (Bench Press → compound, RPE 0,
+   786→   786→      Hypertrophy goal, restDuration 90), and assert equality.
+   787→   787→
+   788→   788→16. getMonthActivitySummary — duration aggregation untested
+   789→   789→    File: src/db/__tests__/analytics.test.ts:482-518
+   790→   790→    Category: coverage-gap
+   791→   791→    Description: The source sums session.duration across same-day
+   792→   792→      sessions into entry.duration. The "aggregates multiple sessions"
+   793→   793→      test asserts sessionCount and volume but not duration.
+   794→   794→    Suggested fix: Add `expect(entry.duration).toBe(3600 + 3600);` (or
+   795→   795→      whatever the fixture durations sum to).
+   796→   796→
+   797→   797→17. mediaCache.test.ts — isCacheApiSupported throwing-getter test
+   798→   798→    doesn't use try/finally for restore
+   799→   799→    File: src/services/__tests__/mediaCache.test.ts:64-78
+   800→   800→    Category: test-quality (mock leakage)
+   801→   801→    Description: If `expect(isCacheApiSupported()).toBe(false)` throws
+   802→   802→      (e.g. assertion failure), the restore `Object.defineProperty(...)`
+   803→   803→      never runs, leaving global.caches in a throwing state for all
+   804→   804→      subsequent tests in the file.
+   805→   805→    Suggested fix: Wrap in try/finally, or move the restore to an
+   806→   806→      `afterEach` that always resets to mockCaches.
+   807→   807→
+   808→   808→🟢 LOW
+   809→   809→───────
+   810→   810→
+   811→   811→18. getSetTypeMeta has unreachable fallback `?? SET_TYPES[0]`
+   812→   812→    File: src/config/setTypes.ts:198
+   813→   813→    Category: type-safety (dead code)
+   814→   814→    Description: SET_TYPE_MAP.get(normalizeSetType(type)) always returns
+   815→   815→      a value because normalizeSetType returns a valid key. The `??
+   816→   816→      SET_TYPES[0]` is dead code that implies the map lookup can fail.
+   817→   817→    Suggested fix: Remove the fallback, or keep it but add a comment
+   818→   818→      explaining it's a defensive no-op.
+   819→   819→
+   820→   820→19. setTypes.test.ts doesn't verify SET_TYPES ordering
+   821→   821→    File: src/config/__tests__/setTypes.test.ts:42-58
+   822→   822→    Category: test-quality
+   823→   823→    Description: The test checks all 11 IDs are present (sorted), but
+   824→   824→      the cycle order documented in the source ("Normal first, then
+   825→   825→      common variants, then specialized") is not asserted. A reorder
+   826→   826→      would change the tap-to-cycle UX but pass the tests.
+   827→   827→    Suggested fix:
+   828→   828→      expect(SET_TYPES.map(m => m.id)).toEqual([
+   829→   829→        "normal","warmup","top_set","back_off","drop_set","failure",
+   830→   830→        "myo_reps","negative","partial","right","left"
+   831→   831→      ]);
+   832→   832→
+   833→   833→20. buildMonthGrid doesn't validate month range (0-11)
+   834→   834→    File: src/components/calendar/CalendarGrid.tsx:60-98
+   835→   835→    Category: edge-case
+   836→   836→    Description: month=12 rolls to January of next year (JS Date
+   837→   837→      behavior), month=-1 rolls to December of previous year. This is
+   838→   838→      undocumented and could surprise callers. No test covers it.
+   839→   839→    Suggested fix: Document the behavior, or guard:
+   840→   840→      if (month < 0 || month > 11) throw new RangeError(`month must be 0-11, got ${month}`);
+   841→   841→
+   842→   842→21. getPlaceholderInitial — misleading Arabic test comment
+   843→   843→    File: src/components/exercise/__tests__/ExerciseVideoPlayer.test.ts:83-86
+   844→   844→    Category: test-quality (documentation)
+   845→   845→    Description: Comment says "first character returned as-is (already
+   846→   846→      uppercase-equivalent)". Arabic has no case — toUpperCase is a
+   847→   847→      no-op. The comment implies Arabic has uppercase.
+   848→   848→    Suggested fix: Update comment to "Arabic name → first character
+   849→   849→      returned as-is (Arabic has no case; toUpperCase is a no-op)".
+   850→   850→
+   851→   851→22. analytics.test.ts mixes A1 and B2 describe blocks in one file
+   852→   852→    File: src/db/__tests__/analytics.test.ts
+   853→   853→    Category: test-quality (organization)
+   854→   854→    Description: The file has 3 top-level describe blocks
+   855→   855→      ("analytics", "analytics — set-type aware (A1)",
+   856→   856→      "getSessionsByMonth + getMonthActivitySummary (B2)") all sharing
+   857→   857→      the same fake-indexeddb instance. The beforeEach in each clears
+   858→   858→      workoutSessions, but the structure makes it easy to accidentally
+   859→   859→      add a test to the wrong block.
+   860→   860→    Suggested fix: Consider splitting into separate files
+   861→   861→      (analytics.test.ts, analytics.setTypes.test.ts,
+   862→   862→      analytics.calendar.test.ts) for clarity.
+   863→   863→
+   864→   864→23. putCachedMedia clone check is shallow
+   865→   865→    File: src/services/__tests__/mediaCache.test.ts:117-128
+   866→   866→    Category: test-quality
+   867→   867→    Description: `expect(storedResponse).not.toBe(response)` verifies
+   868→   868→      the stored object is a different reference, but doesn't verify
+   869→   869→      it's actually a clone (same body, same status). A regression that
+   870→   870→      stored `{}` would pass.
+   871→   871→    Suggested fix:
+   872→   872→      const stored = mockCache.put.mock.calls[0][1] as Response;
+   873→   873→      expect(await stored.text()).toBe(await response.clone().text());
+   874→   874→
+   875→   875→═══════════════════════════════════════════════════════════════════════════
+   876→   876→STRICT MODE COMPLIANCE
+   877→   877→═══════════════════════════════════════════════════════════════════════════
+   878→   878→
+   879→   879→- RestTimer.tsx: ✅ Uses completedRef + fifteenFiredRef to prevent
+   880→   880→  double-firing of sound/voice/notification in StrictMode. The
+   881→   881→  completion effect explicitly checks `if (completedRef.current) return`
+   882→   882→  before firing. This is the correct pattern.
+   883→   883→- ExerciseVideoPlayer.tsx: ✅ The cache-fetch useEffect uses a
+   884→   884→  `cancelled` flag and returns a cleanup that sets it true — StrictMode
+   885→   885→  safe (the second invoke will set its own cancelled=false and re-run).
+   886→   886→  The blob-URL revocation effect uses [blobUrl] as dep, so cleanup runs
+   887→   887→  on every change — safe.
+   888→   888→- CalendarGrid.tsx: ✅ Pure useMemo/useCallback, no side effects.
+   889→   889→- useWorkoutStore.ts: ✅ Zustand store, no effect concerns.
+   890→   890→- analytics.ts: ✅ Pure async functions, no effect concerns.
+   891→   891→- recoveryTracker.ts: ✅ Pure functions, no effect concerns.
+   892→   892→- mediaCache.ts: ✅ Pure async functions, no effect concerns.
+   893→   893→
+   894→   894→NOTE: The StrictMode safety of RestTimer is NOT verified by any test.
+   895→   895→The refs (completedRef, fifteenFiredRef) are component-internal and
+   896→   896→cannot be asserted without a render test. A regression that removed
+   897→   897→the ref guard would pass all current tests. → Add a render test that
+   898→   898→double-invokes the completion effect (via React.StrictMode wrapper in
+   899→   899→testing-library) and asserts playTimerCompleteSound is called exactly
+   900→   900→once.
+   901→   901→
+   902→   902→═══════════════════════════════════════════════════════════════════════════
+   903→   903→SUMMARY
+   904→   904→═══════════════════════════════════════════════════════════════════════════
+   905→   905→
+   906→   906→Total issues: 23
+   907→   907→  🔴 Critical: 2  (cycleSetType + finishWorkout PR detection untested)
+   908→   908→  🟠 High:     5  (timezone flakiness, NaN edge case, 2 render-test gaps,
+   909→   909→                    @ts-expect-error brittleness)
+   910→   910→  🟡 Medium:  10  (type casts, missing branches, false-confidence tests)
+   911→   911→  🟢 Low:      6  (dead code, ordering, docs, organization)
+   912→   912→
+   913→   913→Top 3 actions to take FIRST:
+   914→   914→  1. Add cycleSetType tests (5 cases) — the A1 cycle feature has zero
+   915→   915→     coverage and the UI depends on it.
+   916→   916→  2. Add finishWorkout PR-detection tests — the new countsForPR
+   917→   917→     integration is the core A1 deliverable and is silently untested.
+   918→   918→  3. Fix the timezone-flaky analytics tests — they WILL fail for any
+   919→   919→     developer running tests outside UTC. Use noon-local ISO strings.
+   920→   920→
+   921→   921→The pure-helper coverage (setTypes, recoveryTracker computeLoadFactor,
+   922→   922→CalendarGrid buildMonthGrid, ExerciseVideoPlayer detectMediaKind) is
+   923→   923→excellent. The gaps are concentrated in (a) store-action integration
+   924→   924→tests, (b) component render tests, and (c) timezone/NaN edge cases.
+   925→   925→
