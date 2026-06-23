@@ -1,5 +1,5 @@
 "use client";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Trophy, X } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useEffect } from "react";
@@ -18,39 +18,50 @@ interface PRCelebrationProps {
 }
 
 export default function PRCelebration({ data, onClose }: PRCelebrationProps) {
+  const prefersReducedMotion = useReducedMotion();
+
   useEffect(() => {
     if (!data) return;
 
-    // Fire confetti burst
-    const defaults = {
-      colors: ["#CCFF00", "#00FFFF", "#FF00FF", "#00FF66", "#FFD700"],
-      origin: { y: 0.5 },
-    };
-    confetti({ ...defaults, particleCount: 80, spread: 70, angle: 60 });
-    confetti({ ...defaults, particleCount: 80, spread: 70, angle: 120 });
-    setTimeout(() => confetti({ ...defaults, particleCount: 50, spread: 100 }), 300);
-    setTimeout(() => confetti({ ...defaults, particleCount: 40, spread: 120, origin: { y: 0.3 } }), 600);
+    // Fire confetti burst — suppressed when the user has requested reduced
+    // motion (WCAG 2.3.3). The celebratory message + scale-in animation
+    // (also gated) still fire so the achievement is acknowledged, just
+    // without the flashing particles that could trigger vestibular issues.
+    if (!prefersReducedMotion) {
+      const defaults = {
+        colors: ["#CCFF00", "#00FFFF", "#FF00FF", "#00FF66", "#FFD700"],
+        origin: { y: 0.5 },
+      };
+      confetti({ ...defaults, particleCount: 80, spread: 70, angle: 60 });
+      confetti({ ...defaults, particleCount: 80, spread: 70, angle: 120 });
+      setTimeout(() => confetti({ ...defaults, particleCount: 50, spread: 100 }), 300);
+      setTimeout(() => confetti({ ...defaults, particleCount: 40, spread: 120, origin: { y: 0.3 } }), 600);
+    }
 
     // Auto-dismiss after 5s
     const timeout = setTimeout(onClose, 5000);
     return () => clearTimeout(timeout);
-  }, [data, onClose]);
+  }, [data, onClose, prefersReducedMotion]);
 
   return (
     <AnimatePresence>
       {data && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          initial={prefersReducedMotion ? false : { opacity: 0 }}
+          animate={prefersReducedMotion ? undefined : { opacity: 1 }}
+          exit={prefersReducedMotion ? undefined : { opacity: 0 }}
           onClick={onClose}
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-6"
         >
           <motion.div
-            initial={{ scale: 0.5, opacity: 0, y: 50 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.5, opacity: 0, y: 50 }}
-            transition={{ type: "spring", damping: 15, stiffness: 300 }}
+            initial={prefersReducedMotion ? false : { scale: 0.5, opacity: 0, y: 50 }}
+            animate={prefersReducedMotion ? undefined : { scale: 1, opacity: 1, y: 0 }}
+            exit={prefersReducedMotion ? undefined : { scale: 0.5, opacity: 0, y: 50 }}
+            transition={
+              prefersReducedMotion
+                ? { duration: 0 }
+                : { type: "spring", damping: 15, stiffness: 300 }
+            }
             onClick={(e) => e.stopPropagation()}
             className="relative w-full max-w-sm overflow-hidden rounded-3xl border-2 border-warning/40 bg-gradient-to-br from-bg-card to-bg-elevated p-8 text-center shadow-2xl"
           >
@@ -68,9 +79,13 @@ export default function PRCelebration({ data, onClose }: PRCelebrationProps) {
 
             {/* Trophy icon */}
             <motion.div
-              initial={{ scale: 0, rotate: -180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ delay: 0.2, type: "spring", damping: 10, stiffness: 200 }}
+              initial={prefersReducedMotion ? false : { scale: 0, rotate: -180 }}
+              animate={prefersReducedMotion ? undefined : { scale: 1, rotate: 0 }}
+              transition={
+                prefersReducedMotion
+                  ? { duration: 0 }
+                  : { delay: 0.2, type: "spring", damping: 10, stiffness: 200 }
+              }
               className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-warning to-yellow-500 shadow-lg shadow-warning/40"
             >
               <Trophy className="h-10 w-10 text-black" strokeWidth={2.5} />
@@ -78,9 +93,9 @@ export default function PRCelebration({ data, onClose }: PRCelebrationProps) {
 
             {/* NEW PR text */}
             <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
+              animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+              transition={{ delay: prefersReducedMotion ? 0 : 0.3 }}
               className="text-3xl font-black uppercase italic tracking-tight text-warning mb-2"
             >
               NEW PR!
@@ -112,7 +127,7 @@ export default function PRCelebration({ data, onClose }: PRCelebrationProps) {
 
             {/* Dismiss button */}
             <motion.button
-              whileTap={{ scale: 0.95 }}
+              whileTap={prefersReducedMotion ? undefined : { scale: 0.95 }}
               onClick={onClose}
               className="w-full rounded-xl bg-primary py-3 text-sm font-black uppercase tracking-wider text-black transition-colors hover:bg-primary-light"
             >

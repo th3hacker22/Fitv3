@@ -276,7 +276,7 @@ export default function ExerciseDetailPage() {
                 <button
                   onClick={() => setMetric("e1rm")}
                   className={cn(
-                    "px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all active:scale-95",
+                    "min-h-11 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all active:scale-95",
                     metric === "e1rm"
                       ? "bg-primary/20 text-primary border-primary/40"
                       : "bg-bg-elevated text-text-secondary border-transparent"
@@ -287,7 +287,7 @@ export default function ExerciseDetailPage() {
                 <button
                   onClick={() => setMetric("volume")}
                   className={cn(
-                    "px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all active:scale-95",
+                    "min-h-11 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all active:scale-95",
                     metric === "volume"
                       ? "bg-primary/20 text-primary border-primary/40"
                       : "bg-bg-elevated text-text-secondary border-transparent"

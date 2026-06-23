@@ -143,7 +143,7 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
           </div>
           <button
             onClick={handleUndoSkip}
-            className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-border bg-bg-elevated px-3 h-10 text-xs font-bold uppercase tracking-wider text-text-secondary transition-all hover:text-primary hover:border-primary active:scale-95"
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-border bg-bg-elevated px-4 min-h-11 text-xs font-bold uppercase tracking-wider text-text-secondary transition-all hover:text-primary hover:border-primary active:scale-95"
             aria-label={`Undo skip for ${localizedName}`}
           >
             <RotateCcw className="h-3.5 w-3.5" />
@@ -359,7 +359,7 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
       <div className="border-t border-border p-3">
         <button
           onClick={() => addSet(exerciseIndex)}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-bg-elevated py-2.5 text-xs font-semibold text-text-secondary transition-colors hover:bg-bg-hover hover:text-primary active:scale-[0.98] uppercase tracking-wider"
+          className="flex w-full min-h-11 items-center justify-center gap-2 rounded-xl bg-bg-elevated py-2 text-xs font-semibold text-text-secondary transition-colors hover:bg-bg-hover hover:text-primary active:scale-[0.98] uppercase tracking-wider"
         >
           <Plus className="h-4 w-4" />
           Add Set

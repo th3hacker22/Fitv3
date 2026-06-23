@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useReducedMotion } from "framer-motion";
 import { Play, Image as ImageIcon, Loader2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 
@@ -114,6 +115,7 @@ export default function ExerciseVideoPlayer({
   className,
 }: ExerciseVideoPlayerProps) {
   const isCompact = variant === "compact";
+  const prefersReducedMotion = useReducedMotion();
 
   // Mode: "image" (static) or "animation" (gif/video). Defaults to animation
   // when an animation source exists, else static image.
@@ -275,7 +277,7 @@ export default function ExerciseVideoPlayer({
           loop
           muted
           playsInline
-          autoPlay
+          autoPlay={!prefersReducedMotion}
           preload="none"
           aria-label={`${exerciseName} demonstration video`}
           onError={() => setHasError(true)}

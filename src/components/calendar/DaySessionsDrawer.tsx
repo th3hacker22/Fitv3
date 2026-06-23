@@ -1,8 +1,9 @@
 "use client";
 import { useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
-import { Dumbbell, Clock, TrendingUp, X } from "lucide-react";
+import { Dumbbell, Clock, TrendingUp, CalendarX } from "lucide-react";
+import { Skeleton } from "@/components/ui-custom/Skeleton";
 import type { WorkoutSession } from "@/db/schema";
 
 /**
@@ -23,6 +24,8 @@ export interface DaySessionsDrawerProps {
   dateKey: string | null;
   /** All sessions for that day (already filtered by the parent). */
   sessions: WorkoutSession[];
+  /** When true, shows 3 skeleton placeholder cards (parent is fetching). */
+  isLoading?: boolean;
   /** Called when the drawer should close. */
   onOpenChange: (open: boolean) => void;
 }
@@ -62,9 +65,11 @@ function sessionExerciseCount(session: WorkoutSession): number {
 export default function DaySessionsDrawer({
   dateKey,
   sessions,
+  isLoading = false,
   onOpenChange,
 }: DaySessionsDrawerProps) {
   const open = Boolean(dateKey);
+  const prefersReducedMotion = useReducedMotion();
 
   const totalVolume = useMemo(
     () => sessions.reduce((acc, s) => acc + sessionVolume(s), 0),
@@ -103,7 +108,7 @@ export default function DaySessionsDrawer({
         </DrawerHeader>
 
         {/* Day summary stats */}
-        {open && sessions.length > 0 && (
+        {open && !isLoading && sessions.length > 0 && (
           <div className="grid grid-cols-3 gap-2 border-b border-border p-3">
             <div className="flex flex-col items-center gap-1 rounded-xl bg-bg-elevated p-2">
               <Dumbbell className="h-4 w-4 text-primary" aria-hidden="true" />
@@ -138,30 +143,45 @@ export default function DaySessionsDrawer({
         {/* Session list */}
         <div className="flex-1 overflow-y-auto p-3 no-scrollbar">
           <AnimatePresence mode="popLayout">
-            {open && sessions.length === 0 && (
+            {/* Loading state — 3 skeleton cards while the parent fetches. */}
+            {open && isLoading && (
+              <div className="space-y-2">
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className="h-20 w-full rounded-xl" />
+                ))}
+              </div>
+            )}
+
+            {open && !isLoading && sessions.length === 0 && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex flex-col items-center justify-center gap-2 py-8 text-center"
+                initial={prefersReducedMotion ? false : { opacity: 0 }}
+                animate={prefersReducedMotion ? undefined : { opacity: 1 }}
+                exit={prefersReducedMotion ? undefined : { opacity: 0 }}
+                className="flex flex-col items-center justify-center gap-3 py-10 text-center"
               >
-                <X className="h-8 w-8 text-text-muted" aria-hidden="true" />
-                <p className="text-sm font-bold text-text-secondary">No sessions</p>
+                <CalendarX className="h-10 w-10 text-text-muted" aria-hidden="true" />
+                <div>
+                  <p className="text-sm font-bold text-text-secondary">No sessions found</p>
+                  <p className="mt-0.5 text-xs text-text-muted">
+                    You haven&apos;t logged a workout for this day.
+                  </p>
+                </div>
               </motion.div>
             )}
 
             {open &&
+              !isLoading &&
               sessions.map((session, idx) => {
                 const vol = sessionVolume(session);
                 const exCount = sessionExerciseCount(session);
                 return (
                   <motion.div
                     key={session.id}
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ delay: idx * 0.04 }}
+                    layout={!prefersReducedMotion}
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
+                    animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+                    exit={prefersReducedMotion ? undefined : { opacity: 0, y: -10 }}
+                    transition={{ delay: prefersReducedMotion ? 0 : idx * 0.04 }}
                     className="mb-2 rounded-xl border border-border bg-bg-card p-3"
                   >
                     <div className="flex items-start justify-between gap-2">

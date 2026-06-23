@@ -1,6 +1,6 @@
 "use client";
 import { memo } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Check, Trash2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import type { WorkoutSet } from "@/store/useWorkoutStore";
@@ -36,6 +36,7 @@ const SetRow = memo(
     onRemoveSet,
   }: SetRowProps) => {
     const isCompleted = set.completed;
+    const prefersReducedMotion = useReducedMotion();
 
     // ---- Set type metadata (badge + color) -----------------------------------
     const typeMeta = getSetTypeMeta(set.setType);
@@ -64,10 +65,10 @@ const SetRow = memo(
 
     return (
       <motion.div
-        layout
-        initial={{ opacity: 0, height: 0 }}
-        animate={{ opacity: 1, height: "auto" }}
-        exit={{ opacity: 0, height: 0 }}
+        layout={!prefersReducedMotion}
+        initial={prefersReducedMotion ? false : { opacity: 0, height: 0 }}
+        animate={prefersReducedMotion ? undefined : { opacity: 1, height: "auto" }}
+        exit={prefersReducedMotion ? undefined : { opacity: 0, height: 0 }}
         className={cn(
           "grid grid-cols-[2rem_1fr_1fr_3rem_3rem_2.75rem] gap-2 px-4 py-2.5 transition-colors duration-300 items-center",
           isCompleted ? "bg-success/5" : "bg-transparent"
@@ -92,7 +93,11 @@ const SetRow = memo(
               aria-label={`Set type: ${typeMeta.labelEn}. Tap to change.`}
               title={`${typeMeta.labelEn} (${typeMeta.labelAr})`}
               className={cn(
-                "flex h-5 min-w-[1.75rem] items-center justify-center rounded-md px-1 text-[10px] font-black tracking-tight transition-all active:scale-90 disabled:opacity-50 disabled:active:scale-100 cursor-pointer",
+                // Hit-slop: -my-2 -mx-1 expands the touch target to 44px
+                // (min-h-[2.75rem] min-w-[2.75rem]) without growing the visual
+                // chip — the chip itself stays 1.75rem × 1.25rem, but the
+                // tappable area meets WCAG 2.5.5.
+                "flex h-5 min-h-[2.75rem] min-w-[2.75rem] -my-2 -mx-1 items-center justify-center rounded-md px-1 text-[10px] font-black tracking-tight transition-all active:scale-90 disabled:opacity-50 disabled:active:scale-100 cursor-pointer",
                 typeMeta.chipBg,
                 typeMeta.chipText,
                 !isNonDefaultType && "opacity-40 hover:opacity-100"
@@ -174,12 +179,12 @@ const SetRow = memo(
           <motion.button
             onClick={onToggleComplete}
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 active:scale-90",
+              "flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200 active:scale-90",
               isCompleted
                 ? "bg-success text-white shadow-lg shadow-success/25"
                 : "border border-border bg-bg-elevated text-text-secondary hover:border-success/40 hover:text-success"
             )}
-            whileTap={{ scale: 0.85 }}
+            whileTap={prefersReducedMotion ? undefined : { scale: 0.85 }}
           >
             <Check className="h-5 w-5" strokeWidth={isCompleted ? 3 : 2} />
           </motion.button>

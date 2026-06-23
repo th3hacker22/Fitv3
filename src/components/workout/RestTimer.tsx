@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { X, Timer } from "lucide-react";
 import { useWorkoutStore } from "@/store/useWorkoutStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
@@ -35,6 +35,7 @@ export default function RestTimer() {
   const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);
   const soundEnabled = useSettingsStore((s) => s.soundEnabled);
   const goal = useGeneratorStore((s) => s.goal) || "Hypertrophy";
+  const prefersReducedMotion = useReducedMotion();
 
   // The recommendation is recomputed for display purposes (reason text +
   // presets). The actual countdown duration comes from the store's
@@ -196,10 +197,14 @@ export default function RestTimer() {
     <AnimatePresence>
       {restTimerActive && (
         <motion.div
-          initial={{ y: 120, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 120, opacity: 0 }}
-          transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          initial={prefersReducedMotion ? false : { y: 120, opacity: 0 }}
+          animate={prefersReducedMotion ? undefined : { y: 0, opacity: 1 }}
+          exit={prefersReducedMotion ? undefined : { y: 120, opacity: 0 }}
+          transition={
+            prefersReducedMotion
+              ? { duration: 0 }
+              : { type: "spring", damping: 25, stiffness: 300 }
+          }
           className="fixed inset-x-0 bottom-20 z-[100] mx-auto max-w-md px-5"
         >
           <div
@@ -263,7 +268,11 @@ export default function RestTimer() {
                 <p
                   className={cn(
                     "text-2xl font-bold tabular-nums transition-colors",
-                    isReady ? "text-success animate-pulse" : "text-text-primary"
+                    isReady && !prefersReducedMotion
+                      ? "text-success animate-pulse"
+                      : isReady
+                      ? "text-success"
+                      : "text-text-primary"
                   )}
                 >
                   {formatTime}

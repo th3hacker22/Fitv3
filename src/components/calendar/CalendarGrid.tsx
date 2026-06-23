@@ -1,6 +1,5 @@
 "use client";
 import { useMemo, useCallback } from "react";
-import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/utils/cn";
 import type { DayActivitySummary } from "@/db/analytics";
@@ -159,7 +158,7 @@ export default function CalendarGrid({
           type="button"
           onClick={onPrevMonth}
           aria-label="Previous month"
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-bg-elevated text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary active:scale-95"
+          className="flex h-11 w-11 items-center justify-center rounded-xl bg-bg-elevated text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary active:scale-95"
         >
           <ChevronLeft className="h-5 w-5 rtl:rotate-180" aria-hidden="true" />
         </button>
@@ -179,7 +178,7 @@ export default function CalendarGrid({
           type="button"
           onClick={onNextMonth}
           aria-label="Next month"
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-bg-elevated text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary active:scale-95"
+          className="flex h-11 w-11 items-center justify-center rounded-xl bg-bg-elevated text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary active:scale-95"
         >
           <ChevronRight className="h-5 w-5 rtl:rotate-180" aria-hidden="true" />
         </button>
@@ -218,7 +217,7 @@ export default function CalendarGrid({
           const isToday = cell.dateKey === today;
 
           return (
-            <motion.button
+            <button
               key={cell.dateKey}
               type="button"
               onClick={() => handleClick(cell.dateKey, isActive)}
@@ -229,9 +228,14 @@ export default function CalendarGrid({
                   : cell.dateKey
               }
               aria-disabled={!isActive}
-              whileTap={isActive ? { scale: 0.9 } : undefined}
               className={cn(
-                "relative flex aspect-square flex-col items-center justify-center rounded-lg text-xs font-bold transition-all",
+                // min-h-[2.75rem] ensures the day cell meets the 44px WCAG
+                // touch-target even when aspect-square would otherwise make
+                // it smaller on narrow screens. active:scale-90 replaces the
+                // former framer-motion whileTap (respects prefers-reduced-motion
+                // automatically via the CSS engine's transform handling, and
+                // avoids extra JS work on each tap).
+                "relative flex min-h-[2.75rem] aspect-square flex-col items-center justify-center rounded-lg text-xs font-bold transition-all active:scale-90",
                 INTENSITY_CLASSES[intensity],
                 isActive ? "cursor-pointer hover:ring-2 hover:ring-primary/40" : "cursor-default",
                 isToday && "ring-2 ring-primary"
@@ -241,11 +245,11 @@ export default function CalendarGrid({
                 {cell.day}
               </span>
               {isActive && summary!.sessionCount > 1 && (
-                <span className="absolute top-0.5 end-0.5 flex h-3 min-w-[3] items-center justify-center rounded-full bg-bg/80 px-1 text-[8px] font-black text-text-primary">
+                <span className="absolute top-0.5 end-0.5 flex h-3 min-w-[1.25rem] items-center justify-center rounded-full bg-bg/80 px-1 text-[8px] font-black text-text-primary">
                   {summary!.sessionCount}
                 </span>
               )}
-            </motion.button>
+            </button>
           );
         })}
       </div>

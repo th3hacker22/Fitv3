@@ -1,12 +1,14 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { motion } from "framer-motion";
-import { Calendar as CalendarIcon, ChevronLeft } from "lucide-react";
-import { Link } from "@/router-shim";
+import { motion, useReducedMotion } from "framer-motion";
+import { Calendar as CalendarIcon, ChevronLeft, AlertCircle } from "lucide-react";
+import { Link, useNavigate } from "@/router-shim";
 import { useTranslation } from "react-i18next";
 import CalendarGrid from "@/components/calendar/CalendarGrid";
 import DaySessionsDrawer from "@/components/calendar/DaySessionsDrawer";
 import { Skeleton } from "@/components/ui-custom/Skeleton";
+import { KineticEmptyState } from "@/components/ui-custom/KineticEmptyState";
+import { useToastStore } from "@/store/useToastStore";
 import {
   getMonthActivitySummary,
   getSessionsByMonth,
@@ -32,6 +34,9 @@ import type { WorkoutSession } from "@/db/schema";
 
 export default function CalendarPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const addToast = useToastStore((s) => s.addToast);
+  const prefersReducedMotion = useReducedMotion();
 
   // Current displayed month. Defaults to today's month.
   const today = useMemo(() => new Date(), []);
@@ -41,6 +46,7 @@ export default function CalendarPage() {
   // Activity map for the current month.
   const [activity, setActivity] = useState<Map<string, DayActivitySummary>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   // Prefetch state for the next month (competitor-inspired optimization).
   const [nextMonthPrefetch, setNextMonthPrefetch] = useState<WorkoutSession[] | null>(null);
@@ -49,22 +55,41 @@ export default function CalendarPage() {
   // Drawer state: which day is selected + that day's sessions.
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [selectedDaySessions, setSelectedDaySessions] = useState<WorkoutSession[]>([]);
+  const [isDaySessionsLoading, setIsDaySessionsLoading] = useState(false);
 
   // ── Load the current month's activity summary ──
-  useEffect(() => {
-    let cancelled = false;
-    setIsLoading(true);
-    (async () => {
-      const summary = await getMonthActivitySummary(year, month);
-      if (!cancelled) {
-        setActivity(summary);
-        setIsLoading(false);
+  const loadActivity = useCallback(
+    async (signal: { cancelled: boolean }) => {
+      setIsLoading(true);
+      setLoadError(false);
+      try {
+        const summary = await getMonthActivitySummary(year, month);
+        if (!signal.cancelled) {
+          setActivity(summary);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error("[CalendarPage] Failed to load month activity:", err);
+        if (!signal.cancelled) {
+          setLoadError(true);
+          setIsLoading(false);
+          addToast(
+            "error",
+            "Couldn't load calendar. Check your data and try again."
+          );
+        }
       }
-    })();
+    },
+    [year, month, addToast]
+  );
+
+  useEffect(() => {
+    const signal = { cancelled: false };
+    void loadActivity(signal);
     return () => {
-      cancelled = true;
+      signal.cancelled = true;
     };
-  }, [year, month]);
+  }, [loadActivity]);
 
   // ── Prefetch next month's sessions (competitor-inspired) ──
   // Fires in the background after the current month loads. The prefetched
@@ -117,23 +142,46 @@ export default function CalendarPage() {
     async (dateKey: string) => {
       setSelectedDateKey(dateKey);
       setSelectedDaySessions([]); // show loading state in drawer
-      const monthSessions = await getSessionsByMonth(year, month);
-      // Filter to just the tapped day.
-      const daySessions = monthSessions.filter((s) => {
-        const d = new Date(s.date);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, "0");
-        const day = String(d.getDate()).padStart(2, "0");
-        return `${y}-${m}-${day}` === dateKey;
-      });
-      setSelectedDaySessions(daySessions);
+      setIsDaySessionsLoading(true);
+      try {
+        const monthSessions = await getSessionsByMonth(year, month);
+        // Filter to just the tapped day.
+        const daySessions = monthSessions.filter((s) => {
+          const d = new Date(s.date);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${y}-${m}-${day}` === dateKey;
+        });
+        setSelectedDaySessions(daySessions);
+      } catch (err) {
+        console.error("[CalendarPage] Failed to load day sessions:", err);
+        addToast("error", "Couldn't load that day's workouts.");
+        setSelectedDaySessions([]);
+      } finally {
+        setIsDaySessionsLoading(false);
+      }
     },
-    [year, month]
+    [year, month, addToast]
   );
 
   const handleDrawerOpenChange = useCallback((open: boolean) => {
-    if (!open) setSelectedDateKey(null);
+    if (!open) {
+      setSelectedDateKey(null);
+      setIsDaySessionsLoading(false);
+    }
   }, []);
+
+  // ── Empty-state detection ──
+  // We only show the friendly empty state when the user is viewing the
+  // current month AND no days are active. For past months with no activity
+  // the calendar itself is the right signal (you didn't train that month —
+  // not actionable). For the current month it's a prompt to start.
+  const isCurrentMonth =
+    year === today.getFullYear() && month === today.getMonth();
+  const hasNoActivity = activity.size === 0 ||
+    !Array.from(activity.values()).some((s) => s.isActive);
+  const showEmptyState = !isLoading && !loadError && isCurrentMonth && hasNoActivity;
 
   return (
     <div className="space-y-4 pb-6 pt-2">
@@ -148,8 +196,8 @@ export default function CalendarPage() {
 
       {/* Page header */}
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
+        animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
         className="flex items-center gap-3"
       >
@@ -169,10 +217,37 @@ export default function CalendarPage() {
       {/* Calendar grid */}
       {isLoading ? (
         <Skeleton className="h-[420px] w-full rounded-[--radius-card]" />
+      ) : loadError ? (
+        <div className="glass-card flex flex-col items-center gap-4 rounded-[--radius-card] border border-border p-8 text-center">
+          <AlertCircle className="h-10 w-10 text-danger" aria-hidden="true" />
+          <div>
+            <p className="text-base font-bold text-text-primary">
+              Couldn&apos;t load your calendar
+            </p>
+            <p className="mt-1 text-xs text-text-secondary">
+              Something went wrong while reading your workout history.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadActivity({ cancelled: false })}
+            className="flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold uppercase tracking-wider text-black transition-colors hover:bg-primary-light active:scale-95"
+          >
+            Retry
+          </button>
+        </div>
+      ) : showEmptyState ? (
+        <KineticEmptyState
+          variant="workouts"
+          title="No workouts this month"
+          description="Start your first one and build the habit!"
+          actionLabel="Start Workout"
+          onAction={() => navigate({ to: "/exercises" })}
+        />
       ) : (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          initial={prefersReducedMotion ? false : { opacity: 0 }}
+          animate={prefersReducedMotion ? undefined : { opacity: 1 }}
           transition={{ duration: 0.3 }}
         >
           <CalendarGrid
@@ -207,6 +282,7 @@ export default function CalendarPage() {
       <DaySessionsDrawer
         dateKey={selectedDateKey}
         sessions={selectedDaySessions}
+        isLoading={isDaySessionsLoading}
         onOpenChange={handleDrawerOpenChange}
       />
     </div>
