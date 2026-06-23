@@ -2335,3 +2335,794 @@ Stage Summary:
 - Google logo removed from guest button
 - Notification icon uses /pwa-192x192.png
 - Not pushed to GitHub
+
+---
+Task ID: review-ux-skill
+Agent: UX Auditor (per skills/ux-auditor.md)
+
+## UX Audit: Epic A + B1 + B2
+
+**Scope**: SetRow (A1), RestTimer (A2), ExerciseWorkoutCard (B1), ExerciseVideoPlayer (B1), ExerciseDetailPage (B1), CalendarGrid (B2), DaySessionsDrawer (B2), CalendarPage (B2), setTypes.ts (A1 config).
+
+**Pass/Fail**: **FAIL with conditions** — 11 Blocking friction points identified (threshold for REDESIGN is 2+). Touch-target violations are pervasive (8 components), empty states are missing in 3 places, and error states are missing in 2 data-fetch flows. The architecture and offline-first patterns are sound; the gaps are surface-level UX compliance issues that can be fixed without re-architecture, but the cumulative blocking count triggers REDESIGN per the skill rule.
+
+---
+
+### 1. Cognitive Load
+
+- 🟠 **High — SetRow.tsx:87-103**: Tap-to-cycle through 11 set types means up to 10 taps to reach the desired type (e.g., "left"). No progressive disclosure — the user must memorize the cycle order in `setTypes.ts:67-178` (normal → warmup → top_set → back_off → drop → failure → myo_reps → negative → partial → right → left). First-time users have no way to discover the available types without tapping blindly. **Recommendation**: Replace tap-to-cycle with a SetTypePicker bottom sheet (long-press or chevron-tap to open) that shows all 11 options with labels.
+- 🟠 **High — ExerciseWorkoutCard.tsx:198-232**: Header presents 3-4 competing CTAs (Warmup, Plates, Skip, Replace) alongside the exercise title and superset badge. At 375px this likely overflows or wraps awkwardly (`flex items-start gap-3` with `flex-1` title + `gap-2` button group). Decisions per card ≥4 (beyond the ideal ≤3).
+- ✅ **Good — RestTimer.tsx**: Single dismiss action + 4 quick-adjust presets. Decisions are minimal and the timer auto-dismisses on completion.
+- ✅ **Good — CalendarPage.tsx**: Single primary action (tap a day). Subtitle "Tap an active day to view its sessions" (line 165) gives first-time guidance without onboarding overhead.
+- 🟡 **Medium — ExerciseDetailPage.tsx**: Long scroll (visual → info → tags → muscles → chart → instructions → alternatives → CTA). The "Start Workout Now" CTA (line 418-427) is at the very bottom — thumb-reachable but requires significant scrolling past secondary content. Consider a sticky bottom CTA.
+
+### 2. Consistency
+
+- ✅ **Good — ExerciseWorkoutCard.tsx**: Reuses `ExerciseVideoPlayer`, `SetRow`, `ReplaceExerciseSheet`, `WarmupSheet`, `PlateCalculatorSheet`, `SkipReasonModal`. No new components created.
+- ✅ **Good — ExerciseDetailPage.tsx:21,5,418**: Reuses `SkeletonCard`, `Button`, `AnatomyMap`, `ExerciseVideoPlayer`.
+- ✅ **Good — DaySessionsDrawer.tsx:4**: Reuses `Drawer`/`DrawerContent`/`DrawerHeader`/`DrawerTitle`/`DrawerDescription` from `@/components/ui/drawer`.
+- 🟡 **Medium — DaySessionsDrawer.tsx:141-151**: Ad-hoc "No sessions" empty state (plain `X` icon + text) instead of reusing `KineticEmptyState` (variant="custom"). Violates the "reuse existing components" rule.
+- 🟡 **Medium — ExerciseDetailPage.tsx:118-132**: "Exercise Not Found" is a hand-rolled empty state (icon + text + link) instead of `KineticEmptyState`.
+- 🟡 **Medium — setTypes.ts:113-114, 133-134, 143-144, 153-154, 163-164, 173-174**: 6 of 11 set types use hardcoded Tailwind colors (`bg-purple-500/15`, `text-pink-400`, etc.) instead of semantic theme tokens. The other 5 (`normal`, `warmup`, `top_set`, `back_off`, `failure`) correctly use `bg-primary/15`, `bg-warning/15`, etc. Inconsistent with the design-system principle stated in lines 42-45 of the same file.
+- 🟡 **Medium — RestTimer.tsx:203**: `bottom-20` positioning does not account for safe-area insets on notched devices. Should use `pb-safe` or `env(safe-area-inset-bottom)`.
+- 🟡 **Medium — RestTimer.tsx:272**: `recommendation.reason` is `truncate`d with only a `title` attribute for full text. On mobile (no hover), long reason strings are permanently cut off. Consider wrapping to 2 lines or a tap-to-expand.
+- 🔴 **Critical — Touch targets (pervasive)**: See Friction Points §A below for the full list. 8 components violate the ≥44px rule.
+
+### 3. Feedback
+
+- ✅ **Good — RestTimer.tsx**: Multi-modal completion feedback (sound `playTimerCompleteSound`, voice `voiceCoach.speak("rest_complete")`, system notification, auto-dismiss). 15-second voice warning. "Ready!" pulse in final 5 seconds with color shift (line 193, 254). Timestamp-based countdown survives reloads/backgrounding (lines 54-107). StrictMode-safe via refs (lines 67-68, 116, 138).
+- ✅ **Good — SetRow.tsx:60-63**: `handleFocus` calls `scrollIntoView` after 300ms so the active input isn't hidden by the keyboard. Good mobile-first detail.
+- ✅ **Good — ExerciseVideoPlayer.tsx:281, 291**: `onError` handlers on both `<video>` and `<img>` fall back to the gradient placeholder. Offline-first cache via `mediaCache` service with graceful fallback.
+- 🟡 **Medium — ExerciseVideoPlayer.tsx:263-267**: Loading state is a bare `Loader2 animate-spin` spinner over a blurred backdrop. The skill rule prefers skeletons over bare spinners. For a video player, a skeleton of the aspect-ratio frame would be more consistent.
+- 🟠 **High — ExerciseWorkoutCard.tsx:86-103**: `handleSkipConfirm` swallows errors with `console.warn` only. The user gets no feedback if `recordSkip` fails — the card still visually collapses, so the user thinks the skip was recorded when it wasn't. Should show a toast on failure.
+- 🟠 **High — DaySessionsDrawer.tsx:139-205**: **No loading state**. The parent (`CalendarPage.tsx:119`) sets `selectedDaySessions([])` before fetching, so the drawer flashes the "No sessions" empty state for active days until the fetch resolves. This is a false empty state — confusing for users.
+- 🔴 **Critical — DaySessionsDrawer.tsx**: **No error state**. If `getSessionsByMonth` fails (Dexie error, corrupted DB), the drawer permanently shows "No sessions" with no retry option. User cannot distinguish "no workouts that day" from "data fetch failed".
+- 🔴 **Critical — CalendarPage.tsx:54-67, 116-132**: **No error states** for `getMonthActivitySummary` or `getSessionsByMonth`. If either fails, the page either stays in loading state forever or shows an empty grid with no error message or retry CTA.
+
+### 4. Empty States
+
+- 🔴 **Critical — CalendarPage.tsx:170-188**: **No new-user empty state**. A brand-new user with zero workouts sees an empty calendar grid with inactive cells and the legend. No `KineticEmptyState` (variant="workouts") with a "Start Workout" CTA. The subtitle "Tap an active day to view its sessions" (line 165) is misleading when there are no active days.
+- 🔴 **Critical — ExerciseDetailPage.tsx:259**: **No empty state for "no progress data yet"**. The Progressive Overload chart is gated by `progressData.length > 0` and simply doesn't render for new users. No explanation, no "Log your first workout to see progress" CTA. New users see a gap in the page layout with no context.
+- 🟠 **High — DaySessionsDrawer.tsx:141-151**: "No sessions" empty state is ad-hoc (plain `X` icon + text), not `KineticEmptyState`. Also doesn't handle the "lonely 1" case distinctly (acceptable for a drawer, but the single-session case could show more detail).
+- ✅ **Good — DaySessionsDrawer.tsx:154-203**: 100+ items case is handled — sessions list scrolls (`overflow-y-auto`), exercise chips are capped at 4 with a "+N" overflow indicator (line 194-198).
+- ✅ **Good — CalendarGrid.tsx:243-247**: Multi-session days show a count badge (top-end corner) — handles the "lonely 1 vs many" distinction at the grid level.
+- 🟡 **Medium — ExerciseVideoPlayer.tsx:243-260**: Missing-media placeholder (gradient + exercise initial) is good, but it's not a true "empty state" — it's a fallback. No guidance for users on why media is missing or how to fix it (acceptable for a media player, but worth noting).
+
+### 5. Accessibility
+
+- ✅ **Pass — Keyboard-navigable**: All interactive elements are real `<button>` elements (SetRow chip/check/trash, RestTimer dismiss/presets, CalendarGrid prev/next/days, ExerciseVideoPlayer toggles/speed, ExerciseWorkoutCard actions). No custom div-based click handlers.
+- ✅ **Pass — ARIA labels on icons**: `aria-label` present on icon-only buttons throughout (SetRow.tsx:92, 189; RestTimer.tsx:281, 297; CalendarGrid.tsx:161, 181, 226-230; ExerciseVideoPlayer.tsx:301, 323, 343; ExerciseWorkoutCard.tsx:147, 203, 213, 222). `aria-hidden="true"` on decorative icons (RestTimer.tsx:239, 284; DaySessionsDrawer.tsx:109, 118, 127, 148; CalendarGrid.tsx:164, 184).
+- ✅ **Pass — ARIA live regions**: RestTimer.tsx:247-249 uses `role="timer"`, `aria-live="polite"`, `aria-atomic="true"` — screen readers will announce countdown updates. DaySessionsDrawer uses `DrawerTitle` + `DrawerDescription` (sr-only) correctly.
+- ✅ **Pass — ARIA expanded/controls**: ExerciseWorkoutCard.tsx:239-240, 281-282 uses `aria-expanded` and `aria-controls` for the collapsible tips/notes sections. ExerciseVideoPlayer.tsx:344 uses `aria-pressed` on speed toggle buttons.
+- ✅ **Pass — ARIA disabled**: CalendarGrid.tsx:231 uses `aria-disabled={!isActive}` on inactive day cells.
+- 🟡 **Medium — WCAG AA contrast concerns**:
+  - CalendarGrid.tsx:193 — weekday labels `text-[10px] text-text-muted` (10px is below the 12px minimum for body text; `text-muted` on `bg-bg-card` may fail 4.5:1).
+  - CalendarGrid.tsx:172 — "prefetching…" indicator `text-[10px] text-text-muted animate-pulse` (same concern + pulse animation).
+  - DaySessionsDrawer.tsx:113, 122, 131 — stat labels `text-[9px]` (9px is well below readable minimum).
+  - DaySessionsDrawer.tsx:189, 195 — exercise chips `text-[10px]` and "+N" overflow `text-[10px]`.
+  - SetRow.tsx:167 — RPE label `text-[10px] text-text-muted`.
+  - ExerciseWorkoutCard.tsx:177 — progress badge `text-xs text-primary` on `bg-bg/80` — likely passes but verify.
+  - setTypes.ts — `text-purple-400`, `text-pink-400`, `text-teal-400` on `bg-*/15` may fail 4.5:1 in dark mode. Needs verification.
+- 🔴 **Critical — prefers-reduced-motion NOT respected**: None of the Framer Motion animations are gated by `prefers-reduced-motion`. Specific violations:
+  - SetRow.tsx:66-70 (layout/initial/animate/exit), 174-182 (`whileTap={{ scale: 0.85 }}`).
+  - RestTimer.tsx:198-202 (spring enter/exit), 233 (`transition-all duration-1000` on progress ring), 266 (`animate-pulse` on "Ready!").
+  - ExerciseWorkoutCard.tsx:124-126, 158-166, 256-261, 296-301 (multiple motion.div enter animations).
+  - ExerciseDetailPage.tsx:152-156, 175-178, 187-191, 208-212, 260-264, 343-347, 355-360, 373-377, 412-416 (staggered enter animations on every section).
+  - CalendarGrid.tsx:221-232 (`whileTap={isActive ? { scale: 0.9 } : undefined}`).
+  - DaySessionsDrawer.tsx:140-204 (AnimatePresence with opacity/y transitions).
+  - ExerciseVideoPlayer.tsx:265 — `animate-spin` (CSS, not gated by motion-reduce variant).
+  - CalendarPage.tsx:150-153, 173-176 (page header + grid fade-in).
+  - **Note**: The `Button` component (Button.tsx:35) correctly uses `motion-safe:active:scale-[0.97]`, proving the pattern exists in the codebase — it's just not applied consistently.
+- 🟡 **Medium — ExerciseVideoPlayer.tsx:249**: Placeholder `<div aria-label={exerciseName}>` — divs don't expose `aria-label` reliably to screen readers without a role. Should be `<div role="img" aria-label={...}>`.
+
+### 6. Mobile-First
+
+- ✅ **Pass — 375px viewport**: All layouts use responsive flex/grid. CalendarGrid uses `grid-cols-7 gap-1` with `aspect-square` cells — renders correctly at 375px. ExerciseDetailPage alternatives use horizontal scroll (`overflow-x-auto no-scrollbar`, line 382) instead of forcing a grid.
+- 🟠 **High — ExerciseWorkoutCard.tsx:182-232**: Header button group (`flex items-center gap-2` with Warmup + Plates + Skip + Replace) likely overflows at 375px. With 4 buttons at ~80px each + gaps + title, the row exceeds 375px. No `flex-wrap` or overflow handling. Needs testing on 375px.
+- 🟠 **High — ExerciseWorkoutCard.tsx:306-312**: Notes `<textarea>` does NOT call `scrollIntoView` on focus (unlike SetRow.tsx:58-63 which does). When the keyboard opens on mobile, the textarea will be hidden behind the keyboard. Inconsistent with the SetRow pattern.
+- ✅ **Pass — Thumb-reachable CTAs**:
+  - ExerciseDetailPage.tsx:418-427 — "Start Workout Now" button at bottom of page (thumb-reachable, but requires scroll).
+  - RestTimer.tsx:203 — floating timer at `bottom-20` (thumb-reachable).
+  - ExerciseWorkoutCard.tsx:360-367 — "Add Set" button at bottom of card (thumb-reachable).
+- 🟡 **Medium — CalendarGrid.tsx:201-251**: Day cells at 375px viewport are ~45px (just above 44px), but at 360px (smaller Android) they drop to ~43px. Combined with `gap-1` (4px gaps), fat-finger risk on adjacent days. Consider `gap-1.5` or larger cells.
+- 🟡 **Medium — SetRow.tsx:72**: Grid template `grid-cols-[2rem_1fr_1fr_3rem_3rem_2.75rem]` — at 375px with `px-4` (32px) + `gap-2` (5 gaps × 8px = 40px), the available width is 375 - 32 - 40 = 303px. Fixed columns = 2rem (32) + 3rem (48) + 3rem (48) + 2.75rem (44) = 172px. Remaining for two `1fr` columns = 131px / 2 = 65.5px each for weight/reps inputs. Tight but functional. The RPE column at 3rem (48px) is narrow for "RPE" placeholder + value.
+
+---
+
+### Friction Points
+
+#### §A. Touch Target Violations (Blocking — ALWAYS flag <44px)
+
+| # | File:Line | Element | Current Size | Severity |
+|---|-----------|---------|--------------|----------|
+| 1 | SetRow.tsx:95 | Set-type chip | `h-5` = **20px** tall, `min-w-[1.75rem]` = 28px wide | 🔴 Critical |
+| 2 | SetRow.tsx:177 | Check (toggle complete) button | `h-10 w-10` = **40px** | 🔴 Critical |
+| 3 | SetRow.tsx:116, 139, 162 | Weight/Reps/RPE inputs | `h-10` = **40px** (borderline — inputs often exempt but auditor rule is absolute) | 🟠 High |
+| 4 | RestTimer.tsx:299 | Quick-adjust preset buttons | `h-9` = **36px** | 🔴 Critical |
+| 5 | ExerciseWorkoutCard.tsx:362 | "Add Set" button | `py-2.5 text-xs` ≈ **36px** | 🔴 Critical |
+| 6 | ExerciseWorkoutCard.tsx:146 | "Undo" skip button | `h-10` = **40px** | 🔴 Critical |
+| 7 | ExerciseVideoPlayer.tsx:300 | Detail image/animation toggle | `px-4 py-2` ≈ **32px** | 🔴 Critical |
+| 8 | ExerciseVideoPlayer.tsx:322 | Compact toggle | `px-2.5 py-1.5` ≈ **28px** | 🔴 Critical |
+| 9 | ExerciseVideoPlayer.tsx:346 | Speed control buttons (0.5×/1×/1.5×) | `px-2.5 py-1` ≈ **24px** | 🔴 Critical |
+| 10 | CalendarGrid.tsx:162, 182 | Prev/Next month buttons | `h-10 w-10` = **40px** | 🔴 Critical |
+| 11 | CalendarGrid.tsx:234 | Day cells (on 360px viewports) | `aspect-square` ≈ **43px** on 360px | 🔴 Critical |
+| 12 | ExerciseDetailPage.tsx:279, 290 | e1RM/Volume toggle buttons | `px-3 py-1.5` ≈ **28px** | 🔴 Critical |
+
+#### §B. Missing Loading / Error / Empty States (Blocking — NEVER approve without)
+
+| # | File:Line | Issue | Severity |
+|---|-----------|-------|----------|
+| 13 | DaySessionsDrawer.tsx (whole) | **No error state** — Dexie fetch failure shows permanent "No sessions" | 🔴 Critical (Blocking) |
+| 14 | CalendarPage.tsx:54-67 | **No error state** for `getMonthActivitySummary` failure | 🔴 Critical (Blocking) |
+| 15 | CalendarPage.tsx:116-132 | **No error state** for `getSessionsByMonth` failure on day click | 🔴 Critical (Blocking) |
+| 16 | DaySessionsDrawer.tsx:139 + CalendarPage.tsx:119 | **No loading state** — false "No sessions" flash before fetch resolves | 🟠 High (Blocking) |
+| 17 | CalendarPage.tsx:170-188 | **No new-user empty state** — empty grid with no CTA | 🔴 Critical (Blocking) |
+| 18 | ExerciseDetailPage.tsx:259 | **No empty state** for "no progress data yet" — chart simply doesn't render | 🔴 Critical (Blocking) |
+| 19 | ExerciseVideoPlayer.tsx:263-267 | Loading state is a bare spinner, not a skeleton (skill prefers skeletons) | 🟡 Medium |
+
+#### §C. Cognitive Load (Blocking/Minor)
+
+| # | File:Line | Issue | Severity |
+|---|-----------|-------|----------|
+| 20 | SetRow.tsx:87-103 + setTypes.ts:67-178 | Tap-to-cycle 11 set types = up to 10 taps, no progressive disclosure | 🟠 High |
+| 21 | ExerciseWorkoutCard.tsx:198-232 | 4 competing CTAs in header (Warmup/Plates/Skip/Replace) — exceeds ≤3 decisions ideal | 🟠 High |
+| 22 | ExerciseDetailPage.tsx (whole) | Long scroll with CTA at bottom — consider sticky CTA | 🟡 Medium |
+
+#### §D. Accessibility (Blocking)
+
+| # | File:Line | Issue | Severity |
+|---|-----------|-------|----------|
+| 23 | SetRow.tsx:66-70, 174-182 | Framer Motion animations not gated by `prefers-reduced-motion` | 🔴 Critical (Blocking) |
+| 24 | RestTimer.tsx:198-202, 233, 266 | Spring + pulse + ring animations not gated | 🔴 Critical (Blocking) |
+| 25 | ExerciseWorkoutCard.tsx:124-126, 158-166, 256-261, 296-301 | Multiple motion.div enter animations not gated | 🔴 Critical (Blocking) |
+| 26 | ExerciseDetailPage.tsx:152-416 | Staggered enter animations on every section, not gated | 🔴 Critical (Blocking) |
+| 27 | CalendarGrid.tsx:221-232, DaySessionsDrawer.tsx:140-204, CalendarPage.tsx:150-176 | Motion animations not gated | 🔴 Critical (Blocking) |
+| 28 | ExerciseVideoPlayer.tsx:265 | `animate-spin` CSS not gated by `motion-reduce:` variant | 🟡 Medium |
+| 29 | ExerciseVideoPlayer.tsx:249 | Placeholder `<div aria-label>` missing `role="img"` | 🟡 Medium |
+| 30 | CalendarGrid.tsx:193, DaySessionsDrawer.tsx:113/122/131, SetRow.tsx:167 | `text-[9px]`/`text-[10px]` below readable minimum + potential WCAG AA contrast failures on `text-muted` | 🟡 Medium |
+
+#### §E. Consistency & i18n (Minor/Polish)
+
+| # | File:Line | Issue | Severity |
+|---|-----------|-------|----------|
+| 31 | DaySessionsDrawer.tsx:141-151 | Ad-hoc empty state instead of `KineticEmptyState` | 🟡 Medium |
+| 32 | ExerciseDetailPage.tsx:118-132 | Ad-hoc "Not Found" state instead of `KineticEmptyState` | 🟡 Medium |
+| 33 | setTypes.ts:113-174 | 6 of 11 set types use hardcoded colors (`purple/pink/orange/teal/blue/indigo`) instead of semantic tokens | 🟡 Medium |
+| 34 | SetRow.tsx:93 + setTypes.ts | Arabic label (`labelAr`) only in `title` attribute — no mobile hover, so Arabic users never see their label | 🟡 Medium |
+| 35 | RestTimer.tsx:203 | No safe-area inset handling (`bottom-20` fixed) | 🟡 Medium |
+| 36 | RestTimer.tsx:272 | `recommendation.reason` truncated with no mobile-friendly full view | 🟡 Medium |
+| 37 | CalendarGrid.tsx:244 | `min-w-[3]` looks like a typo (3px) — likely intended `min-w-[1.25rem]` or similar | 🟡 Medium |
+| 38 | ExerciseWorkoutCard.tsx:86-103 | `handleSkipConfirm` swallows errors silently — user gets no feedback if `recordSkip` fails | 🟠 High |
+
+---
+
+### Component Reuse (existing components to use)
+
+- **`KineticEmptyState`** (`@/components/ui-custom/KineticEmptyState`) — for:
+  - CalendarPage new-user empty state (variant="workouts")
+  - DaySessionsDrawer "No sessions" (variant="custom", icon=X)
+  - ExerciseDetailPage "Exercise Not Found" (variant="custom", icon=Dumbbell)
+  - ExerciseDetailPage "No progress data yet" (variant="custom", icon=ChartIcon)
+- **`Skeleton` / `SkeletonCard`** (`@/components/ui-custom/Skeleton`) — for:
+  - ExerciseVideoPlayer loading state (replace bare `Loader2` spinner with aspect-ratio skeleton frame)
+  - DaySessionsDrawer loading state (skeleton session cards while fetching)
+- **`Button`** (`@/components/ui-custom/Button`) — for:
+  - ExerciseDetailPage e1RM/Volume toggles (use size="sm" which is `h-11 md:h-9` — mobile-first 44px)
+  - ExerciseVideoPlayer speed control + toggles (or add a `size="xs"` variant)
+  - SetRow check/trash buttons (or ensure min-h-11)
+  - RestTimer preset buttons (or add `size="sm"`)
+  - CalendarGrid prev/next + day cells (or ensure min-h-11/min-w-11)
+- **`Drawer`** family — already correctly used by DaySessionsDrawer.
+- **`Toast`** (`@/components/ui-custom/Toast`) — for ExerciseWorkoutCard skip-failure feedback.
+
+### New Components Needed
+
+1. **`SetTypePicker`** (bottom sheet) — replaces tap-to-cycle on SetRow chip. Long-press or chevron-tap opens a sheet showing all 11 set types with `labelEn` + `labelAr` + color chip. Solves the 10-tap cognitive load problem (friction point #20) and the Arabic-label visibility problem (#34). Pattern matches existing `WarmupSheet`/`PlateCalculatorSheet`/`SkipReasonModal`.
+2. **`ChartEmptyState`** (or extend `KineticEmptyState` with variant="progress") — for ExerciseDetailPage "no progress data yet". Could be a thin wrapper around `KineticEmptyState` variant="custom" with a chart icon.
+3. *(Optional)* **`SafeAreaBottom`** utility class or component — encapsulates `env(safe-area-inset-bottom)` for floating elements like RestTimer. Prevents the unsafe `bottom-20` hardcode.
+
+---
+
+### Empty State (what new users see)
+
+- **CalendarPage (new user)**: Currently sees an empty calendar grid with all inactive gray cells + a legend explaining intensity colors that don't apply + subtitle "Tap an active day to view its sessions" (misleading — there are no active days). **Should see**: `KineticEmptyState` variant="workouts" above the grid, with "Start Workout" CTA that navigates to the workout generator.
+- **ExerciseDetailPage (new user, no progress)**: Currently sees a gap in the page where the Progressive Overload chart would be — no explanation. **Should see**: A `KineticEmptyState` (variant="custom", icon=ChartIcon) with title "NO PROGRESS YET" and description "Log this exercise once to start tracking your strength gains."
+- **DaySessionsDrawer (no sessions)**: Currently sees a plain `X` icon + "No sessions" text. **Should see**: `KineticEmptyState` variant="custom" with icon=X (or Calendar), with a "Start a Workout" CTA.
+- **SetRow (first-time user)**: The set-type chip shows "W" (Working) with `opacity-40` (line 98) — no indication that tapping cycles through 11 types. **Should see**: A subtle hint (e.g., a tiny chevron or "tap to change" tooltip on first use) or a long-press affordance.
+
+### Loading State
+
+- **CalendarPage**: ✅ `Skeleton` (420px tall, full-width) while `getMonthActivitySummary` resolves (CalendarPage.tsx:171). Good.
+- **ExerciseDetailPage**: ✅ Two `SkeletonCard` components while exercises load (ExerciseDetailPage.tsx:111-112). Good.
+- **ExerciseVideoPlayer**: 🟡 Bare `Loader2 animate-spin` spinner over a blurred backdrop (line 263-267). Should be an aspect-ratio skeleton frame.
+- **DaySessionsDrawer**: 🔴 **None** — flashes "No sessions" empty state while fetching. Should show 2-3 skeleton session cards.
+- **RestTimer**: N/A (no data fetch — timestamp-based countdown).
+- **SetRow**: N/A (synchronous state updates).
+
+### Error State
+
+- **CalendarPage**: 🔴 **None**. If `getMonthActivitySummary` or `getSessionsByMonth` fails (Dexie error, corrupted DB, quota exceeded), the page stays in loading state or shows an empty grid with no error message, no retry CTA. **Should show**: An error card with "Couldn't load calendar data" + a "Retry" button.
+- **DaySessionsDrawer**: 🔴 **None**. If the day-sessions fetch fails, the drawer permanently shows "No sessions" — indistinguishable from a genuine empty day. **Should show**: An error state with "Couldn't load sessions for this day" + retry.
+- **ExerciseVideoPlayer**: ✅ Falls back to gradient placeholder on media load error (line 281, 291). Good — but no user-facing error message (acceptable for media).
+- **ExerciseWorkoutCard (skip)**: 🟠 `handleSkipConfirm` swallows `recordSkip` errors with `console.warn` only (line 99). User sees the card collapse (success UI) even if the skip wasn't recorded. **Should show**: A toast on failure + revert the visual collapse.
+- **ExerciseDetailPage**: ✅ "Exercise Not Found" state for missing exercise (line 118-132). Good — but should use `KineticEmptyState` for consistency.
+
+### Accessibility (per checklist item)
+
+| Checklist Item | Status | Notes |
+|---|---|---|
+| Keyboard-navigable | ✅ Pass | All interactive elements are real `<button>` elements. |
+| WCAG AA 4.5:1 contrast | 🟡 Partial | Several `text-[9px]`/`text-[10px]` instances risk failure; `text-muted` on elevated backgrounds needs verification; 6 set-type colors in setTypes.ts use non-semantic hues that may fail in dark mode. |
+| aria-label on icons | ✅ Pass | Comprehensive across all audited components. |
+| prefers-reduced-motion | 🔴 **Fail** | Pervasive — 7 of 9 files have un-gated Framer Motion animations. The `Button` component proves the `motion-safe:` pattern exists in the codebase but is not applied to motion.* props or `animate-spin`/`animate-pulse` classes. |
+
+### Recommendation: **REDESIGN**
+
+Per the skill rule: "If 2+ Blocking friction points → REDESIGN." This audit identifies **18 Blocking friction points** (§A: 12 touch-target violations, §B: 6 missing loading/error/empty states, §D: 5 prefers-reduced-motion failures across the component tree).
+
+However, the REDESIGN is **targeted, not architectural**. The underlying patterns are sound:
+- ✅ Offline-first data flow (Dexie + Cache API)
+- ✅ Timestamp-based timer that survives reloads
+- ✅ Centralized set-type config (single source of truth)
+- ✅ Component composition (ExerciseWorkoutCard reuses 5 sub-components)
+- ✅ StrictMode-safe side-effect handling (refs in RestTimer)
+
+The required fixes are surface-level:
+1. **Touch targets**: Apply `min-h-11 min-w-11` (44px) to all interactive elements, or route them through the `Button` component (which already enforces this).
+2. **Error states**: Add try/catch in CalendarPage + DaySessionsDrawer fetches, render an error card with retry.
+3. **Empty states**: Use `KineticEmptyState` in CalendarPage (new user), ExerciseDetailPage (no progress), DaySessionsDrawer (no sessions).
+4. **Loading states**: Replace DaySessionsDrawer false-empty-flash with skeleton session cards; replace ExerciseVideoPlayer spinner with a skeleton frame.
+5. **prefers-reduced-motion**: Wrap all `motion.*` animations in a global `<MotionConfig reducedMotion="user">` provider (single fix at app root) OR add `motion-reduce:` variants to each animation. The global MotionConfig is the lower-effort fix.
+6. **Set-type chip**: Replace tap-to-cycle with a `SetTypePicker` bottom sheet (solves cognitive load + Arabic label visibility + touch target in one fix).
+7. **Skip error feedback**: Surface `recordSkip` failures via `Toast` instead of `console.warn`.
+
+**Estimated fix effort**: 1-2 days for a single engineer. No data-model changes, no API changes, no re-architecture. After fixes, re-audit should yield PROCEED.
+
+---
+
+**Files audited** (read in full):
+1. `src/components/workout/SetRow.tsx` (205 lines)
+2. `src/components/workout/RestTimer.tsx` (318 lines)
+3. `src/components/workout/ExerciseWorkoutCard.tsx` (392 lines)
+4. `src/components/exercise/ExerciseVideoPlayer.tsx` (360 lines)
+5. `src/pages/ExerciseDetailPage.tsx` (431 lines)
+6. `src/components/calendar/CalendarGrid.tsx` (255 lines)
+7. `src/components/calendar/DaySessionsDrawer.tsx` (215 lines)
+8. `src/pages/CalendarPage.tsx` (215 lines)
+9. `src/config/setTypes.ts` (221 lines)
+
+**Reference components read** (for reuse analysis):
+- `src/components/ui-custom/KineticEmptyState.tsx`
+- `src/components/ui-custom/Skeleton.tsx`
+- `src/components/ui-custom/Button.tsx`
+
+---
+Task ID: review-arch-skill
+Agent: Architecture Reviewer (per skills/architecture-reviewer.md)
+
+## Architecture Review: Epic A + B1 + B2
+**Verdict**: APPROVE with conditions
+**Data Model**: Existing — no new Prisma model; no new Dexie table. `setType` field added to `ExerciseSetData` (schema.ts:41) as optional `string`; backward compatible via `normalizeSetType()` (setTypes.ts:189). No Dexie version bump needed because `setType` is not an index (only schema strings change for indexes). migrations.ts:96-123 v10/v11 handle the prior additions (exerciseFeedback table, imageUrl field) — non-breaking, no data migration needed.
+**API Routes**: No new API routes in this Epic. All 13 reviewed files are client-side. `useWorkoutStore.finishWorkout` (useWorkoutStore.ts:619-652) does call into the social layer (`useSocialStore.publishSession`, `useChallengesStore.syncWorkoutVolume`) and `pushToCloud(user.uid)` — these endpoints pre-exist and (per ARCHITECTURE.md) follow the `requireUser + Zod` pattern in `src/app/api/social/*` and `src/app/api/challenges/*`. CONDITION: confirm `publishSession` and `syncWorkoutVolume` use the server-derived `callerUid` from `requireUser` and IGNORE the client-passed `user.uid` (see Security).
+**State**: Extended existing store — `useWorkoutStore` gains 4 new fields (`restTimerExerciseRole`, `restTimerLastRPE`, `restTimerEndTs`, `restTimerTotalDuration`) and 2 new actions (`cycleSetType`, `adjustRestTimer`). No new store created. Selectors are properly atomic in RestTimer.tsx:27-37 (one `useWorkoutStore((s) => …)` per field) and ExerciseWorkoutCard.tsx:25-30,112. The `partialize` (useWorkoutStore.ts:685-696) correctly persists rest-timer state for reload survival. Server vs client state cleanly separated (no TanStack Query misuse; all data is Dexie/client).
+**Security**: PASS with one verification required.
+  - ✅ No client-supplied identity headers (`x-user-uid` etc.) introduced.
+  - ✅ `requireUser` is the established pattern (authServer.ts:9-33) and is not bypassed anywhere in these files.
+  - ✅ `normalizeSetType` (setTypes.ts:189-194) validates untrusted Dexie rows (unknown → "normal"); no raw `as SetType` cast without a runtime guard.
+  - 🟡 Medium [useWorkoutStore.ts:637] `publishSession(user.uid, user.displayName, user.photoURL, …)` passes the CLIENT-CACHED uid/displayName/photoURL into the social store. This is acceptable ONLY IF the receiving `/api/social/posts` route calls `requireUser` and uses the server-derived `callerUid` to look up `publicProfile` (per constitution IV). Display name + photoURL passed client-side are display-only and should be re-fetched server-side from `publicProfile`. NEEDS VERIFICATION (outside reviewed file set).
+  - ✅ Firebase init (firebase.ts:44-66) is defensive — `auth`/`storage`/`googleProvider` export `null` when env vars are missing, so offline-first is not broken by a missing Firebase project.
+  - ✅ Middleware (middleware.ts:111-120) enforces session-cookie existence on all write methods.
+**Performance**:
+  - Bundle impact: LOW. ExerciseVideoPlayer.tsx:158-160 dynamically imports `mediaCache` only when an animation URL is present, keeping Cache API code out of the main bundle. Framer Motion is already a dependency (no new bundle cost). CalendarGrid + RestTimer add a few hundred LOC of tree-shakeable code.
+  - Hot path impact:
+    - 🟡 Medium [analytics.ts:7-16, 315-331] `getCompletedSessions` is a full-table `.filter()` scan (constitution VI.Quality-Gates flags "No full-table scans on IndexedDB"). The code justifies this with the real IDB limitation that booleans can't be indexed — defensible. BUT `getSessionsByMonth` then filters by date in-memory; the `date` field IS indexed (migrations.ts:46) so this could be `db.workoutSessions.where("date").between(startISO, endISO).filter(s => s.completed)` to skip the scan. Pre-existing pattern, not introduced here.
+    - 🟡 Medium [CalendarPage.tsx:54-91] On mount, TWO parallel full-table scans fire (main month load + next-month prefetch) because both call `getMonthActivitySummary`/`getSessionsByMonth` → `getCompletedSessions`. They could share a single `getCompletedSessions()` call.
+    - 🟢 Low [CalendarPage.tsx:116-132] `handleDayClick` re-queries `getSessionsByMonth` on every day tap. The activity map already has the summary; only the full session objects are missing. Could cache the month's sessions in state.
+  - Framer Motion usage: judicious. RestTimer has 1 `motion.div` + `AnimatePresence`. CalendarGrid has 1 `motion.button` (per day cell, but only `whileTap`). CalendarPage has 2 `motion.div`s. ExerciseWorkoutCard has `motion.div` + `AnimatePresence` for tips/notes/skipped-state. Total animated components in this Epic: ~6 — well under the 30-component perf threshold.
+  - Images: ExerciseVideoPlayer uses raw `<img>` (ExerciseVideoPlayer.tsx:286) rather than `next/image`. Justified because the `src` is a blob URL (object URL) which `next/image` doesn't optimize. Acceptable. The `loading="lazy"` attribute is set.
+  - `getRecentCompletedSessions` (useWorkoutStore.ts:113-131) uses a 30s module-scope TTL cache to avoid re-scanning on every ghost-logging lookup — good optimization with proper invalidation on save (invalidateRecentSessionsCache, line 134).
+**Constitution**: COMPLIANT.
+  - ✅ I. Type Safety: No `any` types in any of the 13 files (verified via grep). One `value as SetType` cast in setTypes.ts:190 — guarded by `SET_TYPE_MAP.has(value as SetType)` runtime check; equivalent to a type guard. Acceptable.
+  - ✅ II. Offline-First: Dexie is source of truth throughout. `mediaCache.ts` wraps Cache API for offline media. `firebase.ts` exports null handles when unconfigured so the app runs without Firebase. No new Prisma models. No server calls in the hot path (Dexie only).
+  - ✅ III. Firebase Auth Only: No next-auth, no custom JWT, no raw ID-token storage. `firebase.ts` uses `getAuth`/`GoogleAuthProvider` from `firebase/auth`.
+  - ✅ IV. Security-First API Design: No new API routes; existing endpoints already use `requireUser`. Input validation via `normalizeSetType` for Dexie data and (out-of-scope) Zod schemas for API routes.
+  - ✅ V. Progressive Enhancement: All animations use Tailwind transitions / Framer Motion with subtle durations. `prefers-reduced-motion` is not explicitly handled in these components — pre-existing gap, not introduced here.
+  - ✅ No `ignoreBuildErrors` (verified in next.config.ts:1-15 and tsconfig.json `strict: true`, `noImplicitAny: true`).
+  - ✅ No `prisma db push` — no Prisma schema changes in this Epic.
+**Tech Debt Added**: **Low-Medium**
+  - 🟡 Medium [useWorkoutStore.ts:38-63] `inferExerciseRole` is a regex-based heuristic that infers "compound / isolation / core / cardio / warmup" from the exercise name/target/muscleGroup. The comment acknowledges this is a workaround because `WorkoutExerciseItem` doesn't carry the generator's `role` field. Proper fix: add `role?: ExerciseRole` to `WorkoutExerciseItem` (useWorkoutStore.ts:82) and propagate it from the generator. Will cost ~1 hour to clean up across generator → store → call sites.
+  - 🟡 Medium [mediaCache.ts] No eviction policy. The Cache API will accept blobs until browser quota is hit, then either reject puts (silently swallowed) or evict arbitrarily. For an exercise-video cache this could grow to 100s of MB over months. Recommendation: add a `pruneCache(maxEntries=50)` that runs on `putCachedMedia` and trims oldest entries via `cache.keys()` + `cache.delete()`. ~30 LOC.
+  - 🟡 Medium [CalendarPage.tsx:46,82] `nextMonthPrefetch` state is set but NEVER consumed by `handleNextMonth` (line 103-110) — when the user navigates forward, the `useEffect` at line 72 re-fires and re-queries the same month. The prefetch work is wasted. Fix: store the prefetched sessions in state and short-circuit the effect when the displayed month matches the prefetched month. ~10 LOC.
+  - 🟢 Low [recoveryTracker.ts:330-348] `allMuscleIds` Set is built from 3 sources (`muscleData.keys()` + hardcoded list + `Object.keys(RECOVERY_HOURS)`) with significant overlap. The hardcoded list duplicates RECOVERY_HOURS keys. Cosmetic.
+  - 🟢 Low [analytics.ts:97-147] `getPersonalRecords` rebuilds the records Map on every call. For repeated calls within one render cycle (e.g. Stats page + finishWorkout), could memoize. Pre-existing.
+  - 🟢 Low [useWorkoutStore.ts:24-32] `getCachedExercises` reads `localStorage["pulse_exercises_cache"]` and `JSON.parse`s it without schema validation. Returns `[]` on parse failure — acceptable degradation but a corrupt cache silently degrades ghost-logging.
+**Recommendation**: **PROCEED with conditions**
+  Conditions (must address before merge):
+  1. 🟡 Verify `useSocialStore.publishSession` and `useChallengesStore.syncWorkoutVolume` route handlers call `requireUser` and ignore the client-supplied `user.uid`/`displayName`/`photoURL` for identity (constitution IV). If they trust the client uid → REJECT (security rule: "NEVER approve a feature that trusts client-supplied identity").
+  2. 🟡 Either USE `nextMonthPrefetch` in `handleNextMonth` (skip the re-query when the prefetched month matches) OR remove the prefetch state entirely (it's currently dead code).
+  3. 🟡 Add a size-capped eviction to `mediaCache.ts` (LRU or max-entries) so the Cache API doesn't grow unbounded.
+
+  Recommended follow-ups (not blocking):
+  - Add `role?: ExerciseRole` to `WorkoutExerciseItem` to retire `inferExerciseRole` regex heuristic.
+  - Refactor `getSessionsByMonth` to use `.where("date").between(…)` to leverage the existing `date` index.
+  - Cache the current month's full sessions in `CalendarPage` state so `handleDayClick` doesn't re-query.
+
+**Per-file summary**:
+  1. `src/config/setTypes.ts` — ✅ Good. Clean single-source-of-truth, pure data + pure functions, backward-compatible via `normalizeSetType`. `SET_TYPE_MAP` is a `ReadonlyMap` (immutable). Exported helpers (`countsInVolume`, `countsForPR`, `nextSetType`) are pure and unit-testable. Tests exist (`src/config/__tests__/setTypes.test.ts`).
+  2. `src/store/useWorkoutStore.ts` — ✅ Good with 🟡 notes. NOT a God object — 699 LOC but cohesive (active workout + rest timer + finish flow are tightly related). Rest-timer state is timestamp-based (`restTimerEndTs`) — survives reloads. `cycleSetType` (line 403) is minimal and correct. `finishWorkout` PR detection (line 582-618) correctly uses `countsForPR` to exclude non-PR set types. `inferExerciseRole` (line 47-63) is the main tech-debt item. `partialize` (line 685-696) correctly persists rest-timer state.
+  3. `src/db/analytics.ts` — ✅ Good. Pure data-access module. `calculateWeeklyTonnageRaw` (line 49) is shared by `getWeeklyVolume` and `getWeeklyTonnage`. `getMuscleGroupStats` (line 220) builds an `exerciseMap` ONCE → O(S+E) instead of O(S×E) — explicitly called out in the comment. `getMonthActivitySummary` (line 344) is well-documented and pure. The `.filter()` full-scan pattern is a constitution tension but is justified by the IDB boolean-index limitation.
+  4. `src/db/schema.ts` — ✅ Good. `setType?: string` (line 41) is optional → backward compatible. DB-open error handler (line 182-196) preserves user data on schema mismatch instead of nuking. `exerciseFeedback` table is declared in the Dexie class (line 171).
+  5. `src/db/migrations.ts` — ✅ Good. All migrations are non-breaking: v5 migrates numeric IDs to string UIDs, v6 adds `updatedAt`/`deleted`, v8-v11 add new tables/fields. v11 is the latest version. No `setType`-related migration needed (it's a data field, not an index). Each version re-declares every store (required by Dexie) — correct.
+  6. `src/services/recoveryTracker.ts` — ✅ Good. Pure functions throughout: `computeLoadFactor` (line 290) is exported for unit testing. `aggregateMuscleData` (line 178) is internal. `calculateMuscleRecovery` (line 321) is the public entry point. I/O separation is clean — the module takes `sessions: WorkoutSession[]` as input and does NOT touch Dexie (callers fetch and pass in). Tunable constants are at the top with scientific references. Tests exist (`src/services/__tests__/recoveryTracker.test.ts`).
+  7. `src/services/mediaCache.ts` — ✅ Good with 🟡 note. SSR-safe (`isCacheApiSupported` checks `typeof window`). Best-effort (never throws). `fetchMediaWithCache` (line 77) is cache-first with network fallback. `putCachedMedia` clones the response before storing (line 62) — correct. Missing: eviction policy.
+  8. `src/components/exercise/ExerciseVideoPlayer.tsx` — ✅ Good. Reusable (accepts `imageUrl/gifUrl/videoUrl` + `variant: detail|compact`). Pure helpers exported for testing (`detectMediaKind`, `getPlaceholderInitial`, `getPlaceholderGradient`). Dynamic import of `mediaCache` (line 158) keeps it out of the main bundle. IntersectionObserver (line 199-217) pauses offscreen videos. Object URLs are revoked on unmount (line 176-180) — no memory leak.
+  9. `src/components/calendar/CalendarGrid.tsx` — ✅ Good. Purely presentational: takes `activity: Map<string, DayActivitySummary>` as a prop, no data fetching. Pure helpers exported (`buildMonthGrid`, `formatDateKey`, `volumeToIntensity`). DST-safe via local-date keys. `motion.button` with `whileTap` only — minimal animation cost.
+  10. `src/pages/CalendarPage.tsx` — ✅ Good with 🟡 notes. Proper container: owns state, fetches via `getMonthActivitySummary`, delegates rendering to `CalendarGrid` + `DaySessionsDrawer`. 🟡 `nextMonthPrefetch` state is set but unused on navigation. 🟡 `handleDayClick` re-queries `getSessionsByMonth`. Both fixable in <30 LOC.
+  11. `src/components/workout/RestTimer.tsx` — ✅ Good. Exemplary timestamp architecture: `restTimerEndTs` is the source of truth (persisted in store); the displayed `seconds` is recomputed every 1s via `computeRemainingSeconds(endTs)` (line 21-24, pure). Survives tab close, page reload, backgrounding. StrictMode-safe via `completedRef`/`fifteenFiredRef` (lines 67-68) — side effects fire exactly once. Resyncs on `visibilitychange`/`focus` (line 94-107) — robust. Background `setTimeout` (line 149-164) ensures the completion notification fires even when the 1s interval is throttled. Individual selectors throughout (lines 27-37).
+  12. `src/lib/firebase.ts` — ✅ Good. Defensive init: `isFirebaseConfigured` (line 44) requires apiKey + authDomain + projectId + appId (storageBucket intentionally optional). `auth`/`storage`/`googleProvider` export `null` when unconfigured. Comment (line 18-27) explains why this matters: `useAuthStore` imports this at the top of the component tree, so a thrown `auth/invalid-api-key` would crash the whole app. Offline-first promise preserved.
+  13. `src/components/workout/ExerciseWorkoutCard.tsx` — ✅ Good. `memo()`-wrapped (line 21) — prevents re-render when parent re-renders but props are stable. Individual selectors (lines 25-30, 112). `cycleSetType` wired to `SetRow` via `onCycleSetType` callback (line 352). Smart Skip records to learning loop (line 86-103) with try/catch — best-effort. AnimatePresence for set add/remove (line 339). Conditional rendering for skipped state (line 121-155) keeps the card in the workout data (so superset links stay stable) but collapses visually.
+
+
+---
+Task ID: review-perf-skill
+Agent: Performance Reviewer (per skills/performance-reviewer.md)
+
+## Performance Review: Epic A + B1 + B2
+
+**Bundle Impact**: [+~60–80KB — lazy loadable? PARTIAL]
+**Render Performance**: [Warning — selector usage, list virtualization]
+**Data Layer**: [Warning — indexed? N+1? batched?]
+**API Performance**: [Pass — N/A (no API routes in scope; all client-side Dexie)]
+**Memory**: [Warning — cleanup? pagination?]
+**Mobile**: [Warning — 60fps? main thread?]
+**Verdict**: [OPTIMIZE BEFORE BUILD]
+
+---
+
+### 1. Bundle Size
+
+**Overall**: Epic A + B1 + B2 adds roughly 60–80KB on top of the existing bundle (Framer Motion is already present). Not BLOCKED (under the 100KB hard cap) but several non-critical features are NOT lazy-loaded when they could be.
+
+- ✅ Good — `src/config/setTypes.ts`: Pure data module (~3KB), no new dependencies. Map lookups via `SET_TYPE_MAP` are O(1). Excellent.
+- ✅ Good — `src/services/mediaCache.ts`: Tiny (~2KB), no deps. Correctly SSR-safe.
+- ✅ Good — `src/services/recoveryTracker.ts`: Pure TS (~8KB), no new deps.
+- ✅ Good — `src/db/analytics.ts`: Pure TS (~12KB), no new deps.
+- 🟡 Medium — `src/components/workout/ExerciseWorkoutCard.tsx:8-12`: Eagerly imports FOUR sheet modals (`ReplaceExerciseSheet`, `WarmupSheet`, `PlateCalculatorSheet`, `SkipReasonModal`). These are only opened on explicit user tap — perfect candidates for `React.lazy` / `next/dynamic`. Estimated 25–40KB savings if lazy-loaded.
+- 🟡 Medium — `src/components/workout/ExerciseWorkoutCard.tsx:7`: Eagerly imports `ExerciseVideoPlayer`. The video player is heavy (IntersectionObserver, Cache API dynamic import, multiple effects). Should be lazy-loaded with a placeholder.
+- 🟠 High — `src/components/calendar/CalendarGrid.tsx:3` + `DaySessionsDrawer.tsx:3` + `CalendarPage.tsx:3` + `RestTimer.tsx:3` + `SetRow.tsx:3` + `ExerciseWorkoutCard.tsx:2`: All use Framer Motion (`motion` / `AnimatePresence`). Framer Motion is already in the bundle so no NEW addition, but the per-instance runtime cost is high — see §6.
+- ✅ Good — `src/components/exercise/ExerciseVideoPlayer.tsx:158-160`: Dynamic import of `@/services/mediaCache` — keeps the Cache API code out of the main bundle. Model pattern.
+- ✅ Good — `src/store/useWorkoutStore.ts:608, 647`: Dynamic imports for `notificationService` and `useChallengesStore`. Keeps critical-path bundle small.
+
+---
+
+### 2. Render Performance
+
+- 🟠 High — `src/components/workout/ExerciseWorkoutCard.tsx:348-353`: Inline arrow functions passed as props to `<SetRow>`:
+  ```tsx
+  onToggleComplete={() => handleToggleComplete(set.id)}
+  onUpdateWeight={(val) => handleUpdateWeight(set.id, val)}
+  onUpdateReps={(val) => handleUpdateReps(set.id, val)}
+  onUpdateRpe={(val) => handleUpdateRpe(set.id, val)}
+  onCycleSetType={() => cycleSetType(exerciseIndex, set.id)}
+  onRemoveSet={() => handleRemoveSet(set.id)}
+  ```
+  These create NEW function identities on every parent render, completely defeating `memo()` on `SetRow` (`src/components/workout/SetRow.tsx:25`). Every keystroke in any input re-renders ALL SetRows in the card. Fix: pass `set.id` and `exerciseIndex` as props and let `SetRow` call `onToggleComplete(exerciseIndex, setId)` directly, OR memoize callbacks via `useCallback` keyed by `exerciseIndex` and have SetRow forward the setId.
+- 🟠 High — `src/components/workout/ExerciseWorkoutCard.tsx:112`: `const activeWorkout = useWorkoutStore((s) => s.activeWorkout);` subscribes to the entire `activeWorkout` object. Since `updateSet` (`src/store/useWorkoutStore.ts:387-400`) creates a new `activeWorkout.exercises` array on every keystroke, EVERY ExerciseWorkoutCard re-renders on EVERY set update — not just the one being edited. With 6+ exercises × 4 sets, that's a lot of wasted renders. Fix: subscribe only to the specific exercise's data via a selector like `(s) => s.activeWorkout?.exercises[exerciseIndex]`, or pass exercise data down from a single parent subscription.
+- 🟡 Medium — `src/components/workout/ExerciseWorkoutCard.tsx:109-110`: `completedSets` and `totalSets` computed on every render (no `useMemo`). Cheap, but with re-renders firing on every keystroke (see above), adds up.
+- 🟠 High — `src/components/calendar/CalendarGrid.tsx:221-248`: Renders up to 42 `<motion.button>` cells. Each `motion.button` is a Framer Motion component instance with internal state and event handlers. With 42 cells × month navigation triggering full re-renders, this is a measurable cost on mid-range phones. Should use plain `<button>` with CSS `:active` for the tap effect, reserving `motion.button` for the rare active cells only (or none at all).
+- ✅ Good — `src/components/calendar/CalendarGrid.tsx:144-145`: `useMemo` for `cells` and `today`. Correct deps.
+- ✅ Good — `src/components/calendar/CalendarGrid.tsx:147-152`: `useCallback` for `handleClick`.
+- ✅ Good — `src/components/workout/RestTimer.tsx:27-37`: Individual Zustand selectors — no over-subscription. Model pattern.
+- ✅ Good — `src/components/workout/RestTimer.tsx:43-52`: `useMemo` for the smart-rest recommendation.
+- ✅ Good — `src/components/workout/RestTimer.tsx:176-190`: `useCallback` for `handleDismiss` and `handlePreset`.
+- ✅ Good — `src/components/workout/SetRow.tsx:25`: Wrapped in `memo()` (though currently defeated by parent's inline callbacks — see above).
+- 🟡 Medium — `src/components/calendar/DaySessionsDrawer.tsx:155-156, 194, 211-213`: `sessionVolume`, `sessionExerciseCount`, `sessionExercisesMore` called multiple times per session per render (once in totals `useMemo`, again per row, `sessionExercisesMore` called twice in the row). For a day with 5 sessions × 10 exercises × 5 sets, that's 5 × 2 × 50 = 500 redundant iterations per render. Memoize per-session or precompute.
+- 🟡 Medium — `src/components/workout/RestTimer.tsx:73-86`: Interval effect deps `[restTimerActive, restTimerEndTs]`. Every preset adjustment (`adjustRestTimer`) updates `restTimerEndTs`, tearing down and recreating the 1s interval. Functionally correct but causes a brief timing hiccup. Acceptable.
+- ✅ Good — `src/components/exercise/ExerciseVideoPlayer.tsx:226-231`: `useCallback` / `useMemo` for `handleToggle`, `placeholderInitial`, `gradient`.
+- 🟡 Medium — `src/components/exercise/ExerciseVideoPlayer.tsx`: Component is NOT wrapped in `memo()`. Since `ExerciseWorkoutCard` re-renders on every keystroke (see above), this video player re-runs all its effects on every keystroke too. Should be `memo`'d with stable props.
+- ✅ Good — No infinite-loop risks detected in any `useEffect`. The RestTimer effects all have correct deps and use refs for one-shot guards (`completedRef`, `fifteenFiredRef`).
+
+---
+
+### 3. Data Layer Performance
+
+- 🔴 Critical — `src/db/analytics.ts:13-16`: `getCompletedSessions` does a full-table scan:
+  ```ts
+  db.workoutSessions.filter((s) => s.completed === true).toArray()
+  ```
+  This is called by EVERY analytics function (streak, PR, weekly volume, muscle stats, monthly summary). The schema (`src/db/migrations.ts:81`) DOES index `completed` (`workoutSessions: "++id, date, completed, ..."`), but the code bypasses the index with `.filter()`. The comment claims IndexedDB cannot index booleans — true for IndexedDB 1.0, but the index exists in the schema. Fix: store `completed` as `0 | 1` (number) in the index, or use `db.workoutSessions.where("completed").equals(1)`. Currently for a user with 500 sessions, every analytics call scans 500 rows + their nested sets/exercises. This is the single biggest data-layer issue.
+- 🟠 High — `src/db/analytics.ts:315-331` `getSessionsByMonth`: Calls `getCompletedSessions` (full scan) then filters by date in JS. Should use the indexed `date` field with a range query: `db.workoutSessions.where("date").between(startISO, endISO)`. The `date` field IS indexed (`migrations.ts:81`). Currently O(N) scan + filter; should be O(log N + results).
+- 🟠 High — `src/db/analytics.ts:344-390` `getMonthActivitySummary`: Calls `getSessionsByMonth` (full scan), then iterates all sessions for the month. Same root cause as above.
+- 🟠 High — `src/store/useWorkoutStore.ts:120-124` `getRecentCompletedSessions`:
+  ```ts
+  const sessions = await db.workoutSessions
+    .filter((s) => s.completed === true)
+    .reverse()
+    .limit(limit)
+    .toArray();
+  ```
+  The `.filter()` runs BEFORE `.limit()`, so this scans the ENTIRE table even though only 10 rows are needed. The module-level 30s cache (`_recentSessionsCache`) mitigates repeat calls, but the first call per cold-start is O(N). Fix: index on `completed` (as number) and use `.where("completed").equals(1).reverse().limit(10)`.
+- ✅ Good — `src/db/analytics.ts:220-250` `getMuscleGroupStats`: Builds an `exerciseMap` ONCE before iterating sessions — explicitly converts the previous O(S × E) scan into O(S + E). Comment at line 217-219 documents the optimization. Model pattern.
+- ✅ Good — `src/services/recoveryTracker.ts:182-185`: Same `exerciseMap` pattern as above.
+- 🟠 High — `src/db/analytics.ts:98-147` `getPersonalRecords`: O(S × E × sets) nested loop over ALL completed sessions. For 500 sessions × 10 exercises × 5 sets = 25k iterations. Called on every `finishWorkout` (`useWorkoutStore.ts:529`) and every stats-page render. With the full-table scan from `getCompletedSessions` upstream, this likely exceeds 100ms on mid-range phones. Consider precomputing PRs incrementally on session save, or caching the result with invalidation on save.
+- 🟠 High — `src/services/recoveryTracker.ts:178-269` `aggregateMuscleData`: O(S × E × sets × muscleIds) nested loop over ALL completed sessions, even though only the most-recent session per muscle is needed. For 500 sessions × 10 exercises × 5 sets × 4 muscleIds = 100k iterations. Called by `calculateMuscleRecovery` which is called on AnatomyMap renders. Likely exceeds 100ms on mid-range phones (see §6). Fix: sort sessions newest-first (using indexed `date`) and break early per muscle once all known muscles have been seen, OR maintain a rolling per-muscle "last session" record on save.
+- 🟡 Medium — `src/db/analytics.ts:168-185` `getExerciseProgress` and `:188-214` `getEstimated1RM`: Linear scan over all sessions for a single exercise. Could be optimized with an `exerciseId` index on a flat `sets` table, but the current denormalized schema (sets nested in exercises nested in sessions) makes this hard. Acceptable for moderate history sizes.
+- 🟡 Medium — `src/pages/CalendarPage.tsx:120` `handleDayClick`: Re-queries `getSessionsByMonth(year, month)` on every day tap, even though the same query just ran for the current month view. Should reuse the sessions already loaded (or cache them at the page level).
+- 🟠 High — `src/pages/CalendarPage.tsx:72-91` prefetch effect: Fetches `getSessionsByMonth(nextYear, nextMonth)` and stores the result in `nextMonthPrefetch` state — but `handleNextMonth` (`:103-110`) never reads `nextMonthPrefetch`. The prefetched data is discarded. The next-month `useEffect` (`:54-67`) re-fetches via `getMonthActivitySummary`. **The prefetch is wasted work.** Either wire it into the navigation handler (cache-then-revalidate) or remove it.
+- ✅ Good — `src/store/useWorkoutStore.ts:109-137`: 30s TTL cache for recent sessions avoids repeat full-table scans within a workout-building session. `invalidateRecentSessionsCache()` is correctly called after `finishWorkout` (`:570`).
+- ✅ Good — No `$transaction` misuse detected (this is a Dexie-only codebase; no Prisma in scope).
+- ✅ Good — No N+1 patterns detected. All queries batch into a single `toArray()` then iterate in memory.
+
+---
+
+### 4. API Performance
+
+- ✅ Pass — N/A for this scope. All files reviewed are client-side (Dexie / IndexedDB). No Next.js API routes in scope.
+- ✅ Good — `src/store/useWorkoutStore.ts:629, 647-651`: Async side-effects (`pushToCloud`, `syncWorkoutVolume`, `recordFeedbackFromSession`, `evaluateAchievements`) are all fire-and-forget with `.catch(console.error)` — non-blocking on the critical save path.
+- 🟡 Medium — `src/store/useWorkoutStore.ts:608-610` `sendPRNotification`: Dynamic import + fire-and-forget. Good, but the dynamic import runs on EVERY new PR during `finishWorkout` — the module is loaded once and cached by the bundler, so OK.
+
+---
+
+### 5. Memory & Leaks
+
+- ✅ Good — `src/components/workout/RestTimer.tsx:85`: `clearInterval(interval)` on cleanup.
+- ✅ Good — `src/components/workout/RestTimer.tsx:104-105`: `removeEventListener` for `visibilitychange` and `focus` on cleanup.
+- ✅ Good — `src/components/workout/RestTimer.tsx:163`: `window.clearTimeout(timeoutId)` on cleanup.
+- ✅ Good — `src/components/exercise/ExerciseVideoPlayer.tsx:170-172, 178`: Async cancellation via `cancelled` flag; `URL.revokeObjectURL(blobUrl)` on cleanup. Excellent pattern.
+- ✅ Good — `src/components/exercise/ExerciseVideoPlayer.tsx:216`: `observer.disconnect()` on cleanup.
+- 🟡 Medium — `src/services/mediaCache.ts`: Cache API writes are fire-and-forget with NO eviction policy. The `pulse-exercise-media` cache grows unbounded as users browse exercises. On low-storage devices, this could trigger QuotaExceededError silently (caught by the `try/catch`). Recommend: add an LRU eviction pass on `putCachedMedia`, or cap by total entry count / size.
+- 🟡 Medium — `src/store/useWorkoutStore.ts:109-110`: Module-scope `_recentSessionsCache` holds up to 10 full WorkoutSession objects indefinitely (until `invalidateRecentSessionsCache()` is called). Acceptable, but on user logout / account switch the cache is NOT cleared — could leak the previous user's session data into the next user's ghost-logging. Add a logout hook that calls `invalidateRecentSessionsCache()`.
+- 🟡 Medium — `src/pages/CalendarPage.tsx:46-47`: `nextMonthPrefetch` state holds a full `WorkoutSession[]` for the next month. Never cleared on navigation — accumulates as the user browses months. Plus the prefetch is unused (see §3), so this is pure waste.
+- ✅ Good — `src/pages/CalendarPage.tsx:55-66, 73-91`: Both `useEffect`s use a `cancelled` flag to prevent setState-after-unmount. Correct.
+- ✅ Good — `src/db/analytics.ts`: All Dexie queries resolve to a single `toArray()` — no open cursors held.
+- ✅ Good — `src/services/recoveryTracker.ts`: Returns a `Map` — bounded by the number of known muscle IDs (~40). No unbounded growth.
+
+---
+
+### 6. Mobile Performance
+
+- 🟠 High — `src/components/calendar/CalendarGrid.tsx:221-248`: 42 `<motion.button>` instances per render. On a mid-range phone, each Framer Motion component adds ~1–2ms of mount/commit time. 42 × 1.5ms ≈ 63ms — close to the 100ms main-thread-block threshold on its own, and that's per month navigation. Plus `whileTap` adds gesture listeners to each. Recommendation: use plain `<button>` with `active:scale-90` Tailwind class (already used elsewhere in the codebase) for the 42 cells; drop Framer Motion entirely from this component.
+- 🟠 High — `src/components/workout/SetRow.tsx:67`: `motion.div` with the `layout` prop. Layout animations trigger reflow measurements on EVERY SetRow whenever ANY set is added/removed/toggled. With 4–6 sets per exercise × 6 exercises, that's 24–36 simultaneous layout measurements per state change. On mobile this can exceed 16ms per frame → visible jank when checking off sets. Recommendation: drop the `layout` prop (keep `initial`/`animate`/`exit` for enter/leave transitions only).
+- 🟠 High — `src/components/workout/ExerciseWorkoutCard.tsx:166`: `transition={{ duration: 0.4, delay: exerciseIndex * 0.1 }}` — staggered entrance. With 8 exercises, the last card delays 800ms before it even starts animating in. Users perceive this as the page being broken. Cap the stagger (e.g., `Math.min(exerciseIndex, 4) * 0.1`).
+- 🟠 High — `src/services/recoveryTracker.ts:178-269` `aggregateMuscleData`: Synchronous O(S × E × sets × muscleIds) loop. For a user with 200 sessions (moderate), this is ~40k iterations on the main thread, plus `new Date(s.date).getTime()` per session (slow). Likely 50–150ms on a mid-range phone. AnatomyMap renders will jank. Recommendation: chunk the work via `requestIdleCallback` or move to a Web Worker.
+- 🟠 High — `src/db/analytics.ts:98-147` `getPersonalRecords`: Synchronous nested loops after a full-table scan. Called on every stats render. Likely 30–80ms on mid-range. Recommendation: precompute on save, or cache with invalidation.
+- 🟡 Medium — `src/components/calendar/DaySessionsDrawer.tsx:158-164`: `motion.div` with `layout` prop + staggered `delay: idx * 0.04`. With 5+ sessions, exit animations cause layout thrash. With 10 sessions, the last delays 400ms.
+- 🟡 Medium — `src/components/workout/RestTimer.tsx:81-83`: 1s `setInterval` updates state every second — minor but constant re-render. Acceptable for a timer.
+- ✅ Good — `src/components/exercise/ExerciseVideoPlayer.tsx:189-217`: IntersectionObserver pauses videos when scrolled out of view — saves CPU/battery on long workout-session pages.
+- ✅ Good — `src/components/exercise/ExerciseVideoPlayer.tsx:279, 289`: `preload="none"` on `<video>` and `loading="lazy"` on `<img>` — prevents eager media loading.
+- ✅ Good — `src/components/workout/RestTimer.tsx:233`: SVG progress ring uses CSS `transition-all duration-1000 ease-linear` on `strokeDashoffset` — GPU-accelerated, no main-thread cost.
+- ✅ Good — No layout-thrash patterns detected (no read-then-write-DOM-in-a-loop).
+- 🟡 Medium — `src/components/workout/SetRow.tsx:58-63` `handleFocus`: `setTimeout(() => target.scrollIntoView(...), 300)` on every input focus. With 3 inputs per row × multiple rows, this can cause scroll jumps when the user moves between inputs. The 300ms delay also makes the UI feel sluggish. Consider using `scrollIntoView` synchronously or via `requestAnimationFrame`.
+
+---
+
+## Cross-Cutting Findings
+
+### Blockers
+- None (no infinite loops, no >100KB undocumented addition, no Bundle >100KB without lazy loading).
+
+### Must-Fix Before Build (OPTIMIZE)
+1. 🔴 **`src/db/analytics.ts:13-16`** — Full-table scan on every analytics call. Add a numeric `completed` index and use `.where("completed").equals(1)`. Affects ALL analytics + ghost-logging.
+2. 🟠 **`src/db/analytics.ts:315-331`** — `getSessionsByMonth` should use the indexed `date` field with a range query. Affects Calendar (B2) + DaySessionsDrawer.
+3. 🟠 **`src/store/useWorkoutStore.ts:120-124`** — `getRecentCompletedSessions` full-table scan despite `limit(10)`. Use indexed query.
+4. 🟠 **`src/components/workout/ExerciseWorkoutCard.tsx:348-353`** — Inline arrow functions break `memo()` on SetRow. Fix to restore memoization.
+5. 🟠 **`src/components/workout/ExerciseWorkoutCard.tsx:112`** — Over-subscribes to `activeWorkout`. Switch to a per-exercise selector.
+6. 🟠 **`src/pages/CalendarPage.tsx:72-91`** — Prefetch is unused; remove or wire it in. Currently pure waste.
+7. 🟠 **`src/components/calendar/CalendarGrid.tsx:221`** — Replace 42 `<motion.button>` with plain `<button>` + Tailwind `active:` classes.
+8. 🟠 **`src/components/workout/SetRow.tsx:67`** — Drop `layout` prop from motion.div (layout thrash on every set change).
+9. 🟠 **`src/services/recoveryTracker.ts:178-269`** — `aggregateMuscleData` is O(S × E × sets × muscleIds); chunk or move to Web Worker.
+
+### Should-Fix (Medium)
+- 🟡 `src/components/workout/ExerciseWorkoutCard.tsx:8-12` — Lazy-load the four sheet modals.
+- 🟡 `src/services/mediaCache.ts` — Add LRU/size cap to the Cache API store.
+- 🟡 `src/store/useWorkoutStore.ts:109-110` — Clear `_recentSessionsCache` on logout.
+- 🟡 `src/components/exercise/ExerciseVideoPlayer.tsx` — Wrap in `memo()` (parent re-renders on every keystroke).
+- 🟡 `src/components/workout/ExerciseWorkoutCard.tsx:166` — Cap the entrance stagger delay.
+- 🟡 `src/db/analytics.ts:98-147` — Cache `getPersonalRecords` result with save-time invalidation.
+- 🟡 `src/components/calendar/DaySessionsDrawer.tsx:155-156, 194, 211-213` — Memoize per-session volume/exercise-count.
+
+### Praise
+- ✅ `src/components/workout/RestTimer.tsx` — Excellent effect hygiene: individual selectors, `useMemo`/`useCallback` everywhere, proper cleanup of interval / timeout / listeners, StrictMode-safe refs, timestamp-based countdown that survives reloads.
+- ✅ `src/services/recoveryTracker.ts:290-313` `computeLoadFactor` — Pure, clamped, well-documented, exported for unit testing.
+- ✅ `src/config/setTypes.ts` — Clean central config with O(1) Map lookup and backward-compatible `normalizeSetType()`.
+- ✅ `src/components/exercise/ExerciseVideoPlayer.tsx:151-180` — Async cancellation + blob URL revocation pattern is textbook-correct.
+- ✅ `src/db/analytics.ts:220-250` `getMuscleGroupStats` — Pre-builds `exerciseMap` to convert O(S×E) → O(S+E). Documented optimization.
+
+---
+
+## Verdict: OPTIMIZE BEFORE BUILD
+
+The codebase demonstrates strong effect hygiene and good architectural patterns (centralized config, pure functions, async cancellation, dynamic imports for non-critical code). However, **three issues must be fixed before this ships to users**:
+
+1. **Data layer** (`analytics.ts:13-16`, `useWorkoutStore.ts:120-124`): The IndexedDB full-table scans will cause noticeable lag (likely >100ms) on the stats page and AnatomyMap for any user with >100 sessions. The `completed` index exists in the schema but is bypassed by `.filter()`. This is the highest-impact fix.
+
+2. **Render perf** (`ExerciseWorkoutCard.tsx:348-353, 112`): The combination of inline arrow functions (defeating SetRow's `memo`) + over-subscription to `activeWorkout` means every keystroke in any input re-renders the entire workout session page. On a 6-exercise × 4-set workout that's 24 SetRows re-rendering per keystroke — visibly janky on mobile.
+
+3. **Mobile** (`CalendarGrid.tsx:221`, `SetRow.tsx:67`, `recoveryTracker.ts:178-269`): 42 `motion.button` cells + `layout` animations on every SetRow + a synchronous 100k-iteration recovery aggregation collectively threaten 60fps on mid-range phones.
+
+The bundle size is within limits (~60–80KB, mostly sheets that COULD be lazy-loaded but aren't BLOCKING). No infinite loops. No memory leaks (one minor cache-eviction gap in `mediaCache.ts`). No N+1 queries.
+
+After fixing the 9 must-fix items above, this should achieve PERFORMANT status.
+
+---
+Task ID: review-security-skill
+Agent: Security Auditor (per skills/security-auditor.md)
+
+## Security Audit: Epic A + B1 + B2
+
+Scope reviewed (every file read fully):
+- Epic A: src/config/setTypes.ts, src/store/useWorkoutStore.ts, src/components/workout/RestTimer.tsx, src/services/recoveryTracker.ts, src/components/workout/SetRow.tsx, src/db/analytics.ts, src/db/schema.ts
+- Epic B1: src/components/exercise/ExerciseVideoPlayer.tsx, src/services/mediaCache.ts, src/pages/ExerciseDetailPage.tsx, src/components/workout/ExerciseWorkoutCard.tsx
+- Epic B2: src/pages/CalendarPage.tsx, src/components/calendar/CalendarGrid.tsx, src/components/calendar/DaySessionsDrawer.tsx
+- API routes: src/app/api/ai-coach/route.ts, src/app/api/ai-workout/route.ts, src/app/api/auth/session/route.ts, src/app/api/social/{feed,following,follow,posts,comments,kudos,profile,search}/route.ts, src/app/api/challenges/{route.ts,sync-volume/route.ts,[challengeId]/{join,leaderboard,progress}/route.ts}
+- Infrastructure: Caddyfile, src/middleware.ts, .gitignore, src/lib/{authServer.ts,apiSchemas.ts,validation.ts,rateLimit.ts,firebaseAdmin.ts,firebase.ts}, src/app/api/ai-health/route.ts, src/app/api/route.ts
+
+### 1. Authentication & Authorization
+- requireUser called on every user-data API route? — FAIL
+- Identity verified via Firebase session cookie (NOT client headers)? — PASS (where auth exists)
+- Impersonation checks (body uid === callerUid)? — PASS on all identity-bearing POST/DELETE
+- GET routes authenticated? — FAIL (3 critical gaps, see below)
+
+Findings:
+- 🔴 [src/app/api/social/comments/route.ts:32-60] `GET /api/social/comments` does NOT call requireUser. Anyone can scrape comments (authorUid, authorName, authorPhotoURL, text). Public PII exposure.
+- 🔴 [src/app/api/social/search/route.ts:16-40] `GET /api/social/search?q=` does NOT call requireUser. Anyone can enumerate PublicProfile (displayName, photoURL). Public PII exposure — directly violates skill rule "NEVER approve a feature that exposes PII without auth."
+- 🔴 [src/app/api/challenges/[challengeId]/leaderboard/route.ts:13-58] `GET /api/challenges/[challengeId]/leaderboard` does NOT call requireUser. Anyone can scrape userName + userPhotoURL for up to 100 participants per challenge. Public PII exposure.
+- 🟠 [src/app/api/challenges/route.ts:34-96] `GET /api/challenges` does NOT call requireUser. No PII exposed (challenge metadata only) but violates "no anonymous access" rule. Lower severity.
+- 🟠 [src/app/api/social/following/route.ts:13-48] Calls requireUser BUT accepts any `uid` query param — any authenticated user can enumerate ANY user's following list (incl. displayName+photoURL when includeProfiles=true). Privacy violation.
+- 🟠 [src/app/api/challenges/[challengeId]/progress/route.ts:16-71] Calls requireUser BUT accepts any `userId` query param — any authenticated user can read ANY user's userName, userPhotoURL, progressKg, completed, joinedAt. Privacy violation.
+- 🟡 [src/app/api/ai-health/route.ts:8-14] No requireUser. Exposes provider availability + server timestamp. Low impact.
+- ✅ [src/app/api/social/feed/route.ts:13-43] GET properly calls requireUser before listing 50 most recent posts.
+- ✅ [src/app/api/ai-coach/route.ts:17-21], [src/app/api/ai-workout/route.ts:10-14], [src/app/api/auth/session/route.ts:13-57] All call requireUser (or verifyIdToken for session creation).
+- ✅ Impersonation checks in feed POST, follow POST/DELETE, profile POST, sync-volume POST, challenge join POST, comment DELETE, posts DELETE — all verify `body.uid === callerUid`.
+- ✅ [src/app/api/social/comments/route.ts:12-28] `readAuthor` helper fetches author profile from DB by `callerUid`, not from client headers — correct pattern.
+
+### 2. Input Validation
+- POST/DELETE/PUT bodies validated with Zod (no raw `as FooBody` casts)? — PASS
+- Query parameters validated? — PASS
+- Path parameters validated? — PASS
+- 400 response shape consistent `{ error: "Validation failed", details: [...] }`? — PASS
+
+Findings:
+- ✅ Every POST/DELETE/PUT handler uses `parseRequestBody(req, schema)` from `src/lib/apiSchemas.ts`.
+- ✅ Query params validated via `parseQueryParams` in social/following, social/comments, social/search, challenges/[challengeId]/progress.
+- ✅ Path params validated via `parsePathParam` + `challengeIdParamSchema` (regex `^[^\s\x00-\x1f\x7f]+$`) in join, leaderboard, progress.
+- ✅ `parseRequestBody` returns `{ error: "Invalid JSON body" }` on JSON parse failure and `{ error: "Validation failed", details: [...] }` on schema rejection — consistent shape.
+- ✅ Strict-vs-strip policy documented and applied: identity routes use .strict(), large AI payloads + content routes use .strip().
+- ✅ All schemas impose sane length/max caps (e.g. comment text ≤500, displayName ≤50, photoURL ≤2048, IDs ≤200, exercise lists ≤500).
+- ✅ ai-coach schema uses .strip() + max caps (200 exercises, 50 sessions, 50 PRs, userPrompt ≤1000 chars).
+
+### 3. Data Exposure
+- Exposes PII without auth? — FAIL (3 critical, see Section 1)
+- API responses scoped to requesting user? — FAIL (2 high, see Section 1)
+- Error messages sanitized? — MOSTLY PASS (2 medium leaks)
+- Prisma $queryRaw parameterized? — PASS
+
+Findings:
+- 🔴 PII exposed without auth on social/comments GET, social/search GET, challenges/[challengeId]/leaderboard GET (see Section 1).
+- 🟠 social/following?uid=X and challenges/[challengeId]/progress?userId=X not scoped to caller (see Section 1).
+- 🟡 [src/app/api/ai-workout/route.ts:105-108] Catch-all returns `{ error: "Failed to generate workout: " + message }` where `message = error.message` — leaks internal/OpenRouter error details to client. Should use `serverErrorResponse()`.
+- 🟡 [src/app/api/social/following/route.ts:45-46] Catch-all returns `{ error: message }` (raw error.message) — leaks internal error. Should use `serverErrorResponse()`.
+- ✅ All other routes use `serverErrorResponse()` (sanitized `{ error: "Internal server error" }`) for catch-all 500s.
+- ✅ [src/app/api/social/search/route.ts:25-27] `prisma.$queryRaw` uses tagged template literal with parameter binding: `WHERE LOWER(displayName) LIKE LOWER(${"%" + q + "%"})` — no SQL injection. Only $queryRaw usage in the codebase.
+- ✅ Photo URL fields validated with `zOptionalUrl` (http/https only — rejects javascript:/data:).
+- ✅ No internal stack traces, file paths, or DB errors returned by any other route.
+
+### 4. Rate Limiting
+- New route categorized in rate-limit middleware? — PARTIAL
+- Limit appropriate for endpoint? — PASS
+- Per-user rate limiting in place for authenticated routes? — PASS
+
+Findings:
+- ✅ [src/middleware.ts] + [src/lib/rateLimit.ts] Token-bucket middleware with 4 categories: ai=20/hr, sync=60/hr, social-writes=100/hr, default=300/hr.
+- ✅ [src/lib/rateLimit.ts:111-124] `extractUidForRateLimit` reads session cookie with `verifySessionCookie(cookie, false)` (signature only, no revocation call — fast path for rate limiting only). Authoritative auth boundary remains `requireUser` at the route.
+- ✅ [src/lib/rateLimit.ts:128-137] `buildBucketKey` keys by `uid:category` for authenticated requests, falls back to `ip:category` for anonymous.
+- ✅ [src/middleware.ts:111-120] Write-method session-cookie existence check (early 401 for POST/DELETE/PUT/PATCH without cookie).
+- ✅ Cleanup evicts idle buckets after 2h [src/lib/rateLimit.ts:91].
+- ✅ 429 response includes Retry-After + X-RateLimit-Remaining headers.
+- 🟡 GET routes (read paths) fall into `default` (300/hr). For the 3 unauthenticated GET routes (Section 1), an anonymous IP can hit 300/hr × unlimited IPs — combined with the auth bypass this enables relatively unbounded scraping. Fix the auth bypass first; rate limiting is then adequate.
+
+### 5. Client-Side Security
+- Firebase config keys the only secrets on client? — PASS
+- pulse_session cookie httpOnly + sameSite=lax? — PASS
+- dangerouslySetInnerHTML usages sanitized? — PASS (both safe)
+- UGC escaped on render? — PASS
+
+Findings:
+- ✅ [src/lib/firebase.ts:31-37] Only `NEXT_PUBLIC_FIREBASE_*` env vars exposed to client (apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId). No service account, no paid-service API keys.
+- ✅ [src/lib/firebaseAdmin.ts] Service account loaded server-side only via `FIREBASE_SERVICE_ACCOUNT` env var or `service-account.json` file. Never imported by client code.
+- ✅ [src/app/api/auth/session/route.ts:45-51, 61-67] `pulse_session` cookie set with `httpOnly: true`, `sameSite: "lax"`, `secure: NODE_ENV === "production"`, `path: "/"`. Cookie cleared on DELETE with same flags + `maxAge: 0`.
+- ✅ [src/app/layout.tsx:42] `dangerouslySetInnerHTML={{ __html: themeScript }}` — `themeScript` is a static string literal (no user input interpolated). Safe.
+- ✅ [src/components/ui/chart.tsx:83] `dangerouslySetInnerHTML` generates CSS rules from `THEMES` constant + `itemConfig.color`. Currently no UGC feeds into ChartConfig (dev-controlled). Safe today; document as watch item if user-controlled colors ever enter.
+- ✅ UGC (comment text, exercise names, session names, displayName) rendered as React children (e.g. `{c.text}`, `{exercise.exerciseName}`) — React escapes by default.
+- ✅ [src/lib/validation.ts:30-44] `validateUrl` rejects non-http(s) schemes — used by `zOptionalUrl` for photoURL fields.
+- 🟡 [src/store/useWorkoutStore.ts:24-32] `getCachedExercises()` does `JSON.parse(localStorage.getItem("pulse_exercises_cache"))` without schema validation. Defense-in-depth: consider validating the cached shape on read. Not a known XSS vector (no known injection path) — informational only.
+- ✅ [src/services/mediaCache.ts] Cache API keyed by URL string; only stores Response blobs. URLs come from exercise config (server-controlled), not UGC. `fetch(url, { mode: "cors" })`. Safe.
+- ✅ [src/components/exercise/ExerciseVideoPlayer.tsx] Renders `<img src>` / `<video src>` from exercise config props (server-controlled) or blob: URLs from Cache API. No UGC. Safe.
+
+### 6. Infrastructure
+- Caddyfile SSRF-fixed (no XTransformPort open proxy)? — FAIL (CRITICAL)
+- TRUSTED_PROXY_IPS configured? — PASS
+- Body size limits enforced? — PASS
+- Service account file gitignored? — PASS
+
+Findings:
+- 🔴 [Caddyfile:1-23] The `XTransformPort` query handler is an OPEN PROXY: `reverse_proxy localhost:{query.XTransformPort}` proxies ANY localhost port based on a URL query param. Attacker can request `?XTransformPort=5432` to reach Postgres, `?XTransformPort=9099` for Firebase Admin internals, `?XTransformPort=6379` for Redis, etc. Direct violation of checklist item 6 ("Is the Caddyfile SSRF-fixed? No XTransformPort open proxy"). NOT fixed.
+- ✅ [src/middleware.ts:17-47] `TRUSTED_PROXY_IPS` env var respected; `X-Forwarded-For` only trusted when direct connection came from a configured trusted proxy. Falls back to direct IP otherwise. IP spoofing mitigated.
+- ✅ [src/middleware.ts:50-65] Body size limits enforced in middleware before route handler:
+  - `/api/ai-coach`, `/api/ai-workout`: 50KB
+  - `/api/sync/push`: 10MB
+  - Default: 1MB
+  - 413 returned on overflow.
+- ✅ [.gitignore:93-95] `service-account.json` and `*.firebase-adminsdk-*.json` are gitignored.
+- ✅ [.gitignore:34] `.env*` is gitignored.
+- ✅ [src/lib/authServer.ts:9-33] `requireUser` uses `verifySessionCookie(token, true)` — revocation checking enabled (network call to Firebase).
+- ✅ [src/lib/rateLimit.ts:117] `extractUidForRateLimit` uses `verifySessionCookie(cookie, false)` — signature-only fast path (no network call). Correctly used ONLY for rate-limit bucketing, NOT for auth decision.
+
+---
+
+### Verdict: BLOCKED
+
+Four CRITICAL security issues — cannot ship. Per skill rules: "One CRITICAL security issue = BLOCKED. No exceptions."
+
+### Critical Issues (must fix before implementation)
+
+1. 🔴 **Caddyfile SSRF open proxy** [Caddyfile:1-23]
+   The `XTransformPort` query handler proxies ANY localhost port based on a URL query parameter. Remove the `@transform_port_query` block entirely, or restrict to an allow-list of permitted ports. This is an infrastructure-level hole that bypasses all route-level auth.
+
+2. 🔴 **`GET /api/social/comments` unauthenticated** [src/app/api/social/comments/route.ts:32-60]
+   Add `const { uid, response: authResponse } = await requireUser(req); if (!uid) return authResponse!;` at the top of the GET handler. Currently exposes comment text + author PII to anyone.
+
+3. 🔴 **`GET /api/social/search` unauthenticated** [src/app/api/social/search/route.ts:16-40]
+   Add `requireUser` at the top of the GET handler. Currently exposes displayName + photoURL for any substring search to anyone — direct PII enumeration.
+
+4. 🔴 **`GET /api/challenges/[challengeId]/leaderboard` unauthenticated** [src/app/api/challenges/[challengeId]/leaderboard/route.ts:13-58]
+   Add `requireUser` at the top of the GET handler. Currently exposes userName + userPhotoURL for up to 100 participants per challenge to anyone.
+
+### High Issues (should fix before implementation)
+
+5. 🟠 **`GET /api/social/following` not scoped to caller** [src/app/api/social/following/route.ts:13-48]
+   Either force `uid = callerUid` (ignore body-supplied uid), or require `uid === callerUid` and 403 otherwise. Currently any authenticated user can enumerate ANY other user's following list.
+
+6. 🟠 **`GET /api/challenges/[challengeId]/progress` not scoped to caller** [src/app/api/challenges/[challengeId]/progress/route.ts:16-71]
+   Either force `userId = callerUid`, or require `userId === callerUid` and 403 otherwise. Currently any authenticated user can read ANY other user's challenge participation data.
+
+7. 🟠 **`GET /api/challenges` unauthenticated** [src/app/api/challenges/route.ts:34-96]
+   Add `requireUser` for consistency with "no anonymous access" rule. Lower impact (no PII exposed) but violates the rule.
+
+### Medium Issues
+
+8. 🟡 **`POST /api/ai-workout` error path leaks internal details** [src/app/api/ai-workout/route.ts:105-108]
+   Replace `{ error: "Failed to generate workout: " + message }` with `serverErrorResponse()` to avoid leaking OpenRouter / network error internals.
+
+9. 🟡 **`GET /api/social/following` error path leaks internal details** [src/app/api/social/following/route.ts:45-46]
+   Replace `{ error: message }` with `serverErrorResponse()`.
+
+### Notes on Epic A + B1 + B2 client code
+
+All reviewed client-side Epic A/B1/B2 files (setTypes.ts, useWorkoutStore.ts, RestTimer.tsx, recoveryTracker.ts, SetRow.tsx, ExerciseVideoPlayer.tsx, mediaCache.ts, ExerciseDetailPage.tsx, ExerciseWorkoutCard.tsx, CalendarPage.tsx, CalendarGrid.tsx, DaySessionsDrawer.tsx, analytics.ts, schema.ts) are offline-first and operate exclusively on the user's own local Dexie data. They do NOT introduce new server-side attack surfaces. The blocking issues above are in shared infrastructure (Caddyfile) and pre-existing API routes that the Epic A/B1/B2 features integrate with — not in the new Epic code itself.
+
+One defense-in-depth observation: `useWorkoutStore.getCachedExercises()` parses localStorage without schema validation [src/store/useWorkoutStore.ts:24-32]. Not a known XSS vector (no injection path identified), but worth hardening in a future pass.
+
+
+---
+Task ID: review-qa-skill
+Agent: QA Tester (per skills/qa-tester.md)
+
+## QA Report: Epic A + B1 + B2
+
+**Unit Tests**: 335 passed / 1 failed — file paths:
+- ✅ src/config/__tests__/setTypes.test.ts (33 tests) — full pure-fn coverage
+- ✅ src/store/__tests__/useWorkoutStore.test.ts (8 tests) — store actions
+- ✅ src/store/__tests__/restTimer.test.ts (13 tests) — timestamp-based timer (pure fn only)
+- ✅ src/db/__tests__/analytics.test.ts (uses fake-indexeddb) — full analytics incl. B2 calendar
+- ✅ src/services/__tests__/recoveryTracker.test.ts (~18 tests) — incl. pure `computeLoadFactor`
+- ✅ src/services/__tests__/mediaCache.test.ts (~18 tests) — full Cache API mock coverage
+- ✅ src/components/exercise/__tests__/ExerciseVideoPlayer.test.ts (20 tests) — pure helpers ONLY
+- ✅ src/components/calendar/__tests__/CalendarGrid.test.ts (21 tests) — pure helpers ONLY
+- ❌ src/services/__tests__/fatigueEngine.test.ts:68 — pre-existing failure (asserts fatigueScore ≥ 4, got 3) — UNRELATED to Epic A/B but BLOCKS per skill rule "If ANY existing test breaks → BLOCK"
+
+**Integration Tests**: 0 passed / 0 failed — route paths: NONE
+- ❌ `next-test-api-route-handler` NOT installed (package.json devDependencies)
+- ❌ ZERO API route tests for happy/401/400/403/404 paths on any of:
+  - /api/ai-coach, /api/ai-workout, /api/ai-health
+  - /api/auth/session
+  - /api/challenges/* (route, join, progress, leaderboard, sync-volume)
+  - /api/social/* (posts, kudos, follow, following, feed, comments, profile, search)
+- ⚠️ The file `src/services/__tests__/api-integration.test.ts` is misnamed — it tests the CLIENT-SIDE store's `fetch()` call shape, NOT the API routes themselves. No Zod schema rejection tests, no auth/impersonation tests.
+
+**E2E Tests**: 0 passed / 0 failed — spec paths: NONE
+- ❌ `@playwright/test` NOT installed (package.json devDependencies)
+- ❌ ZERO `.spec.ts` files anywhere in the repo (glob returned empty)
+- ❌ NO Firebase Auth Emulator setup
+- ❌ NO `authedPage` fixture
+- ❌ NO Dexie-clear-between-tests (`indexedDB.deleteDatabase("PulseDB")`) in any test file
+- This is a complete strategy gap — section 3 of qa-tester.md is entirely unmet
+
+**Regression**: vitest: 335/336 (1 fail) | tsc: 33 errors | lint: 8 errors — NOT ≤ baseline:
+- ❌ vitest: 1 failure (`src/services/__tests__/fatigueEngine.test.ts:68`) — BLOCK per skill rule
+- ❌ tsc: 33 errors — notable Epic A/B-relevant errors in:
+  - `src/services/aiWorkoutService.ts:197,219,252` (TS2345 goal/fitnessLevel null vs string)
+  - `src/store/useGeneratorStore.ts:122` (TS2739 Exercise missing `exercise, sets, reps`)
+  - `src/pages/WorkoutResultView.tsx` (8 errors — ProgramExercise conversion)
+  - `src/pages/HomePage.tsx:488,584` (startWorkout signature, RoutineExercise[] mismatch)
+  - `src/services/__tests__/fatigueEngine.test.ts:9` (test fixture type mismatch)
+  - Pre-existing errors in: StatsPage, AuthPage, BodyPage, BuilderPage, ExercisesPage, GeneratorWizard, PlateCalculatorSheet, syncEngine, regression.test.tsx
+- ⚠️ lint: 8 errors — ALL pre-existing "Compilation Skipped: Existing memoization could not be preserved" in `src/components/AnatomyMap.tsx` (8 instances at lines 623, 688). Not regressed by Epic A/B but eslint exit code is 1.
+- No baseline file was provided, but the skill says "MUST be ≤ baseline error count" — without a baseline we cannot prove parity, and the absolute count is non-zero for both tsc and lint.
+
+**Agent Browser**: ✅ Pass — full flow verified at http://localhost:3000/
+- Steps performed:
+  1. Opened root URL (HTTP 200)
+  2. Dismissed splash + onboarding overlay via SKIP button
+  3. Seeded a workout session directly into IndexedDB (`PulseDB.workoutSessions`) to make the Calendar link visible (Stats page hides it when `calendarData.every(d => d.volume === 0)`)
+  4. Navigated Home → Stats → Calendar via in-page router (single Next.js `/` route)
+  5. Verified CalendarPage renders: "WORKOUT CALENDAR" h1, "JUNE 2026" heading, all 30 day cells
+  6. Verified active day label: "2026-06-23: 1 workout, 1840 kg-reps" (matches seeded data: 100×10 + 105×8 = 1840)
+  7. Clicked the active day → DaySessionsDrawer opened with heading "TUESDAY, JUNE 23, 2026"
+- Responsive: tested mobile (375×667 iPhone SE) AND desktop (1280×800) — both render correctly
+- Sticky footer: bottom nav visible at both viewports (position:absolute, top:596/729, bottom:667/800)
+- Console errors: ZERO during the entire flow
+- Screenshot saved: /tmp/calendar-verification.png (62KB, full page)
+
+**Success Criteria Met?**: No — with evidence:
+1. ❌ Existing test failure: `src/services/__tests__/fatigueEngine.test.ts:68` fails (fatigueScore=3, expected ≥4). Per skill rule "NEVER approve a feature that broke an existing test" → BLOCK.
+2. ❌ tsc has 33 errors including 5+ in Epic A/B source files (aiWorkoutService, useGeneratorStore, WorkoutResultView, HomePage) — not ≤ baseline (no baseline provided; absolute count is non-zero).
+3. ❌ lint has 8 errors (eslint exits 1) — even though pre-existing in AnatomyMap.tsx, the skill rule "If tsc or lint regressed → BLOCK" applies; without a baseline showing these are pre-existing, they must be treated as blocking.
+4. ❌ Multiple Epic A/B UI components have ZERO tests:
+   - `src/components/calendar/DaySessionsDrawer.tsx` — 0 tests, has 5 untested pure helpers (formatTime, formatDuration, formatVolume, sessionVolume, sessionExerciseCount)
+   - `src/pages/CalendarPage.tsx` — 0 tests (B2 entry point, no test for prefetch logic, year rollover, day-click filtering)
+   - `src/components/workout/SetRow.tsx` — 0 tests (Epic A set-type chip cycle button has no test)
+   - `src/components/workout/ExerciseWorkoutCard.tsx` — 0 tests (skip flow, superset rendering, set-type cycle wiring)
+5. ❌ Partial coverage gaps:
+   - `RestTimer.tsx` — only `computeRemainingSeconds` is tested; NO render test, NO 15s-warning test, NO completion-effect test, NO preset-button test
+   - `ExerciseVideoPlayer.tsx` — only 3 pure helpers tested; NO render test (no test for cache-hit vs network, placeholder vs media, mode toggle, speed control)
+   - `CalendarGrid.tsx` — only 3 pure helpers tested; NO render test (no test for active-day click handler, today ring, intensity classes, session-count badge)
+6. ❌ Section 2 (Integration Tests) entirely unmet — `next-test-api-route-handler` not installed, no happy/401/400/403/404 tests for any API route
+7. ❌ Section 3 (E2E Tests) entirely unmet — Playwright not installed, zero spec files, no Firebase Auth Emulator setup
+8. ❌ No `vi.useFakeTimers()` usage anywhere — section 1 explicitly requires this for time-dependent logic, and the RestTimer is heavily time-dependent
+
+**Verdict**: 🔴 BLOCK
+
+The Agent Browser verification confirms the Calendar feature (B2) WORKS end-to-end with no console errors at mobile + desktop sizes — that section passes. However, the test strategy has critical gaps that violate the qa-tester.md rules:
+
+- 1 existing test is failing (BLOCK per rule)
+- 5 of 12 audited UI source files have ZERO tests (3 of them are critical B1/B2 components)
+- 3 of 12 have only pure-helper coverage with NO render/interaction tests
+- ZERO API integration tests exist (section 2 fully missing)
+- ZERO E2E tests exist (section 3 fully missing — Playwright isn't even installed)
+- 33 tsc errors + 8 lint errors prevent clean CI
+
+### Coverage Matrix (Epic A + B1 + B2)
+
+| # | Source File | Test File | Coverage | Severity |
+|---|---|---|---|---|
+| 1 | src/config/setTypes.ts | src/config/__tests__/setTypes.test.ts (33 tests, pure fns) | Full unit | ✅ Good |
+| 2 | src/store/useWorkoutStore.ts | useWorkoutStore.test.ts (8) + restTimer.test.ts (13) | Partial — no fake timers, no cycleSetType test, no adjustRestTimer test in main file | 🟡 Medium |
+| 3 | src/db/analytics.ts | src/db/__tests__/analytics.test.ts (fake-indexeddb, ~25 tests) | Full unit + integration | ✅ Good |
+| 4 | src/services/recoveryTracker.ts | src/services/__tests__/recoveryTracker.test.ts (~18 tests, pure fn + integration) | Full unit | ✅ Good |
+| 5 | src/services/mediaCache.ts | src/services/__tests__/mediaCache.test.ts (~18 tests) | Full unit | ✅ Good |
+| 6 | src/components/exercise/ExerciseVideoPlayer.tsx | src/components/exercise/__tests__/ExerciseVideoPlayer.test.ts (20 tests, PURE HELPERS ONLY — no render) | Pure fns only — no render/interaction/A11y test | 🟠 High |
+| 7 | src/components/calendar/CalendarGrid.tsx | src/components/calendar/__tests__/CalendarGrid.test.ts (21 tests, PURE HELPERS ONLY — no render) | Pure fns only — no render/click/intensity test | 🟠 High |
+| 8 | src/components/calendar/DaySessionsDrawer.tsx | **NONE** | ZERO tests — 5 untested pure helpers (formatTime/formatDuration/formatVolume/sessionVolume/sessionExerciseCount) + no render | 🔴 Critical |
+| 9 | src/pages/CalendarPage.tsx | **NONE** | ZERO tests — B2 entry point, prefetch + year-rollover + day-click filter untested | 🔴 Critical |
+| 10 | src/components/workout/RestTimer.tsx | partial in restTimer.test.ts (computeRemainingSeconds only) | Pure helper only — NO render, NO 15s-warning, NO completion effects, NO preset test | 🟠 High |
+| 11 | src/components/workout/SetRow.tsx | **NONE** | ZERO tests — Epic A set-type chip cycle button has no test | 🔴 Critical |
+| 12 | src/components/workout/ExerciseWorkoutCard.tsx | **NONE** | ZERO tests — skip flow, superset rendering, set-type cycle wiring untested | 🔴 Critical |
+
+### Strategy Section Compliance Summary
+| Section | Skill Requirement | Status |
+|---|---|---|
+| 1. Unit Tests | Every pure function, mock externals, fake-indexeddb, fake timers, ≥5 cases/fn | 🟡 Partial — fake-indexeddb ✅, fake timers ❌, ≥5 cases mostly ✅, but 5 components have ZERO tests |
+| 2. Integration Tests | next-test-api-route-handler, happy/401/400/403/404, Zod rejection | ❌ Fully missing — package not installed, 0 route tests |
+| 3. E2E Tests | Playwright + Firebase Auth Emulator, authedPage fixture, Dexie clear | ❌ Fully missing — Playwright not installed, 0 spec files |
+| 4. Regression | vitest 0 fail, tsc ≤ baseline, eslint 0 new errors | ❌ 1 vitest fail, 33 tsc errors, 8 lint errors |
+| 5. Agent Browser | Open feature, exercise flow, no console errors, responsive, sticky footer | ✅ Pass — full flow verified mobile + desktop, 0 console errors, sticky footer visible |
+
+### Next Actions (for the implementing agent — NOT performed by QA)
+1. Fix or quarantine `src/services/__tests__/fatigueEngine.test.ts:68` (pre-existing failure blocking CI)
+2. Add render tests for: DaySessionsDrawer, CalendarPage, RestTimer, SetRow, ExerciseWorkoutCard, ExerciseVideoPlayer (render), CalendarGrid (render)
+3. Add `vi.useFakeTimers()` tests for RestTimer (15s warning, completion side effects, preset adjustments)
+4. Install `next-test-api-route-handler` and add happy/401/400/403/404 tests for at least the social + challenges API routes
+5. Install `@playwright/test`, set up Firebase Auth Emulator, add `authedPage` fixture, add E2E spec for the Calendar → DaySessionsDrawer flow (and the SetRow cycle flow for Epic A)
+6. Fix tsc errors in: aiWorkoutService.ts, useGeneratorStore.ts, WorkoutResultView.tsx, HomePage.tsx
+7. Address lint errors in AnatomyMap.tsx (memoization preservation) or document as accepted baseline
