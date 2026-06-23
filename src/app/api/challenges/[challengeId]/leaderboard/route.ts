@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { serverErrorResponse } from "@/lib/validation";
+import { requireUser } from "@/lib/authServer";
 import { parsePathParam } from "@/lib/apiSchemas";
 import { challengeIdParamSchema } from "../../schema";
 
@@ -10,11 +11,15 @@ export const dynamic = "force-dynamic";
 // GET /api/challenges/[challengeId]/leaderboard
 // Return Participations for the challenge with progress > 0, sorted by
 // progressKg desc, top 100. Returns 404 if the challenge doesn't exist.
+// Requires authentication to prevent public scraping of participant PII.
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ challengeId: string }> }
 ) {
   try {
+    const { response: authResponse } = await requireUser(req);
+    if (authResponse) return authResponse;
+
     const { challengeId: rawChallengeId } = await params;
     const pathParsed = parsePathParam(rawChallengeId, challengeIdParamSchema);
     if (!pathParsed.success) return pathParsed.response;

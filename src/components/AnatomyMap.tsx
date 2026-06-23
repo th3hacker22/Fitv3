@@ -620,21 +620,20 @@ function AnatomyMapComponent({
     );
   };
 
-  const muscleGroups = useMemo(() => {
-    return muscles.map((m) => {
-      const isActive = isMuscleActive(m.id);
-      const isSecondary = isMuscleSecondary(m.id);
-      const isHovered = hovered === m.id;
-      const isActiveTip = activeTip === m.id;
-      const activeOrSec = isActive || isHovered || isActiveTip || isSecondary;
-      const a = isActive || isHovered || isActiveTip;
+  const muscleGroups = muscles.map((m) => {
+    const isActive = isMuscleActive(m.id);
+    const isSecondary = isMuscleSecondary(m.id);
+    const isHovered = hovered === m.id;
+    const isActiveTip = activeTip === m.id;
+    const activeOrSec = isActive || isHovered || isActiveTip || isSecondary;
+    const a = isActive || isHovered || isActiveTip;
 
-      let fillOpacity = 0.45;
-      if (isHovered || isActiveTip) fillOpacity = 0.9;
-      else if (isActive) fillOpacity = 0.75;
-      else if (isSecondary) fillOpacity = 0.3;
+    let fillOpacity = 0.45;
+    if (isHovered || isActiveTip) fillOpacity = 0.9;
+    else if (isActive) fillOpacity = 0.75;
+    else if (isSecondary) fillOpacity = 0.3;
 
-      return (
+    return (
         <g
           key={m.id}
           className="cursor-pointer"
@@ -672,29 +671,16 @@ function AnatomyMapComponent({
         </g>
       );
     });
-  }, [
-    muscles,
-    selected,
-    highlightedMuscles,
-    secondaryHighlightedMuscles,
-    hovered,
-    activeTip,
-    heatmapIntensity,
-    prefersReducedMotion,
-    isInView,
-    toggle,
-  ]);
 
-  const muscleButtons = useMemo(() => {
-    return muscles.map((m) => {
-      const isActive = isMuscleActive(m.id);
-      const isSecondary = isMuscleSecondary(m.id);
-      const isHovered = hovered === m.id;
-      const isActiveTip = activeTip === m.id;
-      const a = isActive || isHovered || isActiveTip;
-      const activeOrSec = a || isSecondary;
+  const muscleButtons = muscles.map((m) => {
+    const isActive = isMuscleActive(m.id);
+    const isSecondary = isMuscleSecondary(m.id);
+    const isHovered = hovered === m.id;
+    const isActiveTip = activeTip === m.id;
+    const a = isActive || isHovered || isActiveTip;
+    const activeOrSec = a || isSecondary;
 
-      return (
+    return (
         <button
           key={m.id}
           onClick={() => toggle(m.id)}
@@ -729,17 +715,6 @@ function AnatomyMapComponent({
         </button>
       );
     });
-  }, [
-    muscles,
-    selected,
-    highlightedMuscles,
-    secondaryHighlightedMuscles,
-    hovered,
-    activeTip,
-    prefersReducedMotion,
-    isInView,
-    toggle,
-  ]);
 
   return (
     <div ref={mapRef} className="relative w-full max-w-2xl mx-auto select-none">

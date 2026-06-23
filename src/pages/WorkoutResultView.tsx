@@ -363,7 +363,7 @@ export default function WorkoutResultView() {
                       <div className="min-w-0">
                         {hasProgram && (
                           <span className="text-xs font-black uppercase tracking-widest text-primary/80 mb-0.5 block">
-                            {"role" in item ? ((item as Record<string, unknown>).role as string) : "Exercise"}
+                            {"role" in item ? item.role : "Exercise"}
                           </span>
                         )}
                         <div className="flex items-center gap-2 flex-wrap">
@@ -410,10 +410,10 @@ export default function WorkoutResultView() {
                           <span>{item.restSeconds}s Rest</span>
                         </>
                       ) : null}
-                      {"tempo" in item && (item as Record<string, unknown>).tempo ? (
+                      {"tempo" in item && item.tempo ? (
                         <>
                           <span className="opacity-30">•</span>
-                          <span>{(item as Record<string, unknown>).tempo as string}</span>
+                          <span>{item.tempo}</span>
                         </>
                       ) : null}
                     </div>
@@ -427,9 +427,9 @@ export default function WorkoutResultView() {
                       </div>
                     )}
 
-                    {"note" in item && (item as Record<string, unknown>).note && (
+                    {"note" in item && item.note && (
                       <p className="mt-2 text-xs text-text-secondary italic leading-snug border-l border-primary/30 pl-2">
-                        {(item as Record<string, unknown>).note as string}
+                        {item.note}
                       </p>
                     )}
                   </div>

@@ -34,6 +34,7 @@ import {
   DragOverlay,
   type DragStartEvent,
   type DragEndEvent,
+  type UniqueIdentifier,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -183,7 +184,7 @@ export default function BuilderPage() {
   const [routineExercises, setRoutineExercises] = useState<RoutineExercise[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeDragId, setActiveDragId] = useState<number | null>(null);
+  const [activeDragId, setActiveDragId] = useState<UniqueIdentifier | null>(null);
 
   useEffect(() => {
     loadExercises();

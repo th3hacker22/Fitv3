@@ -29,8 +29,12 @@ async function readAuthor(req: NextRequest) {
 
 // GET — list comments for a post, oldest first.
 // Query: ?postId=<postId>
+// Requires authentication to prevent public scraping of comment PII.
 export async function GET(req: NextRequest) {
   try {
+    const { response: authResponse } = await requireUser(req);
+    if (authResponse) return authResponse;
+
     const parsed = parseQueryParams(req, commentsQuerySchema);
     if (!parsed.success) return parsed.response;
     const { postId } = parsed.data;

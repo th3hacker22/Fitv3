@@ -54,7 +54,7 @@ export default function AuthPage() {
             type="button"
             onClick={() => {
               continueAsGuest();
-              navigate("home");
+              navigate({ to: "home" });
             }}
             className="w-full bg-[#ccff00] hover:bg-[#b3e600] active:scale-[0.98] text-black font-black italic uppercase text-xs py-4 px-6 rounded-none tracking-widest transition-all shadow-[0_4px_20px_rgba(204,255,0,0.25)] flex items-center justify-center gap-2 cursor-pointer"
           >
@@ -69,8 +69,13 @@ export default function AuthPage() {
     );
   }
 
+  // After the early return above, auth and googleProvider are guaranteed
+  // non-null. Capture in local consts so TypeScript narrows them in closures.
+  const verifiedAuth = auth!;
+  const verifiedProvider = googleProvider!;
+
   const handleResendVerification = async () => {
-    const user = auth.currentUser;
+    const user = verifiedAuth.currentUser;
     if (user) {
       await sendEmailVerification(user);
       setVerifiedMessage("Verification email resent! Check your inbox.");
@@ -81,7 +86,7 @@ export default function AuthPage() {
     setError("");
     setLoading(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      await signInWithPopup(verifiedAuth, verifiedProvider);
     } catch (err) {
       const code = (err as { code?: string })?.code;
       const message = err instanceof Error ? err.message : "Google sign-in failed";
@@ -107,9 +112,9 @@ export default function AuthPage() {
     setLoading(true);
     try {
       if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
+        await signInWithEmailAndPassword(verifiedAuth, email, password);
       } else {
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        const cred = await createUserWithEmailAndPassword(verifiedAuth, email, password);
         await sendEmailVerification(cred.user);
         setVerifiedMessage("Verification email sent. Check your inbox and verify before signing in.");
         setIsLogin(true);

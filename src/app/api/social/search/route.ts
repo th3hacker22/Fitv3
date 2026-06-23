@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { serverErrorResponse } from "@/lib/validation";
+import { requireUser } from "@/lib/authServer";
 import { parseQueryParams } from "@/lib/apiSchemas";
 import { searchQuerySchema } from "./schema";
 
@@ -13,8 +14,12 @@ export const dynamic = "force-dynamic";
 // We use a parameterized raw query with LOWER() on both sides to achieve
 // case-insensitive contains matching safely (no SQL injection).
 // Query: ?q=<searchQuery>
+// Requires authentication to prevent public user enumeration.
 export async function GET(req: NextRequest) {
   try {
+    const { response: authResponse } = await requireUser(req);
+    if (authResponse) return authResponse;
+
     const parsed = parseQueryParams(req, searchQuerySchema);
     if (!parsed.success) return parsed.response;
     const q = parsed.data.q;

@@ -856,7 +856,7 @@ export const generateWorkout = (
   state: {
     gender: "male" | "female" | null;
     age: number;
-    goal: string;
+    goal: string | null;
     fitnessLevel: string | null;
     equipment: string[];
     selectedMuscles: string[]; // backward compat map to priorityMuscles

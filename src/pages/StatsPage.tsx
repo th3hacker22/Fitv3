@@ -408,7 +408,7 @@ export default function StatsPage() {
               </defs>
               <XAxis
                 dataKey="week"
-                tick={{ fill: chartColors.textSecondary, fontSize: 9 }}
+                tick={{ fill: chartColors.textMuted, fontSize: 9 }}
                 axisLine={false}
                 tickLine={false}
               />
@@ -420,7 +420,7 @@ export default function StatsPage() {
                   borderRadius: 8,
                   fontSize: 12,
                 }}
-                labelStyle={{ color: chartColors.textSecondary }}
+                labelStyle={{ color: chartColors.textMuted }}
                 formatter={(v: number) => [`${Math.round(v)} kg`, "Volume"]}
               />
               <Bar dataKey="volume" fill="url(#barGradient)" radius={[4, 4, 0, 0]} />
@@ -456,7 +456,7 @@ export default function StatsPage() {
             </div>
             <Activity className="h-4 w-4 text-text-secondary" />
           </div>
-          <ExerciseProgressChart exercises={exercises} sessions={sessions} />
+          <ExerciseProgressChart preloadedSessions={sessions} />
         </motion.section>
       )}
 

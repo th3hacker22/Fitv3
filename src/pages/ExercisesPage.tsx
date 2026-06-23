@@ -469,9 +469,11 @@ export default function ExercisesPage() {
                       className="hover:text-text-primary ml-0.5"
                       onClick={(e) => {
                         e.stopPropagation();
-                        const currentArray = Array.isArray(filters.bodyPart)
+                        const currentArray: string[] = Array.isArray(filters.bodyPart)
                           ? filters.bodyPart
-                          : [filters.bodyPart];
+                          : filters.bodyPart
+                            ? [filters.bodyPart]
+                            : [];
                         const nextArray = currentArray.filter((p) => p !== bp);
                         setFilter("bodyPart", nextArray.length > 0 ? nextArray : "all");
                       }}

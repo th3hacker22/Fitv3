@@ -224,7 +224,6 @@ describe("i18n English-only regression test", () => {
 
   it("supportedLngs does not include 'ar'", async () => {
     const i18n = await import("../../i18n");
-    // @ts-expect-error accessing internal config
     const supported = i18n.default.options?.supportedLngs || [];
     expect(supported).not.toContain("ar");
     expect(supported).toContain("en");

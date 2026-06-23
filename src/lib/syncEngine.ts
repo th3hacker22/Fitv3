@@ -74,7 +74,7 @@ export async function exportLocalBackup() {
   const photosExport = await Promise.all(
     progressPhotos.map(async (p) => ({
       ...p,
-      imageBlob: await blobToBase64(p.imageBlob),
+      imageBlob: p.imageBlob ? await blobToBase64(p.imageBlob) : undefined,
       thumbnailBlob: p.thumbnailBlob ? await blobToBase64(p.thumbnailBlob) : undefined,
     }))
   );

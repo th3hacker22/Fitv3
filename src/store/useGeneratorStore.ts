@@ -52,7 +52,7 @@ interface GeneratorStore extends GeneratorProfile {
   toggleMuscle: (muscle: string) => void;
   setRoutine: (routine: WorkoutRoutine) => void;
   setProgram: (program: WorkoutProgram) => void;
-  swapExercise: (index: number, newExercise: Exercise) => void;
+  swapExercise: (index: number, newExercise: WorkoutRoutine["exercises"][number]) => void;
   swapProgramExercise: (dayIndex: number, exerciseIndex: number, newExercise: Exercise) => void;
   reset: () => void;
   regenerateSeed: () => void;

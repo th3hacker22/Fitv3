@@ -484,8 +484,11 @@ export default function HomePage() {
                   size="sm"
                   className="w-full"
                   onClick={async () => {
-                    const ids = routine.exercises.map((e) => e.exerciseId);
-                    const sessionId = await startWorkout(ids);
+                    const items = routine.exercises.map((e) => ({
+                      exerciseId: e.exerciseId,
+                      isSupersetWithNext: e.isSupersetWithNext,
+                    }));
+                    const sessionId = await startWorkout(items);
                     navigate({ to: "/workout/$sessionId", params: { sessionId } });
                   }}
                 >
@@ -581,7 +584,7 @@ export default function HomePage() {
                       {
                         id: uid(),
                         name: template.name,
-                        exercises: built,
+                        exercises: built.exercises,
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
                       },

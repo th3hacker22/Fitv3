@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui-custom/Button";
 import {
@@ -50,46 +50,45 @@ export default function BodyPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chartColors = useThemeColors();
 
-  // Load data
-  useEffect(() => {
-    let cleanup: (() => void) | undefined;
+  // Track object URLs for cleanup on unmount
+  const objectUrlsRef = useRef<string[]>([]);
 
-    async function loadData() {
-      try {
-        const [measurementsData, photosData] = await Promise.all([
-          db.bodyMeasurements.orderBy("date").reverse().toArray(),
-          db.progressPhotos.orderBy("date").reverse().toArray(),
-        ]);
+  // Load data — extracted as a callback so handlers can call it after mutations.
+  const loadData = useCallback(async () => {
+    // Revoke previous object URLs before creating new ones
+    objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    objectUrlsRef.current = [];
 
-        setMeasurements(measurementsData);
+    try {
+      const [measurementsData, photosData] = await Promise.all([
+        db.bodyMeasurements.orderBy("date").reverse().toArray(),
+        db.progressPhotos.orderBy("date").reverse().toArray(),
+      ]);
 
-        const photosWithUrls = photosData.map((photo) => ({
-          ...photo,
-          url: photo.imageUrl
-            ? photo.imageUrl
-            : photo.imageBlob
-              ? URL.createObjectURL(photo.imageBlob)
-              : "",
-        }));
-        setPhotos(photosWithUrls);
+      setMeasurements(measurementsData);
 
-        cleanup = () => {
-          photosWithUrls.forEach((p) => {
-            if (!p.imageUrl) URL.revokeObjectURL(p.url);
-          });
-        };
-      } catch (error) {
-        console.error("Failed to load body data:", error);
-      }
+      const photosWithUrls = photosData.map((photo) => {
+        const url = photo.imageUrl
+          ? photo.imageUrl
+          : photo.imageBlob
+            ? URL.createObjectURL(photo.imageBlob)
+            : "";
+        if (!photo.imageUrl && url) objectUrlsRef.current.push(url);
+        return { ...photo, url };
+      });
+      setPhotos(photosWithUrls);
+    } catch (error) {
+      console.error("Failed to load body data:", error);
     }
-
-    loadData();
-
-    // Return cleanup that revokes all object URLs on unmount
-    return () => {
-      if (cleanup) cleanup();
-    };
   }, []);
+
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+    return () => {
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [loadData]);
 
   // Handle measurement submit
   async function handleSubmit(e: React.FormEvent) {
