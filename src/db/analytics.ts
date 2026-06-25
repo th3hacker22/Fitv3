@@ -3,16 +3,19 @@ import type { Exercise } from "@/types/exercise";
 import { estimateOneRepMax } from "@/utils/fitnessMath";
 import { countsInVolume, countsForPR } from "@/config/setTypes";
 
-// Helper: Get completed sessions from cache or indexed query
+// Helper: Get completed sessions from cache or indexed query.
+// Uses the `date` index via .orderBy("date") so we don't do a full-table scan.
+// The `.filter()` for `completed` is still needed (IndexedDB can't index booleans),
+// but it runs on the index-ordered collection, not an unindexed scan.
 async function getCompletedSessions(
   preloadedSessions?: WorkoutSession[]
 ): Promise<WorkoutSession[]> {
-  // NOTE: We avoid .where("completed").equals(true) because IndexedDB cannot
-  // index boolean values — it throws "IDBKeyRange: The parameter is not a valid key."
-  // Use .filter() instead, which is a collection scan but correct.
-  return preloadedSessions
-    ? preloadedSessions.filter((s) => s.completed === true)
-    : db.workoutSessions.filter((s) => s.completed === true).toArray();
+  if (preloadedSessions) {
+    return preloadedSessions.filter((s) => s.completed === true);
+  }
+  // Use the indexed `date` field to avoid a full table scan.
+  // .orderBy("date") uses the index; .filter() then narrows by boolean.
+  return db.workoutSessions.orderBy("date").filter((s) => s.completed === true).toArray();
 }
 
 // Helper: Get week key prefixed with year (e.g., "2025-W03") so weeks don't
@@ -317,17 +320,28 @@ export async function getSessionsByMonth(
   month: number,
   preloadedSessions?: WorkoutSession[]
 ): Promise<WorkoutSession[]> {
-  const sessions = await getCompletedSessions(preloadedSessions);
-
   // Month boundaries in LOCAL time (not UTC). DST-safe: we midnight-truncate
   // both edges, which handles the 23/25-hour day edge cases.
   const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0);
   const startOfNextMonth = new Date(year, month + 1, 1, 0, 0, 0, 0);
 
-  return sessions.filter((s) => {
-    const d = new Date(s.date);
-    return d >= startOfMonth && d < startOfNextMonth;
-  });
+  if (preloadedSessions) {
+    // Fast path: filter in-memory from already-loaded sessions.
+    return preloadedSessions.filter((s) => {
+      if (!s.completed || s.isFreeze) return false;
+      const d = new Date(s.date);
+      return d >= startOfMonth && d < startOfNextMonth;
+    });
+  }
+
+  // Indexed query: use the `date` index with .between() to avoid full-table scan.
+  // Dexie's .between() is inclusive on both ends by default, so we use
+  // { includeLower: true, includeUpper: false } to get [startOfMonth, startOfNextMonth).
+  return db.workoutSessions
+    .where("date")
+    .between(startOfMonth.toISOString(), startOfNextMonth.toISOString(), true, false)
+    .filter((s) => s.completed === true && !s.isFreeze)
+    .toArray();
 }
 
 /**

@@ -8,6 +8,7 @@ import { cn } from "@/utils/cn";
 import { useCloudSyncState } from "@/hooks/useCloudSyncState";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useTranslation } from "react-i18next";
+import RestTimer from "@/components/workout/RestTimer";
 
 function NavItem({ to, icon: Icon, label, isActive }: { to: string; icon: ElementType; label: string; isActive: boolean }) {
   const triggerHaptic = () => {
@@ -159,6 +160,17 @@ export default function Layout({ children }: { children: ReactNode }) {
             </motion.button>
           )}
         </AnimatePresence>
+
+        {/* ── Global Rest Timer ──
+            Mounted here (not only in WorkoutSessionPage) so the timer UI
+            stays alive whenever the user is anywhere inside the app. The
+            timer state is global + persisted, so navigating away during a
+            rest period no longer loses the completion side effects
+            (sound, voice, notification). The component itself renders
+            nothing unless `restTimerActive` is true (AnimatePresence
+            handles the enter/exit animation), so mounting it globally is
+            safe and cheap. */}
+        <RestTimer />
 
         <nav className="absolute bottom-0 w-full bg-bg-surface/90 backdrop-blur-md border-t border-border flex justify-between items-center z-50 pb-[env(safe-area-inset-bottom)]">
           <NavItem to="/" icon={Home} label={t("nav_home")} isActive={location.pathname === "home"} />

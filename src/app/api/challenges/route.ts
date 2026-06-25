@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { serverErrorResponse } from "@/lib/validation";
+import { requireUser } from "@/lib/authServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,8 +32,16 @@ const DEFAULT_CHALLENGES = [
 // GET — return all currently-active challenges. If none exist in the
 // active date window, seed the default three first (in a transaction),
 // then return the active set.
-export async function GET() {
+//
+// SECURITY: Authentication is required so the auto-seed transaction (which
+// performs DB writes) never runs for anonymous callers. Returns 401 if no
+// valid session is present.
+export async function GET(req: NextRequest) {
   try {
+    // ── Authentication: require valid session ──
+    const { uid: callerUid, response: authResponse } = await requireUser(req);
+    if (!callerUid) return authResponse!;
+
     const now = new Date().toISOString();
 
     const activeCount = await prisma.challenge.count({

@@ -13,13 +13,14 @@ interface SetRowProps {
   exerciseIndex: number;
   ghostWeight?: number;
   ghostReps?: number;
-  onToggleComplete: () => void;
-  onUpdateWeight: (value: string) => void;
-  onUpdateReps: (value: string) => void;
-  onUpdateRpe?: (value: string) => void;
+  /** Stable callback — receives the set ID so the parent doesn't need inline closures (preserves memo). */
+  onToggleComplete: (setId: string) => void;
+  onUpdateWeight: (setId: string, value: string) => void;
+  onUpdateReps: (setId: string, value: string) => void;
+  onUpdateRpe?: (setId: string, value: string) => void;
   /** Tap-to-cycle the set type chip (11 types). See src/config/setTypes.ts. */
-  onCycleSetType?: () => void;
-  onRemoveSet?: () => void;
+  onCycleSetType?: (exerciseIndex: number, setId: string) => void;
+  onRemoveSet?: (setId: string) => void;
 }
 
 const SetRow = memo(
@@ -34,6 +35,7 @@ const SetRow = memo(
     onUpdateRpe,
     onCycleSetType,
     onRemoveSet,
+    exerciseIndex,
   }: SetRowProps) => {
     const isCompleted = set.completed;
     const prefersReducedMotion = useReducedMotion();
@@ -88,7 +90,7 @@ const SetRow = memo(
           {onCycleSetType && (
             <button
               type="button"
-              onClick={onCycleSetType}
+              onClick={() => onCycleSetType?.(exerciseIndex, set.id)}
               disabled={isCompleted}
               aria-label={`Set type: ${typeMeta.labelEn}. Tap to change.`}
               title={`${typeMeta.labelEn} (${typeMeta.labelAr})`}
@@ -113,7 +115,7 @@ const SetRow = memo(
             type="number"
             inputMode="decimal"
             value={set.weight}
-            onChange={(e) => onUpdateWeight(e.target.value)}
+            onChange={(e) => onUpdateWeight(set.id, e.target.value)}
             onFocus={handleFocus}
             placeholder={ghostWeight != null ? String(ghostWeight) : ""}
             readOnly={isCompleted}
@@ -136,7 +138,7 @@ const SetRow = memo(
             type="number"
             inputMode="numeric"
             value={set.reps}
-            onChange={(e) => onUpdateReps(e.target.value)}
+            onChange={(e) => onUpdateReps(set.id, e.target.value)}
             onFocus={handleFocus}
             placeholder={ghostReps != null ? String(ghostReps) : ""}
             readOnly={isCompleted}
@@ -159,7 +161,7 @@ const SetRow = memo(
             type="number"
             inputMode="numeric"
             value={set.rpe || ""}
-            onChange={(e) => onUpdateRpe && onUpdateRpe(e.target.value)}
+            onChange={(e) => onUpdateRpe && onUpdateRpe(set.id, e.target.value)}
             onFocus={handleFocus}
             placeholder="RPE"
             readOnly={isCompleted}
@@ -177,7 +179,7 @@ const SetRow = memo(
 
         <div className="flex items-center justify-center">
           <motion.button
-            onClick={onToggleComplete}
+            onClick={() => onToggleComplete(set.id)}
             className={cn(
               "flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200 active:scale-90",
               isCompleted
@@ -192,7 +194,7 @@ const SetRow = memo(
 
         <div className="flex items-center justify-center">
           <button
-            onClick={onRemoveSet}
+            onClick={() => onRemoveSet?.(set.id)}
             disabled={isCompleted}
             className="flex h-11 w-11 items-center justify-center text-text-secondary hover:text-danger disabled:opacity-30 transition-colors rounded-xl"
           >

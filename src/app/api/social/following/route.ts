@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/authServer";
+import { serverErrorResponse } from "@/lib/validation";
 import { parseQueryParams } from "@/lib/apiSchemas";
 import { followingQuerySchema } from "./schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Return an array of UIDs the given user is following.
-// Query: ?uid=<followerUid>
-// Requires authentication to prevent enumeration attacks.
+// Return an array of UIDs the caller is following.
+// Query: ?uid=<ignored>&includeProfiles=true
+//
+// SECURITY: The `uid` query param is intentionally IGNORED to prevent IDOR /
+// PII enumeration. The caller's own session UID (callerUid) is always used,
+// so an authenticated user can only ever read their own following list.
 export async function GET(req: NextRequest) {
   try {
     // ── Authentication: require valid session ──
@@ -18,11 +22,11 @@ export async function GET(req: NextRequest) {
 
     const parsed = parseQueryParams(req, followingQuerySchema);
     if (!parsed.success) return parsed.response;
-    const { uid, includeProfiles } = parsed.data;
+    const { includeProfiles } = parsed.data;
 
     if (includeProfiles) {
       const follows = await prisma.follow.findMany({
-        where: { followerUid: uid },
+        where: { followerUid: callerUid },
         include: { following: true },
       });
       const profiles = follows.map((f) => ({
@@ -34,7 +38,7 @@ export async function GET(req: NextRequest) {
     }
 
     const follows = await prisma.follow.findMany({
-      where: { followerUid: uid },
+      where: { followerUid: callerUid },
       select: { followingUid: true },
     });
 
@@ -42,7 +46,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(following);
   } catch (error) {
     console.error("social/following GET failed:", error);
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverErrorResponse();
   }
 }

@@ -116,10 +116,13 @@ async function getRecentCompletedSessions(limit = 10): Promise<WorkoutSession[]>
     return _recentSessionsCache.slice(0, limit);
   }
   try {
-    // .reverse() gives newest-first directly (Dexie uses the primary key order)
+    // Use the indexed `date` field via .orderBy("date").reverse() to get
+    // newest-first without a full-table scan. The .filter() for completed
+    // is applied on the index-ordered collection.
     const sessions = await db.workoutSessions
-      .filter((s) => s.completed === true)
+      .orderBy("date")
       .reverse()
+      .filter((s) => s.completed === true)
       .limit(limit)
       .toArray();
     _recentSessionsCache = sessions;

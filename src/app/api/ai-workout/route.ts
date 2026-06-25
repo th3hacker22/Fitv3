@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { requireUser } from "@/lib/authServer";
 import { parseRequestBody } from "@/lib/apiSchemas";
+import { serverErrorResponse } from "@/lib/validation";
 import { structuredRequestBodySchema } from "./schema";
 
 export const runtime = "nodejs";
@@ -102,11 +103,8 @@ Recommend 3-5 exercises. Recommend realistic set and rep schemes based on the go
       );
     }
 
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json(
-      { error: "Failed to generate workout: " + message },
-      { status: 500 }
-    );
+    // Never leak internal error details back to the client.
+    return serverErrorResponse();
   }
 }
 

@@ -9,10 +9,13 @@ import { challengeIdParamSchema } from "../../schema";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET /api/challenges/[challengeId]/progress?userId=<userId>
-// Return the Participation for (challengeId, userId) or null if not
-// joined yet. Returns 404 if the challenge doesn't exist.
-// Requires authentication to prevent PII leakage.
+// GET /api/challenges/[challengeId]/progress?userId=<ignored>
+// Return the caller's own Participation for (challengeId, callerUid) or
+// null if not joined yet. Returns 404 if the challenge doesn't exist.
+//
+// SECURITY: The `userId` query param is intentionally IGNORED to prevent
+// IDOR / PII leakage. The caller's own session UID (callerUid) is always
+// used, so an authenticated user can only ever read their own progress.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ challengeId: string }> }
@@ -27,9 +30,10 @@ export async function GET(
     if (!pathParsed.success) return pathParsed.response;
     const challengeId = pathParsed.data;
 
+    // Validate the query shape for forward-compat (the userId field is
+    // accepted but intentionally NOT read — callerUid is used instead).
     const queryParsed = parseQueryParams(req, progressQuerySchema);
     if (!queryParsed.success) return queryParsed.response;
-    const { userId } = queryParsed.data;
 
     // Verify the challenge exists.
     const challenge = await prisma.challenge.findUnique({
@@ -45,7 +49,7 @@ export async function GET(
 
     const participation = await prisma.participation.findUnique({
       where: {
-        challengeId_userId: { challengeId, userId },
+        challengeId_userId: { challengeId, userId: callerUid },
       },
     });
 

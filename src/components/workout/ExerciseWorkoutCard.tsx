@@ -109,10 +109,13 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
   const completedSets = exercise.sets.filter((s) => s.completed).length;
   const totalSets = exercise.sets.length;
 
-  const activeWorkout = useWorkoutStore((s) => s.activeWorkout);
-  const isPartOrStartOfSuperset =
-    exercise.isSupersetWithNext ||
-    (activeWorkout && activeWorkout.exercises[exerciseIndex - 1]?.isSupersetWithNext);
+  // Subscribe to ONLY the superset flag of the previous exercise — not the
+  // entire activeWorkout object (which would re-render every card on any
+  // set update in any exercise).
+  const prevExerciseSuperset = useWorkoutStore(
+    (s) => s.activeWorkout?.exercises[exerciseIndex - 1]?.isSupersetWithNext ?? false
+  );
+  const isPartOrStartOfSuperset = exercise.isSupersetWithNext || prevExerciseSuperset;
 
   // ── Skipped state: collapsed banner with undo ──
   // The exercise stays in the workout data (so navigation / superset links
@@ -345,12 +348,12 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
               exerciseIndex={exerciseIndex}
               ghostWeight={set.previousWeight}
               ghostReps={set.previousReps}
-              onToggleComplete={() => handleToggleComplete(set.id)}
-              onUpdateWeight={(val) => handleUpdateWeight(set.id, val)}
-              onUpdateReps={(val) => handleUpdateReps(set.id, val)}
-              onUpdateRpe={(val) => handleUpdateRpe(set.id, val)}
-              onCycleSetType={() => cycleSetType(exerciseIndex, set.id)}
-              onRemoveSet={() => handleRemoveSet(set.id)}
+              onToggleComplete={handleToggleComplete}
+              onUpdateWeight={handleUpdateWeight}
+              onUpdateReps={handleUpdateReps}
+              onUpdateRpe={handleUpdateRpe}
+              onCycleSetType={cycleSetType}
+              onRemoveSet={handleRemoveSet}
             />
           ))}
         </AnimatePresence>
