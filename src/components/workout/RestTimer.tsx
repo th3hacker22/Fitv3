@@ -205,7 +205,7 @@ export default function RestTimer() {
               ? { duration: 0 }
               : { type: "spring", damping: 25, stiffness: 300 }
           }
-          className="fixed inset-x-0 bottom-20 z-[100] mx-auto max-w-md px-5"
+          className="fixed inset-x-0 bottom-20 z-[100] mx-auto max-w-md px-5 pb-[env(safe-area-inset-bottom)]"
         >
           <div
             className={cn(

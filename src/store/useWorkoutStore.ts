@@ -643,7 +643,13 @@ export const useWorkoutStore = create<WorkoutState>()(
               exercisesCount: session.exercises.length,
               totalVolume,
             })
-            .catch(console.error);
+            .catch((err) => {
+              console.error("Failed to share to feed:", err);
+              useToastStore.getState().addToast(
+                "info",
+                "Workout saved locally. Share to feed will retry when online."
+              );
+            });
         }
         // Sync volume to active challenges (Phase 2 improvement integration)
         // Pass session.id as idempotency key to prevent double-counting on replay.
@@ -651,7 +657,13 @@ export const useWorkoutStore = create<WorkoutState>()(
           .then(({ useChallengesStore }) =>
             useChallengesStore.getState().syncWorkoutVolume(totalVolume, session.id)
           )
-          .catch(console.error);
+          .catch((err) => {
+            console.error("Failed to sync challenge volume:", err);
+            useToastStore.getState().addToast(
+              "info",
+              "Challenge progress will sync when online."
+            );
+          });
       }
 
       set({

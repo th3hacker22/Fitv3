@@ -192,11 +192,15 @@ function aggregateMuscleData(
   // Per-muscle: track the most-recent session's volume + RPE.
   const muscleData = new Map<string, MuscleTrainingDatum>();
 
-  // Sort sessions chronologically (oldest first) so the last write per muscle
-  // is the most-recent session.
+  // Sort sessions newest-first so we can early-break once all known muscles
+  // have been seen. This converts the worst case from O(S×E×sets×muscleIds)
+  // to O(S_seen × E × sets × muscleIds) where S_seen is typically <5.
   const sortedSessions = [...completed].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
+
+  // Track which muscles we've already found the most-recent session for.
+  const seenMuscles = new Set<string>();
 
   for (const session of sortedSessions) {
     const sessionTime = new Date(session.date).getTime();
@@ -245,9 +249,12 @@ function aggregateMuscleData(
       sessionVolumes.push(totalSessionVolume);
     }
 
-    // Record this session's per-muscle data (overwrites older sessions →
-    // the final entry per muscle is the most-recent one).
+    // Record this session's per-muscle data. Since we iterate newest-first,
+    // the FIRST session that hits a muscle is its most-recent — we skip
+    // writing if the muscle was already seen (older session).
     for (const [muscleId, data] of sessionMuscleData) {
+      if (seenMuscles.has(muscleId)) continue;
+      seenMuscles.add(muscleId);
       muscleData.set(muscleId, {
         lastTrained: sessionTime,
         sessionVolume: data.volume,
@@ -258,6 +265,12 @@ function aggregateMuscleData(
         rpeSetCount: data.rpeCount,
       });
     }
+
+    // Early break: if we've found data for all known muscles, no need to
+    // iterate older sessions. The number of known muscles is the size of
+    // the RECOVERY_HOURS lookup table (~40). Once seenMuscles covers all
+    // of them, further sessions can't add new data.
+    if (seenMuscles.size >= Object.keys(RECOVERY_HOURS).length) break;
   }
 
   const userAvgVolume =

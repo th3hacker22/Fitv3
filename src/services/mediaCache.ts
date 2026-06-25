@@ -17,6 +17,8 @@
  */
 
 const CACHE_NAME = "pulse-exercise-media";
+/** Maximum number of cached media entries. When exceeded, oldest entries are evicted (LRU). */
+const MAX_CACHE_ENTRIES = 50;
 
 /**
  * True when the Cache API is available in the current context.
@@ -60,6 +62,15 @@ export async function putCachedMedia(url: string, response: Response): Promise<v
     const cache = await caches.open(CACHE_NAME);
     // Clone before storing — the original response is consumed by the caller.
     await cache.put(url, response.clone());
+
+    // LRU eviction: if the cache has more than MAX_CACHE_ENTRIES, delete the
+    // oldest. Cache API doesn't have built-in LRU, so we check the entry count
+    // and delete the first (oldest) keys until we're under the limit.
+    const keys = await cache.keys();
+    if (keys.length > MAX_CACHE_ENTRIES) {
+      const toDelete = keys.slice(0, keys.length - MAX_CACHE_ENTRIES);
+      await Promise.all(toDelete.map((req) => cache.delete(req)));
+    }
   } catch {
     /* swallow — caching is best-effort */
   }
