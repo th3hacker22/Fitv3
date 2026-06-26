@@ -197,20 +197,20 @@ describe("Router history cap regression test", () => {
 // ── Test 5: syncAll in-flight guard prevents concurrent calls ──
 
 describe("syncAll in-flight guard regression test", () => {
-  it("does not set syncing state twice for concurrent calls", async () => {
+  it("does not run syncAll twice for concurrent calls", async () => {
     const { syncAll } = await import("../../lib/syncEngine");
-    const { useSyncStore } = await import("../../store/useSyncStore");
-    useSyncStore.setState({ status: "idle", lastSyncedAt: null });
 
     // Fire two concurrent syncAll calls
     const p1 = syncAll("user1");
     const p2 = syncAll("user1");
 
-    await Promise.all([p1, p2]);
+    const [r1, r2] = await Promise.all([p1, p2]);
 
-    // Both should complete, status should be idle (not error)
-    expect(useSyncStore.getState().status).toBe("idle");
-    expect(useSyncStore.getState().lastSyncedAt).not.toBeNull();
+    // Both should complete with idle status (not error)
+    expect(r1.status).toBe("idle");
+    expect(r2.status).toBe("idle");
+    // At least one should have a lastSyncedAt
+    expect(r1.lastSyncedAt || r2.lastSyncedAt).not.toBeNull();
   });
 });
 

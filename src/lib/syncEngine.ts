@@ -6,48 +6,57 @@
  * persistent) and reports a "synced" state. This keeps the UI functional and the
  * sync indicator meaningful, while all real data stays in IndexedDB.
  *
- * If you later wire up a real backend (e.g. Prisma API routes), replace the
- * no-op bodies below with real fetch() calls to your API.
+ * Architecture (Phase 6 fix): This module is a PURE LIBRARY — it does NOT import
+ * any Zustand stores. It returns status values, and callers (hooks/stores)
+ * decide how to update the UI. This fixes the inverted dependency where the lib
+ * layer was importing the store layer.
  */
-import { useToastStore } from "@/store/useToastStore";
-import { useSyncStore } from "@/store/useSyncStore";
 
-export async function pushToCloud(_userId: string) {
-  // Local DB (Dexie/IndexedDB) is the source of truth and already persistent.
-  // No remote push in this build.
-  return;
+export type SyncStatus = "syncing" | "idle" | "error";
+
+export interface SyncResult {
+  status: SyncStatus;
+  lastSyncedAt?: string;
+  error?: string;
 }
 
-export async function pullFromCloud(_userId: string) {
+export async function pushToCloud(_userId: string): Promise<{ success: boolean }> {
+  // Local DB (Dexie/IndexedDB) is the source of truth and already persistent.
+  // No remote push in this build.
+  return { success: true };
+}
+
+export async function pullFromCloud(_userId: string): Promise<{ success: boolean }> {
   // Nothing to pull — data is local-first.
-  return;
+  return { success: true };
 }
 
 // In-flight guard: prevents concurrent syncAll calls from racing.
-// useBackgroundSync can fire multiple events simultaneously (online +
-// visibilitychange), and without this guard, overlapping calls would
-// interleave status updates and cause UI flicker.
 let syncInFlight = false;
 
-export async function syncAll(userId: string) {
-  if (syncInFlight) return; // already syncing — skip
+/**
+ * Sync all local data to the cloud (currently a no-op since Dexie is persistent).
+ * Returns a SyncResult — the caller is responsible for updating UI state.
+ */
+export async function syncAll(userId: string): Promise<SyncResult> {
+  if (syncInFlight) return { status: "idle" };
   syncInFlight = true;
-  useSyncStore.getState().setStatus("syncing");
   try {
     // Simulate a short sync window for UX feedback.
     await new Promise((r) => setTimeout(r, 300));
-    useSyncStore.getState().setStatus("idle");
-    useSyncStore.getState().setLastSyncedAt(new Date().toISOString());
+    return {
+      status: "idle",
+      lastSyncedAt: new Date().toISOString(),
+    };
   } catch (err) {
-    console.error("Sync all failed:", err);
-    useSyncStore.getState().setStatus("error");
-    useToastStore.getState().addToast("error", "Sync failed.");
+    const message = err instanceof Error ? err.message : "Unknown sync error";
+    return { status: "error", error: message };
   } finally {
     syncInFlight = false;
   }
 }
 
-/** Export all local data as a JSON backup (Phase 3 improvement). */
+/** Export all local data as a JSON backup. */
 export async function exportLocalBackup() {
   const { db } = await import("@/db");
   const [
@@ -70,7 +79,6 @@ export async function exportLocalBackup() {
     db.userProfile.toArray(),
   ]);
 
-  // Photos contain Blobs — convert to base64 for JSON export.
   const photosExport = await Promise.all(
     progressPhotos.map(async (p) => ({
       ...p,
@@ -114,7 +122,6 @@ export async function importLocalBackup(backup: {
   if (backup.unlockedAchievements)
     await db.unlockedAchievements.bulkPut(backup.unlockedAchievements as never[]);
 
-  // Convert base64 photo strings back to Blobs
   if (backup.progressPhotos) {
     const photos = await Promise.all(
       backup.progressPhotos.map(async (p) => ({
@@ -135,7 +142,6 @@ function base64ToBlob(dataUrl: string): Blob {
   for (let i = 0; i < bstr.length; i++) u8[i] = bstr.charCodeAt(i);
   return new Blob([u8], { type: mime });
 }
-
 
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

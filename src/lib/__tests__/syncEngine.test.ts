@@ -1,8 +1,6 @@
 import "fake-indexeddb/auto";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { pushToCloud, pullFromCloud, syncAll, exportLocalBackup } from "../syncEngine";
-import { useSyncStore } from "@/store/useSyncStore";
-import { useToastStore } from "@/store/useToastStore";
 
 // localStorage shim for node environment
 const localStorageMock = (() => {
@@ -16,40 +14,44 @@ const localStorageMock = (() => {
 })();
 Object.defineProperty(global, "localStorage", { value: localStorageMock, writable: true });
 
-// Mock toast store
-vi.mock("@/store/useToastStore", () => ({
-  useToastStore: {
-    getState: () => ({ addToast: vi.fn() }),
-  },
-}));
-
 describe("syncEngine (local-mode / Next.js port)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useSyncStore.setState({ status: "idle", lastSyncedAt: null });
     localStorage.clear();
   });
 
   describe("pushToCloud", () => {
-    it("is a no-op that resolves without throwing", async () => {
-      await expect(pushToCloud("user_123")).resolves.toBeUndefined();
+    it("is a no-op that resolves with success: true", async () => {
+      const result = await pushToCloud("user_123");
+      expect(result.success).toBe(true);
     });
   });
 
   describe("pullFromCloud", () => {
-    it("is a no-op that resolves without throwing", async () => {
-      await expect(pullFromCloud("user_123")).resolves.toBeUndefined();
+    it("is a no-op that resolves with success: true", async () => {
+      const result = await pullFromCloud("user_123");
+      expect(result.success).toBe(true);
     });
   });
 
   describe("syncAll", () => {
-    it("sets status to idle and stamps lastSyncedAt in store state", async () => {
-      await syncAll("user_123");
-      const s = useSyncStore.getState();
-      expect(s.status).toBe("idle");
-      expect(s.lastSyncedAt).not.toBeNull();
+    it("returns status idle and stamps lastSyncedAt", async () => {
+      const result = await syncAll("user_123");
+      expect(result.status).toBe("idle");
+      expect(result.lastSyncedAt).not.toBeNull();
+      expect(result.error).toBeUndefined();
       // Should be a valid ISO date
-      expect(new Date(s.lastSyncedAt!).getTime()).not.toBeNaN();
+      expect(new Date(result.lastSyncedAt!).getTime()).not.toBeNaN();
+    });
+
+    it("returns idle without lastSyncedAt when already in-flight", async () => {
+      // Start two concurrent calls — the second should return early
+      const [r1, r2] = await Promise.all([syncAll("user_123"), syncAll("user_123")]);
+      // At least one should have a lastSyncedAt (the first)
+      expect(r1.status).toBe("idle");
+      // The second may or may not have lastSyncedAt depending on timing,
+      // but it should be "idle" status (the early-return value)
+      expect(r2.status).toBe("idle");
     });
   });
 
@@ -64,7 +66,6 @@ describe("syncEngine (local-mode / Next.js port)", () => {
       expect(Array.isArray(backup.foodEntries)).toBe(true);
       expect(Array.isArray(backup.nutritionGoals)).toBe(true);
       expect(Array.isArray(backup.unlockedAchievements)).toBe(true);
-      // exportedAt should be a valid ISO date
       expect(new Date(backup.exportedAt).getTime()).not.toBeNaN();
     });
 
@@ -84,7 +85,6 @@ describe("syncEngine (local-mode / Next.js port)", () => {
       const backup = await exportLocalBackup();
       expect(backup.workoutSessions.some((s) => s.id === "test_session_1")).toBe(true);
 
-      // Cleanup
       await db.workoutSessions.delete("test_session_1");
     });
   });

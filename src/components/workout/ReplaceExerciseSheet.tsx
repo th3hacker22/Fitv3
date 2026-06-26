@@ -1,6 +1,6 @@
 "use client";
 import { Drawer } from "vaul";
-import { RefreshCw, X, Dumbbell } from "lucide-react";
+import { X, Dumbbell } from "lucide-react";
 import { useWorkoutStore } from "@/store/useWorkoutStore";
 import { useExerciseStore } from "@/store/useExerciseStore";
 import { getAlternativeExercises } from "@/services/exerciseService";
@@ -9,9 +9,27 @@ interface Props {
   exerciseIndex: number;
   currentExerciseId: string;
   target: string;
+  /** Controlled open state (driven by the parent kebab menu). */
+  isOpen: boolean;
+  /** Called when the drawer requests to close (overlay tap, X, escape). */
+  onClose: () => void;
 }
 
-export default function ReplaceExerciseSheet({ exerciseIndex, currentExerciseId, target }: Props) {
+/**
+ * ReplaceExerciseSheet — controlled bottom sheet for swapping an exercise
+ * for an alternative (same target muscle, excluding the current one).
+ *
+ * Previously rendered its own trigger button (RefreshCw icon). The trigger
+ * has been removed so the sheet can be opened programmatically from the
+ * ExerciseWorkoutCard kebab menu. The parent owns the `isOpen` state.
+ */
+export default function ReplaceExerciseSheet({
+  exerciseIndex,
+  currentExerciseId,
+  target,
+  isOpen,
+  onClose,
+}: Props) {
   const replaceExercise = useWorkoutStore((s) => s.replaceExercise);
   const exercises = useExerciseStore((s) => s.exercises);
 
@@ -23,13 +41,7 @@ export default function ReplaceExerciseSheet({ exerciseIndex, currentExerciseId,
   };
 
   return (
-    <Drawer.Root shouldScaleBackground>
-      <Drawer.Trigger asChild>
-        <button className="flex h-12 w-12 items-center justify-center rounded-xl bg-bg-elevated text-text-secondary transition-all duration-200 hover:bg-primary-muted hover:text-primary active:scale-90">
-          <RefreshCw className="h-4 w-4" />
-        </button>
-      </Drawer.Trigger>
-
+    <Drawer.Root open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }} shouldScaleBackground>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm" />
         <Drawer.Content className="fixed inset-x-0 bottom-0 z-[201] mx-auto max-w-md rounded-t-2xl bg-bg-card">
@@ -43,7 +55,10 @@ export default function ReplaceExerciseSheet({ exerciseIndex, currentExerciseId,
                 🔄 Alternative Exercises
               </Drawer.Title>
               <Drawer.Close asChild>
-                <button className="flex h-12 w-12 items-center justify-center rounded-xl text-text-secondary hover:text-text-primary">
+                <button
+                  className="flex h-12 w-12 items-center justify-center rounded-xl text-text-secondary hover:text-text-primary"
+                  aria-label="Close replace exercise sheet"
+                >
                   <X className="h-5 w-5" />
                 </button>
               </Drawer.Close>
@@ -60,7 +75,7 @@ export default function ReplaceExerciseSheet({ exerciseIndex, currentExerciseId,
                   <Drawer.Close asChild key={ex.id}>
                     <button
                       onClick={() => handleReplace(ex.id)}
-                      className="flex w-full items-center gap-3 rounded-xl bg-bg-elevated p-4 transition-all duration-200 hover:bg-bg-hover hover:ring-1 hover:ring-primary/30 active:scale-[0.98]"
+                      className="flex w-full min-h-11 items-center gap-3 rounded-xl bg-bg-elevated p-4 transition-all duration-200 hover:bg-bg-hover hover:ring-1 hover:ring-primary/30 active:scale-[0.98]"
                     >
                       <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-bg-card overflow-hidden">
                         <img

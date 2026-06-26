@@ -10,7 +10,6 @@ import { getSetTypeMeta } from "@/config/setTypes";
 interface SetRowProps {
   set: WorkoutSet;
   setIndex: number;
-  exerciseIndex: number;
   ghostWeight?: number;
   ghostReps?: number;
   /** Stable callback — receives the set ID so the parent doesn't need inline closures (preserves memo). */
@@ -18,8 +17,12 @@ interface SetRowProps {
   onUpdateWeight: (setId: string, value: string) => void;
   onUpdateReps: (setId: string, value: string) => void;
   onUpdateRpe?: (setId: string, value: string) => void;
-  /** Tap-to-cycle the set type chip (11 types). See src/config/setTypes.ts. */
-  onCycleSetType?: (exerciseIndex: number, setId: string) => void;
+  /**
+   * Open the SetTypePicker bottom sheet for this set (replaces tap-to-cycle).
+   * The parent owns the picker state and calls the store's `setSetType`
+   * action when a type is picked.
+   */
+  onOpenTypePicker?: (setId: string) => void;
   onRemoveSet?: (setId: string) => void;
 }
 
@@ -33,9 +36,8 @@ const SetRow = memo(
     onUpdateWeight,
     onUpdateReps,
     onUpdateRpe,
-    onCycleSetType,
+    onOpenTypePicker,
     onRemoveSet,
-    exerciseIndex,
   }: SetRowProps) => {
     const isCompleted = set.completed;
     const prefersReducedMotion = useReducedMotion();
@@ -85,12 +87,12 @@ const SetRow = memo(
           >
             {setIndex + 1}
           </span>
-          {/* Set-type chip: tap to cycle through 11 types.
+          {/* Set-type chip: tap to open the SetTypePicker bottom sheet.
               Hidden when completed (no mid-workout type change after logging). */}
-          {onCycleSetType && (
+          {onOpenTypePicker && (
             <button
               type="button"
-              onClick={() => onCycleSetType?.(exerciseIndex, set.id)}
+              onClick={() => onOpenTypePicker?.(set.id)}
               disabled={isCompleted}
               aria-label={`Set type: ${typeMeta.labelEn}. Tap to change.`}
               title={`${typeMeta.labelEn} (${typeMeta.labelAr})`}

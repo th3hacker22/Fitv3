@@ -13,7 +13,7 @@ import { pushToCloud } from "@/lib/syncEngine";
 import { uid } from "@/utils/id";
 import { estimateOneRepMax } from "@/utils/fitnessMath";
 import { voiceCoach } from "@/services/voiceCoach";
-import { nextSetType, countsForPR } from "@/config/setTypes";
+import { nextSetType, countsForPR, type SetType } from "@/config/setTypes";
 import { suggestRestDuration } from "@/services/smartRest";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { useGeneratorStore } from "@/store/useGeneratorStore";
@@ -251,6 +251,12 @@ interface WorkoutState {
    * Used by SetRow.tsx tap-to-cycle. See src/config/setTypes.ts.
    */
   cycleSetType: (exerciseIndex: number, setId: string) => void;
+  /**
+   * Set the setType of a single set to a specific value (no cycling).
+   * Used by SetTypePicker — a bottom-sheet grid that lets the user pick any
+   * of the 11 set types in one tap instead of cycling up to 10 times.
+   */
+  setSetType: (exerciseIndex: number, setId: string, type: SetType) => void;
   toggleSetComplete: (exerciseIndex: number, setId: string) => void;
   dismissRestTimer: () => void;
   /**
@@ -419,6 +425,23 @@ export const useWorkoutStore = create<WorkoutState>()(
         const current = s.setType ?? "normal";
         return { ...s, setType: nextSetType(current) };
       }),
+    };
+
+    set({ activeWorkout: { ...activeWorkout, exercises } });
+  },
+
+  // ── Set the setType of a specific set (used by SetTypePicker) ──
+  setSetType: (exerciseIndex, setId, type) => {
+    const { activeWorkout } = get();
+    if (!activeWorkout) return;
+
+    const exercises = [...activeWorkout.exercises];
+    const exercise = exercises[exerciseIndex];
+    if (!exercise) return;
+
+    exercises[exerciseIndex] = {
+      ...exercise,
+      sets: exercise.sets.map((s) => (s.id === setId ? { ...s, setType: type } : s)),
     };
 
     set({ activeWorkout: { ...activeWorkout, exercises } });

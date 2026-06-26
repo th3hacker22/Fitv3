@@ -1,7 +1,7 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lightbulb, Dumbbell, ChevronDown, ChevronUp, Plus, Flame, SkipForward, RotateCcw } from "lucide-react";
-import { useState, useCallback, memo } from "react";
+import { Lightbulb, Dumbbell, ChevronDown, ChevronUp, Plus, Flame, SkipForward, RotateCcw, MoreVertical, Shuffle } from "lucide-react";
+import { useState, useCallback, memo, useMemo } from "react";
 import { cn } from "@/utils/cn";
 import { useWorkoutStore, type WorkoutExerciseItem } from "@/store/useWorkoutStore";
 import ExerciseVideoPlayer from "@/components/exercise/ExerciseVideoPlayer";
@@ -9,9 +9,11 @@ import ReplaceExerciseSheet from "./ReplaceExerciseSheet";
 import WarmupSheet from "./WarmupSheet";
 import PlateCalculatorSheet from "./PlateCalculatorSheet";
 import SetRow from "./SetRow";
+import SetTypePicker from "./SetTypePicker";
 import SkipReasonModal, { type SkipReason } from "./SkipReasonModal";
 import { recordSkip } from "@/services/learningLoop";
 import { useTranslation } from "react-i18next";
+import { normalizeSetType, type SetType } from "@/config/setTypes";
 
 interface Props {
   exercise: WorkoutExerciseItem;
@@ -24,7 +26,7 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
 
   const updateSet = useWorkoutStore((s) => s.updateSet);
   const toggleSetComplete = useWorkoutStore((s) => s.toggleSetComplete);
-  const cycleSetType = useWorkoutStore((s) => s.cycleSetType);
+  const setSetType = useWorkoutStore((s) => s.setSetType);
   const addSet = useWorkoutStore((s) => s.addSet);
   const removeSet = useWorkoutStore((s) => s.removeSet);
   const setExerciseNotes = useWorkoutStore((s) => s.setExerciseNotes);
@@ -33,7 +35,17 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
   const [showWarmup, setShowWarmup] = useState(false);
   const [showPlates, setShowPlates] = useState(false);
   const [showSkipModal, setShowSkipModal] = useState(false);
+  const [showReplace, setShowReplace] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [isSkipped, setIsSkipped] = useState(false);
+
+  // ── SetTypePicker state ──
+  // The picker is owned by the card (not per-SetRow) so only one picker
+  // instance exists per exercise. `typePickerSetId` tracks which set's chip
+  // was tapped so we can highlight its current type and route the selection
+  // back to the correct set via `setSetType`.
+  const [showTypePicker, setShowTypePicker] = useState(false);
+  const [typePickerSetId, setTypePickerSetId] = useState<string | null>(null);
 
   // Warmup button only makes sense when there's a working weight to ramp up to.
   const firstSetWeight = Number(exercise.sets[0]?.weight) || 0;
@@ -77,6 +89,36 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
     [removeSet, exerciseIndex]
   );
 
+  const handleOpenTypePicker = useCallback((setId: string) => {
+    setTypePickerSetId(setId);
+    setShowTypePicker(true);
+  }, []);
+
+  const handleSelectType = useCallback(
+    (type: SetType) => {
+      if (typePickerSetId) {
+        setSetType(exerciseIndex, typePickerSetId, type);
+      }
+      setShowTypePicker(false);
+      setTypePickerSetId(null);
+    },
+    [exerciseIndex, typePickerSetId, setSetType]
+  );
+
+  // Resolve the current setType for the picked set so the picker can
+  // highlight it. Falls back to "normal" when the set has no setType yet
+  // (backward-compatible with workouts started before the setType field).
+  const currentPickerType: SetType = useMemo(() => {
+    if (!typePickerSetId) return "normal";
+    const targetSet = exercise.sets.find((s) => s.id === typePickerSetId);
+    return normalizeSetType(targetSet?.setType);
+  }, [typePickerSetId, exercise.sets]);
+
+  const handleTypePickerOpenChange = useCallback((open: boolean) => {
+    setShowTypePicker(open);
+    if (!open) setTypePickerSetId(null);
+  }, []);
+
   // ── Smart Skip with Reason ──
   // When the user explicitly skips an exercise we record the reason to the
   // Learning Loop (so future workouts can de-prioritise disliked exercises)
@@ -116,6 +158,27 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
     (s) => s.activeWorkout?.exercises[exerciseIndex - 1]?.isSupersetWithNext ?? false
   );
   const isPartOrStartOfSuperset = exercise.isSupersetWithNext || prevExerciseSuperset;
+
+  // ── Kebab menu actions ──
+  // Each action closes the menu first, then opens the corresponding sheet.
+  // Closing the menu before opening the sheet avoids z-index conflicts
+  // (the menu's backdrop sits above the sheet otherwise).
+  const handleMenuWarmup = useCallback(() => {
+    setShowMenu(false);
+    setShowWarmup(true);
+  }, []);
+  const handleMenuPlates = useCallback(() => {
+    setShowMenu(false);
+    setShowPlates(true);
+  }, []);
+  const handleMenuSkip = useCallback(() => {
+    setShowMenu(false);
+    setShowSkipModal(true);
+  }, []);
+  const handleMenuReplace = useCallback(() => {
+    setShowMenu(false);
+    setShowReplace(true);
+  }, []);
 
   // ── Skipped state: collapsed banner with undo ──
   // The exercise stays in the workout data (so navigation / superset links
@@ -198,40 +261,81 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
             {exercise.equipment} · {exercise.target}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {showWarmupButton && (
-            <button
-              onClick={() => setShowWarmup(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-warning/30 bg-warning/10 px-3 h-12 text-xs font-bold uppercase tracking-wider text-warning transition-all duration-200 hover:bg-warning/20 active:scale-95"
-              aria-label={`Show warmup sets for ${localizedName}`}
-            >
-              <Flame className="h-3.5 w-3.5" />
-              Warmup
-            </button>
-          )}
-          {showPlatesButton && (
-            <button
-              onClick={() => setShowPlates(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3 h-12 text-xs font-bold uppercase tracking-wider text-primary transition-all duration-200 hover:bg-primary/20 active:scale-95"
-              aria-label={`Show plate breakdown for ${localizedName}`}
-            >
-              <Dumbbell className="h-3.5 w-3.5" />
-              Plates
-            </button>
-          )}
+        {/* Kebab menu — single CTA replaces 4 competing buttons (Hick's Law). */}
+        <div className="relative">
           <button
-            onClick={() => setShowSkipModal(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-border bg-bg-elevated px-3 h-12 text-xs font-bold uppercase tracking-wider text-text-secondary transition-all duration-200 hover:text-warning hover:border-warning/40 active:scale-95"
-            aria-label={`Skip ${localizedName}`}
+            type="button"
+            onClick={() => setShowMenu((v) => !v)}
+            className="flex h-11 w-11 items-center justify-center rounded-xl bg-bg-elevated text-text-secondary transition-all duration-200 hover:bg-bg-hover hover:text-primary active:scale-95"
+            aria-label={`More actions for ${localizedName}`}
+            aria-expanded={showMenu}
+            aria-haspopup="menu"
           >
-            <SkipForward className="h-3.5 w-3.5" />
-            Skip
+            <MoreVertical className="h-5 w-5" />
           </button>
-          <ReplaceExerciseSheet
-            exerciseIndex={exerciseIndex}
-            currentExerciseId={exercise.exerciseId}
-            target={exercise.target}
-          />
+          <AnimatePresence>
+            {showMenu && (
+              <>
+                {/* Backdrop — closes the menu on outside tap without
+                    intercepting the sheet overlays below. */}
+                <div
+                  className="fixed inset-0 z-[190]"
+                  onClick={() => setShowMenu(false)}
+                  aria-hidden="true"
+                />
+                <motion.div
+                  role="menu"
+                  aria-label={`Actions for ${localizedName}`}
+                  initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute end-0 top-12 z-[195] min-w-[200px] overflow-hidden rounded-xl border border-border bg-bg-card shadow-xl"
+                >
+                  {showWarmupButton && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleMenuWarmup}
+                      className="flex w-full min-h-11 items-center gap-3 px-4 py-2.5 text-sm font-bold uppercase tracking-wider text-warning transition-colors hover:bg-warning/10"
+                    >
+                      <Flame className="h-4 w-4" />
+                      Warmup Sets
+                    </button>
+                  )}
+                  {showPlatesButton && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleMenuPlates}
+                      className="flex w-full min-h-11 items-center gap-3 px-4 py-2.5 text-sm font-bold uppercase tracking-wider text-primary transition-colors hover:bg-primary/10"
+                    >
+                      <Dumbbell className="h-4 w-4" />
+                      Plate Calculator
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handleMenuSkip}
+                    className="flex w-full min-h-11 items-center gap-3 px-4 py-2.5 text-sm font-bold uppercase tracking-wider text-text-secondary transition-colors hover:bg-bg-hover hover:text-warning"
+                  >
+                    <SkipForward className="h-4 w-4" />
+                    Skip Exercise
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handleMenuReplace}
+                    className="flex w-full min-h-11 items-center gap-3 px-4 py-2.5 text-sm font-bold uppercase tracking-wider text-text-secondary transition-colors hover:bg-bg-hover hover:text-primary"
+                  >
+                    <Shuffle className="h-4 w-4" />
+                    Replace Exercise
+                  </button>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -345,14 +449,13 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
               key={set.id}
               set={set}
               setIndex={setIdx}
-              exerciseIndex={exerciseIndex}
               ghostWeight={set.previousWeight}
               ghostReps={set.previousReps}
               onToggleComplete={handleToggleComplete}
               onUpdateWeight={handleUpdateWeight}
               onUpdateReps={handleUpdateReps}
               onUpdateRpe={handleUpdateRpe}
-              onCycleSetType={cycleSetType}
+              onOpenTypePicker={handleOpenTypePicker}
               onRemoveSet={handleRemoveSet}
             />
           ))}
@@ -388,6 +491,19 @@ export default memo(function ExerciseWorkoutCard({ exercise, exerciseIndex }: Pr
         onClose={() => setShowSkipModal(false)}
         exerciseName={localizedName}
         onSelect={handleSkipConfirm}
+      />
+      <ReplaceExerciseSheet
+        exerciseIndex={exerciseIndex}
+        currentExerciseId={exercise.exerciseId}
+        target={exercise.target}
+        isOpen={showReplace}
+        onClose={() => setShowReplace(false)}
+      />
+      <SetTypePicker
+        open={showTypePicker}
+        onOpenChange={handleTypePickerOpenChange}
+        onSelect={handleSelectType}
+        currentType={currentPickerType}
       />
     </motion.div>
   );
