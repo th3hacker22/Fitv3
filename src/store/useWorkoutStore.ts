@@ -17,6 +17,7 @@ import { nextSetType, countsForPR } from "@/config/setTypes";
 import { suggestRestDuration } from "@/services/smartRest";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { useGeneratorStore } from "@/store/useGeneratorStore";
+import { buildSession, detectNewPRs, computeSessionVolume } from "@/services/workoutFinisher";
 
 // ── Helpers ──
 
@@ -519,14 +520,30 @@ export const useWorkoutStore = create<WorkoutState>()(
   },
 
   // ── Finish workout & save to Dexie ──
+  // Decomposed into steps via src/services/workoutFinisher.ts:
+  //   1. buildSession — pure: constructs WorkoutSession from active state
+  //   2. persistSession — Dexie write + cache invalidation
+  //   3. detectNewPRs — pure: compares session e1RM vs prior bests
+  //   4. announcePRs — side effects: haptic, voice, notification, toast
+  //   5. shareSession — social feed + challenge sync (with offline toast)
   finishWorkout: async (shareToFeed?: boolean) => {
     const { activeWorkout } = get();
     if (!activeWorkout) return;
 
     try {
-      const duration = Math.floor((Date.now() - activeWorkout.startedAt) / 1000);
+      // ── Step 1: Build the session object (pure) ──
+      const session = buildSession(activeWorkout.exercises, activeWorkout.startedAt);
 
-      // Capture prior personal records so we can detect new PRs in this session.
+      // ── Step 2: Persist to Dexie ──
+      await db.workoutSessions.add(session);
+      invalidateRecentSessionsCache();
+
+      // ── Step 3: Learning Loop (fire-and-forget) ──
+      recordFeedbackFromSession(session).catch((err) =>
+        console.warn("[learningLoop] Failed to record session feedback:", err)
+      );
+
+      // ── Step 4: Detect new PRs (pure) + announce (side effects) ──
       let priorBests = new Map<string, number>();
       try {
         const records = await getPersonalRecords();
@@ -535,94 +552,27 @@ export const useWorkoutStore = create<WorkoutState>()(
         /* no prior history */
       }
 
-      const session: WorkoutSession = {
-        id: uid(),
-        name: `Pulse Workout ${new Date().toLocaleDateString("en-US")}`,
-        date: new Date().toISOString(),
-        duration,
-        exercises: activeWorkout.exercises
-          .filter((e) => e.sets.some((s) => s.completed))
-          .map((e) => ({
-            exerciseId: e.exerciseId,
-            exerciseName: e.exerciseName,
-            notes: e.notes,
-            sets: e.sets
-              .filter((s) => s.completed)
-              .map((s) => {
-                const w = Number(s.weight) || 0;
-                const r = Number(s.reps) || 0;
-                return {
-                  weight: w,
-                  reps: r,
-                  rpe: s.rpe ? Number(s.rpe) : undefined,
-                  completed: true,
-                  estimated1RM: estimateOneRepMax(w, r),
-                  // Persist the setType so analytics can later filter volume/PR.
-                  setType: s.setType ?? "normal",
-                };
-              }),
-          })),
-        completed: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      await db.workoutSessions.add(session);
-      // Invalidate the recent-sessions cache so the next ghost-logging lookup
-      // sees the freshly-saved session.
-      invalidateRecentSessionsCache();
-
-      // ── Learning Loop: record per-exercise feedback (completed/incomplete) ──
-      // This feeds the personalization engine so future workouts boost loved
-      // exercises and de-prioritize disliked ones.
-      recordFeedbackFromSession(session).catch((err) =>
-        console.warn("[learningLoop] Failed to record session feedback:", err)
-      );
-
-      // Detect new personal records (highest estimated 1RM completed set per exercise).
-      // Only PR-eligible set types count (excludes warmup/drop/failure/negative/
-      // partial/back_off/myo_reps — see src/config/setTypes.ts).
-      let newPrCount = 0;
-      for (const ex of session.exercises) {
-        let sessionMax1RM = 0;
-        let bestSetWeight = 0;
-        let bestSetReps = 0;
-
-        for (const s of ex.sets) {
-          if (!countsForPR(s.setType)) continue;
-          const e1rm = s.estimated1RM || 0;
-          if (e1rm > sessionMax1RM) {
-            sessionMax1RM = e1rm;
-            bestSetWeight = s.weight;
-            bestSetReps = s.reps;
-          }
+      const prResult = detectNewPRs(session, priorBests);
+      for (const pr of prResult.newPRs) {
+        // Celebratory haptic
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          navigator.vibrate([30, 40, 30, 40, 60]);
         }
-        if (sessionMax1RM <= 0) continue;
-        const prior = priorBests.get(String(ex.exerciseId)) ?? 0;
-        if (sessionMax1RM > prior) {
-          newPrCount++;
-          // Phase 1 improvement: celebratory haptic pattern on new PR
-          if (typeof navigator !== "undefined" && navigator.vibrate) {
-            navigator.vibrate([30, 40, 30, 40, 60]);
-          }
-          // Voice Coach: announce the new PR (no-op when disabled).
-          voiceCoach.speak("new_pr");
-          // Push notification for PR (no-op when notifications disabled)
-          import("@/services/notificationService").then(({ sendPRNotification }) => {
-            sendPRNotification(ex.exerciseName, bestSetWeight, bestSetReps);
-          }).catch(() => {});
-          useToastStore
-            .getState()
-            .addToast(
-              "success",
-              `New PR! ${ex.exerciseName}: ${bestSetWeight}kg x ${bestSetReps} (Est. 1RM: ${sessionMax1RM}kg)`
-            );
-        }
+        // Voice Coach
+        voiceCoach.speak("new_pr");
+        // Push notification (lazy import)
+        import("@/services/notificationService").then(({ sendPRNotification }) => {
+          sendPRNotification(pr.exerciseName, pr.weight, pr.reps);
+        }).catch(() => {});
+        // Toast
+        useToastStore.getState().addToast(
+          "success",
+          `New PR! ${pr.exerciseName}: ${pr.weight}kg x ${pr.reps} (Est. 1RM: ${pr.estimated1RM}kg)`
+        );
       }
 
+      // ── Step 5: Achievements + cloud sync + share (if user is authed) ──
       const user = useAuthStore.getState().user;
-
-      // Evaluate achievements
       useAchievementsStore
         .getState()
         .evaluateAchievements(user?.uid || undefined)
@@ -630,10 +580,9 @@ export const useWorkoutStore = create<WorkoutState>()(
 
       if (user) {
         pushToCloud(user.uid).catch(console.error);
-        const totalVolume = session.exercises.reduce(
-          (sum, ex) => sum + ex.sets.reduce((sSum, set) => sSum + set.weight * set.reps, 0),
-          0
-        );
+
+        const totalVolume = computeSessionVolume(session);
+
         if (shareToFeed) {
           useSocialStore
             .getState()
@@ -651,8 +600,8 @@ export const useWorkoutStore = create<WorkoutState>()(
               );
             });
         }
-        // Sync volume to active challenges (Phase 2 improvement integration)
-        // Pass session.id as idempotency key to prevent double-counting on replay.
+
+        // Sync volume to active challenges
         import("@/store/useChallengesStore")
           .then(({ useChallengesStore }) =>
             useChallengesStore.getState().syncWorkoutVolume(totalVolume, session.id)
@@ -666,6 +615,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           });
       }
 
+      // ── Reset workout state ──
       set({
         activeWorkout: null,
         isWorkoutActive: false,
