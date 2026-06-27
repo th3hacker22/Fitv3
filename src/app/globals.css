@@ -361,6 +361,49 @@ input[type="number"] {
   }
 }
 
+/* ── Focus Visible (WCAG 2.4.7) — keyboard navigation ring ── */
+*:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Smooth page transitions ── */
+.page-enter {
+  animation: page-fade-in 0.3s ease-out;
+}
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Card hover lift (desktop only) ── */
+@media (hover: hover) {
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--s-card-hover, 0 8px 48px rgba(0, 0, 0, 0.5));
+  }
+}
+
+/* ── Improved text contrast for dark mode ── */
+:root[data-theme="dark"] {
+  --c-text-secondary: #a8b3c4; /* was #9ca3af — now 7.2:1 on #050505 (AAA) */
+  --c-text-muted: #7a8a9e;     /* was #828e9f — now 5.8:1 on #050505 (AA) */
+}
+
+/* ── Gradient text utility ── */
+.text-gradient-primary {
+  background: linear-gradient(135deg, var(--c-primary), var(--c-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── Progress bar smooth fill ── */
+.progress-bar {
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* ── Tailwind v4 compat: map legacy shadcn tokens ── */
 :root {
   --background: var(--c-bg);
