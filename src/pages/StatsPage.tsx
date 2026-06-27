@@ -277,7 +277,7 @@ export default function StatsPage() {
 
           {/* Mini 7-day heatmap */}
           <div className="flex flex-col gap-1.5">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary text-right">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-text-secondary text-right">
               Last 7
             </span>
             <div className="flex gap-1">
@@ -317,9 +317,9 @@ export default function StatsPage() {
         className="grid grid-cols-3 gap-3"
       >
         {/* Workouts */}
-        <div className="glass-card flex flex-col gap-2 rounded-2xl border border-border p-3">
+        <div className="glass-card card-hover flex flex-col gap-2 rounded-2xl border border-border p-3">
           <div className="flex items-center justify-between">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-text-secondary">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-secondary">
               Workouts
             </span>
             <Dumbbell className="h-3.5 w-3.5 text-primary" />
@@ -332,9 +332,9 @@ export default function StatsPage() {
         </div>
 
         {/* Volume */}
-        <div className="glass-card flex flex-col gap-2 rounded-2xl border border-border p-3">
+        <div className="glass-card card-hover flex flex-col gap-2 rounded-2xl border border-border p-3">
           <div className="flex items-center justify-between">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-text-secondary">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-secondary">
               Volume
             </span>
             <TrendingUp className="h-3.5 w-3.5 text-secondary" />
@@ -343,14 +343,14 @@ export default function StatsPage() {
             <span className="text-2xl font-black italic tabular-nums text-secondary">
               {formatVolume(totalStats.totalVolume)}
             </span>
-            <span className="text-[9px] font-bold uppercase text-text-secondary">kg</span>
+            <span className="text-[10px] font-bold uppercase text-text-secondary">kg</span>
           </div>
         </div>
 
         {/* Training Time */}
-        <div className="glass-card flex flex-col gap-2 rounded-2xl border border-border p-3">
+        <div className="glass-card card-hover flex flex-col gap-2 rounded-2xl border border-border p-3">
           <div className="flex items-center justify-between">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-text-secondary">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-secondary">
               Time
             </span>
             <Clock className="h-3.5 w-3.5 text-info" />
@@ -361,11 +361,11 @@ export default function StatsPage() {
                 <span className="text-2xl font-black italic tabular-nums text-info">
                   {dur.hours}
                 </span>
-                <span className="text-[9px] font-bold uppercase text-text-secondary">h</span>
+                <span className="text-[10px] font-bold uppercase text-text-secondary">h</span>
               </>
             )}
             <span className="text-2xl font-black italic tabular-nums text-info">{dur.mins}</span>
-            <span className="text-[9px] font-bold uppercase text-text-secondary">m</span>
+            <span className="text-[10px] font-bold uppercase text-text-secondary">m</span>
           </div>
         </div>
       </motion.section>
@@ -379,12 +379,12 @@ export default function StatsPage() {
           animate="visible"
           className="glass-card flex flex-col gap-4 rounded-2xl border border-border p-5"
         >
-          <div className="flex items-end justify-between border-b border-border pb-3">
+          <div className="flex items-end justify-between border-b border-border pb-3 mb-4">
             <div className="flex flex-col gap-0.5">
               <h2 className="text-sm font-bold uppercase italic text-text-primary">
                 Weekly Volume
               </h2>
-              <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">
                 Last 8 Weeks
               </span>
             </div>
@@ -445,12 +445,12 @@ export default function StatsPage() {
           animate="visible"
           className="glass-card flex flex-col gap-3 rounded-2xl border border-border p-5"
         >
-          <div className="flex items-center justify-between border-b border-border pb-2">
+          <div className="flex items-center justify-between border-b border-border pb-2 mb-4">
             <div className="flex flex-col gap-0.5">
               <h2 className="text-sm font-bold uppercase italic text-text-primary">
                 Exercise Progress
               </h2>
-              <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">
                 Weight & 1RM Over Time
               </span>
             </div>
@@ -469,11 +469,11 @@ export default function StatsPage() {
           animate="visible"
           className="flex flex-col gap-3"
         >
-          <div className="flex items-center justify-between border-b border-border pb-2">
+          <div className="flex items-center justify-between border-b border-border pb-2 mb-4">
             <h2 className="text-sm font-bold uppercase italic text-text-primary">
               Personal Records
             </h2>
-            <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">
               {personalRecords.length} total
             </span>
           </div>
@@ -508,7 +508,7 @@ export default function StatsPage() {
                       kg
                     </span>
                   </div>
-                  <span className="inline-block rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
+                  <span className="inline-block rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
                     1RM: {Math.round(pr.max1RM)}kg
                   </span>
                 </div>
@@ -527,25 +527,25 @@ export default function StatsPage() {
           animate="visible"
           className="glass-card flex flex-col gap-3 overflow-hidden rounded-2xl border border-border p-5"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold uppercase italic text-text-primary">Consistency</h2>
             <div className="flex items-center gap-3">
               <Link
                 to="/calendar"
-                className="flex items-center gap-1.5 rounded-lg bg-bg-elevated px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-primary transition-colors hover:bg-bg-hover active:scale-95"
+                className="flex min-h-11 items-center gap-1.5 rounded-lg bg-bg-elevated px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-primary transition-colors hover:bg-bg-hover active:scale-95"
               >
                 <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
                 Calendar
               </Link>
               <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-bold uppercase text-text-secondary">Less</span>
+                <span className="text-[10px] font-bold uppercase text-text-secondary">Less</span>
                 <div className="flex gap-0.5">
                   <div className="h-2.5 w-2.5 rounded-sm border border-border bg-bg-elevated" />
                   <div className="h-2.5 w-2.5 rounded-sm bg-primary/30" />
                   <div className="h-2.5 w-2.5 rounded-sm bg-primary/60" />
                   <div className="h-2.5 w-2.5 rounded-sm bg-primary" />
                 </div>
-                <span className="text-[9px] font-bold uppercase text-text-secondary">More</span>
+                <span className="text-[10px] font-bold uppercase text-text-secondary">More</span>
               </div>
             </div>
           </div>
@@ -557,7 +557,7 @@ export default function StatsPage() {
                 {Array.from({ length: 12 }).map((_, weekIdx) => {
                   const cellIdx = weekIdx * 7 + dayIdx;
                   const day = calendarData[cellIdx];
-                  if (!day) return <div key={weekIdx} className="h-3 w-3" />;
+                  if (!day) return <div key={weekIdx} className="h-3 w-3 min-w-[2.5rem]" />;
                   const intensity =
                     day.volume === 0
                       ? 0
@@ -569,7 +569,7 @@ export default function StatsPage() {
                   return (
                     <div
                       key={weekIdx}
-                      className="h-3 w-3 rounded-sm"
+                      className="h-3 w-3 min-w-[2.5rem] rounded-sm"
                       style={{
                         backgroundColor:
                           intensity === 0
@@ -586,7 +586,7 @@ export default function StatsPage() {
             ))}
           </div>
 
-          <div className="mt-1 flex justify-between text-[9px] font-bold uppercase tracking-widest text-text-secondary">
+          <div className="mt-1 flex justify-between text-[10px] font-bold uppercase tracking-widest text-text-secondary">
             <span>12 weeks ago</span>
             <span>Today</span>
           </div>

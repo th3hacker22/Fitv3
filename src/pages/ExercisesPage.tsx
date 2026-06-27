@@ -2,12 +2,12 @@
 import { useEffect, useState, useDeferredValue, useRef, useCallback, useMemo } from "react";
 import { Link } from "@/router-shim";
 import { motion, useReducedMotion } from "framer-motion";
-import { Search, Dumbbell, ChevronRight, Loader2, X, Plus } from "lucide-react";
+import { Search, Dumbbell, ChevronRight, X, Plus } from "lucide-react";
 import { KineticEmptyState } from "@/components/ui-custom/KineticEmptyState";
 import { Button } from "@/components/ui-custom/Button";
 import { cn } from "@/utils/cn";
 import { useExerciseStore } from "@/store/useExerciseStore";
-import { SkeletonExerciseGrid } from "@/components/ui-custom/Skeleton";
+import { Skeleton, SkeletonExerciseGrid } from "@/components/ui-custom/Skeleton";
 import AnatomyMap from "@/components/AnatomyMap";
 import { Drawer } from "vaul";
 import { useTranslation } from "react-i18next";
@@ -266,15 +266,9 @@ export default function ExercisesPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-xl font-bold text-text-primary uppercase tracking-wider">
-            Exercise Library
-          </h1>
-          <p className="mt-1 text-sm text-text-secondary">Loading exercises...</p>
-        </div>
-        <div className="flex items-center justify-center gap-2 py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <span className="text-sm text-text-secondary">Loading 1300+ exercises...</span>
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-36" />
         </div>
         <SkeletonExerciseGrid />
       </div>
@@ -312,7 +306,7 @@ export default function ExercisesPage() {
           variant="outline"
           size="sm"
           icon={<Plus className="h-4 w-4" />}
-          className="rounded-xl flex-shrink-0"
+          className="min-h-11 rounded-xl flex-shrink-0"
         >
           Create Custom
         </Button>
@@ -330,7 +324,7 @@ export default function ExercisesPage() {
             onFocus={() => setIsSearchFocused(true)}
             onBlur={() => setTimeout(() => setIsSearchFocused(false), 150)}
             onKeyDown={handleSearchSubmit}
-            className="w-full rounded-[--radius-card] border border-border bg-bg-card py-3 pl-4 pr-12 text-sm text-text-primary placeholder-text-muted outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary shadow-sm"
+            className="w-full min-h-11 rounded-[--radius-card] border border-border bg-bg-card py-3 pl-4 pr-12 text-sm text-text-primary placeholder-text-muted outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/40 shadow-sm"
           />
         </div>
 
@@ -357,85 +351,87 @@ export default function ExercisesPage() {
       </div>
 
       {/* ── Quick Filter Chips ── */}
-      <div className="flex overflow-x-auto pb-2 -mx-4 px-4 gap-2 no-scrollbar">
-        <button
-          onClick={() => setFilter("bodyPart", "all")}
-          className={cn(
-            "whitespace-nowrap px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border",
-            !filters.bodyPart || filters.bodyPart === "all"
-              ? "bg-primary text-primary-text border-primary shadow-[0_0_12px_var(--c-primary-glow)]"
-              : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
-          )}
-        >
-          All Muscles
-        </button>
-        {[
-          "chest",
-          "back",
-          "shoulders",
-          "upper arms",
-          "lower arms",
-          "waist",
-          "upper legs",
-          "lower legs",
-          "cardio",
-          "neck",
-        ].map((part) => {
-          const isActive = Array.isArray(filters.bodyPart)
-            ? filters.bodyPart.includes(part)
-            : filters.bodyPart === part;
-          return (
-            <button
-              key={part}
-              onClick={() => {
-                setFilter("bodyPart", part);
-              }}
-              className={cn(
-                "whitespace-nowrap px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border",
-                isActive
-                  ? "bg-primary/20 text-primary border-primary/50 shadow-[0_0_12px_var(--c-primary-dim)]"
-                  : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
-              )}
-            >
-              {part}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="flex overflow-x-auto pb-2 -mx-4 px-4 gap-2 no-scrollbar">
-        <button
-          onClick={() => setFilter("equipment", "all")}
-          className={cn(
-            "whitespace-nowrap px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border",
-            !filters.equipment || filters.equipment === "all"
-              ? "bg-primary text-primary-text border-primary"
-              : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
-          )}
-        >
-          All Eqp
-        </button>
-        {["barbell", "dumbbell", "cable", "machine", "body weight", "kettlebell", "band"].map(
-          (eq) => {
-            const isActive = filters.equipment === eq;
+      <div className="space-y-3">
+        <div className="flex overflow-x-auto pb-2 -mx-4 px-4 gap-2 no-scrollbar">
+          <button
+            onClick={() => setFilter("bodyPart", "all")}
+            className={cn(
+              "whitespace-nowrap min-h-11 px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all border active:scale-95",
+              !filters.bodyPart || filters.bodyPart === "all"
+                ? "bg-primary text-primary-text border-primary shadow-[0_0_12px_var(--c-primary-glow)]"
+                : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
+            )}
+          >
+            All Muscles
+          </button>
+          {[
+            "chest",
+            "back",
+            "shoulders",
+            "upper arms",
+            "lower arms",
+            "waist",
+            "upper legs",
+            "lower legs",
+            "cardio",
+            "neck",
+          ].map((part) => {
+            const isActive = Array.isArray(filters.bodyPart)
+              ? filters.bodyPart.includes(part)
+              : filters.bodyPart === part;
             return (
               <button
-                key={eq}
+                key={part}
                 onClick={() => {
-                  setFilter("equipment", isActive ? "all" : eq);
+                  setFilter("bodyPart", part);
                 }}
                 className={cn(
-                  "whitespace-nowrap px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border",
+                  "whitespace-nowrap min-h-11 px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all border active:scale-95",
                   isActive
-                    ? "bg-primary text-primary-text border-primary shadow-sm"
+                    ? "bg-primary/20 text-primary border-primary/50 shadow-[0_0_12px_var(--c-primary-dim)]"
                     : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
                 )}
               >
-                {eq}
+                {part}
               </button>
             );
-          }
-        )}
+          })}
+        </div>
+
+        <div className="flex overflow-x-auto pb-2 -mx-4 px-4 gap-2 no-scrollbar">
+          <button
+            onClick={() => setFilter("equipment", "all")}
+            className={cn(
+              "whitespace-nowrap min-h-11 px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all border active:scale-95",
+              !filters.equipment || filters.equipment === "all"
+                ? "bg-primary text-primary-text border-primary"
+                : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
+            )}
+          >
+            All Eqp
+          </button>
+          {["barbell", "dumbbell", "cable", "machine", "body weight", "kettlebell", "band"].map(
+            (eq) => {
+              const isActive = filters.equipment === eq;
+              return (
+                <button
+                  key={eq}
+                  onClick={() => {
+                    setFilter("equipment", isActive ? "all" : eq);
+                  }}
+                  className={cn(
+                    "whitespace-nowrap min-h-11 px-4 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all border active:scale-95",
+                    isActive
+                      ? "bg-primary text-primary-text border-primary shadow-sm"
+                      : "bg-bg-elevated text-text-secondary border-border hover:border-border-active hover:text-text-primary"
+                  )}
+                >
+                  {eq}
+                </button>
+              );
+            }
+          )}
+        </div>
       </div>
 
       {/* ── Anatomy Filter ── */}
@@ -542,7 +538,7 @@ export default function ExercisesPage() {
                 params={{ exerciseId: exercise.id }}
                 className="block h-full"
               >
-                <div className="glass-card group relative overflow-hidden rounded-[--radius-card] transition-all duration-300 hover:ring-1 hover:ring-primary/30 active:scale-[0.97] h-full flex flex-col">
+                <div className="glass-card card-hover group relative overflow-hidden rounded-[--radius-card] transition-all duration-300 hover:ring-1 hover:ring-primary/30 active:scale-[0.97] h-full flex flex-col">
                   <ExerciseImage
                     src={exercise.imageUrl}
                     alt={exercise.name}

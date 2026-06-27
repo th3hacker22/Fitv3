@@ -146,14 +146,14 @@ export default function HomePage() {
   };
 
   return (
-    <div className="space-y-5 pb-4">
+    <div className="space-y-4 pb-4">
       {/* ── SECTION 1: Hero Card ── */}
       <motion.section
         custom={0}
         variants={fadeUp}
         initial={prefersReducedMotion ? false : "hidden"}
         animate="visible"
-        className="glass-card relative min-h-[200px] overflow-hidden rounded-2xl border border-border"
+        className="glass-card card-hover relative min-h-[200px] overflow-hidden rounded-2xl border border-border"
       >
         <img
           src="/images/hero-athlete.jpg"
@@ -170,7 +170,7 @@ export default function HomePage() {
           <div>
             <div className="mb-1 flex items-center gap-1.5">
               <Zap className="h-3.5 w-3.5 text-primary" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-primary">PULSE</span>
+              <span className="text-gradient-primary text-[10px] font-bold uppercase tracking-widest">PULSE</span>
             </div>
             <h1 className="text-2xl font-black italic uppercase tracking-tighter text-white">
               {greeting},
@@ -187,7 +187,7 @@ export default function HomePage() {
             <motion.button
               whileTap={prefersReducedMotion ? undefined : { scale: 0.95 }}
               onClick={() => navigate({ to: "/exercises" })}
-              className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-xs font-black uppercase italic tracking-widest text-black transition-transform"
+              className="flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 py-3 text-xs font-black uppercase italic tracking-widest text-black transition-transform"
               style={{ boxShadow: "0 0 20px rgba(204,255,0,0.3)" }}
             >
               <Play className="h-4 w-4 fill-black" />
@@ -276,7 +276,7 @@ export default function HomePage() {
         variants={fadeUp}
         initial={prefersReducedMotion ? false : "hidden"}
         animate="visible"
-        className="glass-card relative overflow-hidden rounded-2xl border border-primary/30 p-5"
+        className="glass-card card-hover relative overflow-hidden rounded-2xl border border-primary/30 p-5"
       >
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
         <motion.div
@@ -304,7 +304,7 @@ export default function HomePage() {
           <motion.button
             whileTap={prefersReducedMotion ? undefined : { scale: 0.98 }}
             onClick={() => navigate({ to: "/wizard" })}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-black uppercase italic tracking-widest text-black transition-transform"
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-black uppercase italic tracking-widest text-black transition-transform"
             style={{ boxShadow: "0 0 20px rgba(204,255,0,0.2)" }}
           >
             <Zap className="h-4 w-4 fill-black" />
@@ -374,7 +374,7 @@ export default function HomePage() {
       >
         <Link
           to="/stats"
-          className="glass-card flex flex-col items-center gap-2 rounded-2xl border border-border p-4 transition-colors hover:bg-bg-elevated"
+          className="glass-card card-hover flex min-h-[5rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border p-4 transition-colors hover:bg-bg-elevated"
         >
           <TrendingUp className="h-5 w-5 text-success" />
           <span className="text-xs font-bold uppercase tracking-wider text-text-primary">
@@ -383,7 +383,7 @@ export default function HomePage() {
         </Link>
         <Link
           to="/body"
-          className="glass-card flex flex-col items-center gap-2 rounded-2xl border border-border p-4 transition-colors hover:bg-bg-elevated"
+          className="glass-card card-hover flex min-h-[5rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border p-4 transition-colors hover:bg-bg-elevated"
         >
           <Target className="h-5 w-5 text-warning" />
           <span className="text-xs font-bold uppercase tracking-wider text-text-primary">

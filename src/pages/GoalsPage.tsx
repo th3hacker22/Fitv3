@@ -131,7 +131,7 @@ export default function GoalsPage() {
           onAction={() => setShowAddForm(true)}
         />
       ) : (
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           {showAddForm && (
             <AddGoalForm
               onSave={async (input) => {
@@ -152,7 +152,7 @@ export default function GoalsPage() {
                 initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: prefersReducedMotion ? 0 : idx * 0.05 }}
-                className="rounded-[--radius-card] glass-card p-4"
+                className="rounded-[--radius-card] glass-card card-hover p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -203,7 +203,7 @@ export default function GoalsPage() {
                       animate={{ width: `${p.percent}%` }}
                       transition={{ duration: prefersReducedMotion ? 0 : 0.5, ease: "easeOut" }}
                       className={cn(
-                        "h-full rounded-full transition-colors",
+                        "h-full rounded-full transition-colors progress-bar",
                         p.achieved ? "bg-success" : "bg-primary"
                       )}
                     />
